@@ -472,32 +472,32 @@ Future<String?> getFingerprintTokenFromPrefs() async {
                           style: TextStyle(fontSize: 16, color: Colors.white)),
                 ),
                 const SizedBox(height: 15),
-                // DividerWithText(text: "OR"),
-                // const SizedBox(height: 50),
-                // InkWell(
-                //   onTap: biometricLogin,
-                //   borderRadius: BorderRadius.circular(50),
-                //   child: Container(
-                //     padding: const EdgeInsets.all(20),
-                //     decoration: BoxDecoration(
-                //       shape: BoxShape.circle,
-                //       color: Colors.grey[200],
-                //       boxShadow: [
-                //         BoxShadow(
-                //             color: Colors.grey.withOpacity(0.4),
-                //             blurRadius: 6,
-                //             offset: Offset(0, 2)),
-                //       ],
-                //     ),
-                //     child: Icon(Icons.fingerprint,
-                //         size: 36,
-                //         color: const Color.fromARGB(255, 3, 201, 219)),
-                //   ),
-                // ),
-                // const SizedBox(height: 10),
-                // Text("Login with Biometrics",
-                //     style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-                // const SizedBox(height: 30),
+                DividerWithText(text: "OR"),
+                const SizedBox(height: 50),
+                InkWell(
+                  // onTap: biometricLogin,
+                  borderRadius: BorderRadius.circular(50),
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.grey[200],
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.grey.withOpacity(0.4),
+                            blurRadius: 6,
+                            offset: Offset(0, 2)),
+                      ],
+                    ),
+                    child: Icon(Icons.fingerprint,
+                        size: 36,
+                        color: const Color.fromARGB(255, 3, 201, 219)),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text("Login with Biometrics",
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+                const SizedBox(height: 30),
               ],
             ),
           ),
