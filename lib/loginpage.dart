@@ -60,125 +60,231 @@ class _loginState extends State<login> {
 
   final LocalAuthentication auth = LocalAuthentication();
 
-  Future<void> biometricLogin() async {
-    try {
-      bool isSupported = await auth.isDeviceSupported();
-      bool canCheck = await auth.canCheckBiometrics;
+Future<void> biometricLogin() async {
+  try {
+    final token = await getFingerprintTokenFromPrefs();
 
-      if (!isSupported || !canCheck) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              backgroundColor: Colors.red,
-              content: Text("Biometric not available")),
-        );
-        return;
-      }
-
-      bool authenticated = await auth.authenticate(
-        localizedReason: "Login with fingerprint or face",
-        options: const AuthenticationOptions(
-          biometricOnly: true,
-          stickyAuth: true,
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.orange,
+          content: Text(
+            "Please login with username and password first to enable fingerprint login",
+          ),
         ),
       );
-
-      if (authenticated) {
-        final token = await getTokenFromPrefs();
-        if (token != null && token.isNotEmpty) {
-          await addfingerprint();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text(
-                    "Please login with username and password first to enable biometric login")),
-          );
-        }
-      } else {}
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            backgroundColor: Colors.red,
-            content: Text("Biometric login failed: $e")),
-      );
+      return;
     }
-  }
 
+    final bool isSupported = await auth.isDeviceSupported();
+    final bool canCheck = await auth.canCheckBiometrics;
+    final List<BiometricType> availableBiometrics =
+        await auth.getAvailableBiometrics();
+
+    if (!isSupported || !canCheck || availableBiometrics.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.red,
+          content: Text("Fingerprint/biometric is not available on this device"),
+        ),
+      );
+      return;
+    }
+
+    final bool authenticated = await auth.authenticate(
+      localizedReason: "Use fingerprint to login to Beposoft",
+      options: const AuthenticationOptions(
+        biometricOnly: true,
+        stickyAuth: true,
+      ),
+    );
+
+    if (authenticated) {
+      await addfingerprint();
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.red,
+        content: Text("Fingerprint login failed: $e"),
+      ),
+    );
+  }
+}
   Future<String?> getTokenFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('token');
   }
 
-  Future<void> addfingerprint() async {
-    final token = await getTokenFromPrefs();
-    try {
-      final response = await http.post(
-        Uri.parse('$api/api/login/$token/'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
+ Future<void> addfingerprint() async {
+  final savedFingerprintToken = await getFingerprintTokenFromPrefs();
 
-      // ...existing code...
-      var active = jsonDecode(response.body)['user']['department'];
-      if (response.statusCode == 200) {
-        // Handle navigation based on active role
-        Widget targetPage;
-        switch (active) {
-          case 'Information Technology':
-          case 'Accounts / Accounting':
-            targetPage = dashboard();
-            break;
-          case 'warehouse':
-            targetPage = WarehouseDashboard();
-            break;
-          case 'BDO':
-            targetPage = bdo_dashbord();
-            break;
-          case 'COO':
-            targetPage = admin_dashboard();
-            break;
-          case 'CEO':
-            targetPage = ceo_dashboard();
-            break;
-          case 'SD':
-            targetPage = SdDashboard();
-            break;
-          case 'ADMIN':
-            targetPage = admin_dashboard();
-            break;
-          case 'BDM':
-            targetPage = bdm_dashbord();
-            break;
-          case 'Warehouse Admin':
-            targetPage = WarehouseAdmin();
-            break;
-          case 'Marketing':
-            targetPage = marketing_dashboard();
-            break;
-          case 'ASD':
-            targetPage = asd_dashbord();
-            break;
-          case 'HR':
-            targetPage = HrDashboard();
-            break;
-          default:
-            targetPage = dashboard();
-        }
-
-        Navigator.push(
-            context, MaterialPageRoute(builder: (context) => targetPage));
-
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              backgroundColor: Colors.green,
-              content: Text('Successfully logged in.')),
-        );
-      } else {}
-    } catch (e) {}
+  if (savedFingerprintToken == null || savedFingerprintToken.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        backgroundColor: Colors.orange,
+        content: Text("Please login first"),
+      ),
+    );
+    return;
   }
 
+  try {
+    final response = await http.post(
+      Uri.parse('$api/api/login/$savedFingerprintToken/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $savedFingerprintToken',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+
+      /*
+        Some APIs return a new token.
+        Some APIs only validate the old token.
+        So we safely use new token if available, otherwise old fingerprint token.
+      */
+      final String token =
+          responseData['token']?.toString() ?? savedFingerprintToken;
+
+      final userData = responseData['user'];
+
+      String active = "";
+      String name = "";
+      int warehouseId = 0;
+      int userId = 0;
+
+      try {
+        final jwt = JWT.decode(token);
+
+        active = jwt.payload['active']?.toString() ??
+            userData?['department']?.toString() ??
+            responseData['active']?.toString() ??
+            "";
+
+        userId = jwt.payload['id'] is int
+            ? jwt.payload['id']
+            : int.tryParse(jwt.payload['id']?.toString() ?? "0") ?? 0;
+      } catch (e) {
+        active = userData?['department']?.toString() ??
+            responseData['active']?.toString() ??
+            "";
+      }
+
+      name = userData?['name']?.toString() ??
+          responseData['name']?.toString() ??
+          "";
+
+      warehouseId = userData?['warehouse_id'] is int
+          ? userData['warehouse_id']
+          : int.tryParse(userData?['warehouse_id']?.toString() ?? "0") ?? 0;
+
+      /*
+        IMPORTANT:
+        Restore the same SharedPreferences values saved during normal login.
+        Otherwise dashboard pages may treat the user as guest/default.
+      */
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString('token', token);
+      await prefs.setString('fingerprint_token', token);
+      await prefs.setString('department', active);
+      await prefs.setString('username', name);
+      await prefs.setInt('warehouse_id', warehouseId);
+
+      if (warehouseId != 0) {
+        await prefs.setInt('warehouse', warehouseId);
+      }
+
+      if (userId != 0) {
+        await prefs.setInt('user_id', userId);
+      }
+
+      Widget targetPage;
+
+      switch (active) {
+        case 'Information Technology':
+        case 'Accounts / Accounting':
+          targetPage = dashboard();
+          break;
+        case 'warehouse':
+          targetPage = WarehouseDashboard();
+          break;
+        case 'BDO':
+          targetPage = bdo_dashbord();
+          break;
+        case 'COO':
+          targetPage = ceo_dashboard();
+          break;
+        case 'CEO':
+          targetPage = ceo_dashboard();
+          break;
+        case 'SD':
+          targetPage = SdDashboard();
+          break;
+        case 'ADMIN':
+          targetPage = admin_dashboard();
+          break;
+        case 'BDM':
+          targetPage = bdm_dashbord();
+          break;
+        case 'Warehouse Admin':
+          targetPage = WarehouseAdmin();
+          break;
+        case 'Marketing':
+          targetPage = marketing_dashboard();
+          break;
+        case 'ASD':
+          targetPage = asd_dashbord();
+          break;
+        case 'HR':
+          targetPage = HrDashboard();
+          break;
+        case 'CSO':
+          targetPage = cso_dashboard();
+          break;
+        default:
+          targetPage = dashboard();
+      }
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => targetPage),
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.green,
+          content: Text('Successfully logged in.'),
+        ),
+      );
+    } else {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.remove('fingerprint_token');
+      await prefs.remove('token');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.red,
+          content: Text("Saved login expired. Please login again."),
+        ),
+      );
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.red,
+        content: Text("Fingerprint login failed: $e"),
+      ),
+    );
+  }
+}
+
+Future<String?> getFingerprintTokenFromPrefs() async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  return prefs.getString('fingerprint_token');
+}
   Future login(String email, String password, BuildContext context) async {
     try {
       var response = await http.post(
@@ -206,6 +312,7 @@ class _loginState extends State<login> {
             await prefs.setString('username', name); // Store user name
             await prefs.setInt('warehouse_id', warehouse); // Store warehouse ID
             await storeUserData(token, active, name, warehouse);
+            await prefs.setString('fingerprint_token', token);
           } catch (e) {}
 
           // Handle navigation based on active role
@@ -365,32 +472,32 @@ class _loginState extends State<login> {
                           style: TextStyle(fontSize: 16, color: Colors.white)),
                 ),
                 const SizedBox(height: 15),
-                DividerWithText(text: "OR"),
-                const SizedBox(height: 50),
-                InkWell(
-                  onTap: biometricLogin,
-                  borderRadius: BorderRadius.circular(50),
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.grey[200],
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.grey.withOpacity(0.4),
-                            blurRadius: 6,
-                            offset: Offset(0, 2)),
-                      ],
-                    ),
-                    child: Icon(Icons.fingerprint,
-                        size: 36,
-                        color: const Color.fromARGB(255, 3, 201, 219)),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text("Login with Biometrics",
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-                const SizedBox(height: 30),
+                // DividerWithText(text: "OR"),
+                // const SizedBox(height: 50),
+                // InkWell(
+                //   onTap: biometricLogin,
+                //   borderRadius: BorderRadius.circular(50),
+                //   child: Container(
+                //     padding: const EdgeInsets.all(20),
+                //     decoration: BoxDecoration(
+                //       shape: BoxShape.circle,
+                //       color: Colors.grey[200],
+                //       boxShadow: [
+                //         BoxShadow(
+                //             color: Colors.grey.withOpacity(0.4),
+                //             blurRadius: 6,
+                //             offset: Offset(0, 2)),
+                //       ],
+                //     ),
+                //     child: Icon(Icons.fingerprint,
+                //         size: 36,
+                //         color: const Color.fromARGB(255, 3, 201, 219)),
+                //   ),
+                // ),
+                // const SizedBox(height: 10),
+                // Text("Login with Biometrics",
+                //     style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+                // const SizedBox(height: 30),
               ],
             ),
           ),
