@@ -1,0 +1,525 @@
+import 'package:beposoft/pages/ACCOUNTS/dashboard.dart';
+import 'package:beposoft/pages/ADMIN/admin_dashboard.dart';
+import 'package:beposoft/pages/ADMIN/ceo_dashboard.dart';
+import 'package:beposoft/pages/BDM/bdm_dshboard.dart';
+import 'package:beposoft/pages/BDO/bdo_dashboard.dart';
+import 'package:beposoft/pages/HR/hr_dashboard.dart';
+import 'package:beposoft/pages/MARKETING/marketing_dashboard.dart';
+import 'package:beposoft/pages/WAREHOUSE/warehouse_admin.dart';
+import 'package:beposoft/pages/WAREHOUSE/warehouse_dashboard.dart';
+import 'package:beposoft/registerationpage.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:beposoft/pages/api.dart';
+import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
+import 'package:local_auth/local_auth.dart';
+
+import 'dart:convert';
+
+class login extends StatefulWidget {
+  const login({super.key});
+
+  @override
+  State<login> createState() => _loginState();
+}
+
+class _loginState extends State<login> {
+  var url = "$api/api/login/";
+
+  TextEditingController email = TextEditingController();
+  TextEditingController password = TextEditingController();
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+  }
+
+   Future<String?> getTokenFromPrefs() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    for (String key in prefs.getKeys()) {
+  }
+    return prefs.getString('token2');
+  }
+
+
+Future<void> addfingerprint() async{
+  final token=await getTokenFromPrefs();
+ try{
+   final response= await http.post(Uri.parse('$api/api/login/$token/'),
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer $token',
+  },
+ 
+  );
+   
+   
+
+// ...existing code...
+var active = jsonDecode(response.body)['user']['department'];
+      if (response.statusCode == 200) {
+
+
+          // Handle navigation based on active role
+          Widget targetPage;
+          switch (active) {
+            case 'Information Technology':
+            case 'Accounts / Accounting':
+              targetPage = dashboard();
+              break;
+            case 'warehouse':
+              targetPage = WarehouseDashboard();
+              break;
+            case 'BDO':
+              targetPage = bdo_dashbord();
+              break;
+            case 'COO':
+              targetPage = admin_dashboard();
+              break;
+            case 'CEO':
+              targetPage = ceo_dashboard();
+              break;
+            case 'ADMIN':
+              targetPage = admin_dashboard();
+              break;
+            case 'BDM':
+              targetPage = bdm_dashbord();
+              break;
+            case 'Warehouse Admin':
+              targetPage = WarehouseAdmin();
+              break;
+            case 'Marketing':
+              targetPage = marketing_dashboard();
+              break;
+            case 'HR':
+              targetPage = HrDashboard();
+              break;
+            default:
+              targetPage = dashboard();
+          }
+
+          Navigator.push(
+              context, MaterialPageRoute(builder: (context) => targetPage));
+
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                backgroundColor: Colors.green,
+                content: Text('Successfully logged in.')),
+          );
+       
+      } else {
+       
+      }
+ }
+ catch(e){
+  
+ }
+}
+
+
+  final LocalAuthentication auth = LocalAuthentication();
+
+  Future<void> biometricLogin() async {
+  try {
+    bool isSupported = await auth.isDeviceSupported();
+    bool canCheck = await auth.canCheckBiometrics;
+
+
+    if (!isSupported || !canCheck) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.red, content: Text("Biometric not available")),
+      );
+      return;
+    }
+
+    bool authenticated = await auth.authenticate(
+      localizedReason: "Login with fingerprint or face",
+      options: const AuthenticationOptions(
+        biometricOnly: true,
+        stickyAuth: true,
+      ),
+    );
+
+
+    if (authenticated) {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+
+prefs.getKeys().forEach((key) {
+});
+
+
+//       String? savedToken = prefs.getString('user_token');
+//       String? username = prefs.getString('user_name');
+// String? department = prefs.getString('user_department');
+//       int? warehouse = prefs.getInt('warehouse_id');
+
+      // print('Retrieved from SharedPreferences:');
+      // print('Token: $savedToken');
+      // print('Username: $username');
+      // print('Department: $department');
+      // print('Warehouse: $warehouse');
+addfingerprint() ;
+      // if (savedToken != null && username != null && department != null) {
+      //   // Determine target page
+      //   Widget targetPage;
+      //   switch (department) {
+      //     case 'Information Technology':
+      //     case 'Accounts / Accounting':
+      //       targetPage = dashboard();
+      //       break;
+      //     case 'warehouse':
+      //       targetPage = WarehouseDashboard();
+      //       break;
+      //     case 'BDO':
+      //       targetPage = bdo_dashbord();
+      //       break;
+      //     case 'COO':
+      //       targetPage = admin_dashboard();
+      //       break;
+      //     case 'CEO':
+      //       targetPage = ceo_dashboard();
+      //       break;
+      //     case 'ADMIN':
+      //       targetPage = admin_dashboard();
+      //       break;
+      //     case 'BDM':
+      //       targetPage = bdm_dashbord();
+      //       break;
+      //     case 'Warehouse Admin':
+      //       targetPage = WarehouseAdmin();
+      //       break;
+      //     case 'Marketing':
+      //       targetPage = marketing_dashboard();
+      //       break;
+      //     case 'HR':
+      //       targetPage = HrDashboard();
+      //       break;
+      //     default:
+      //       targetPage = dashboard();
+      //   }
+
+      //   print('Navigating to: $targetPage');
+
+      //   Navigator.push(
+      //     context,
+      //     MaterialPageRoute(builder: (context) => targetPage),
+      //   );
+
+      //   ScaffoldMessenger.of(context).showSnackBar(
+      //     SnackBar(backgroundColor: Colors.green, content: Text('Biometric login successful')),
+      //   );
+      // } else {
+      //   print('Missing data in SharedPreferences.');
+      //   ScaffoldMessenger.of(context).showSnackBar(
+      //     SnackBar(backgroundColor: Colors.red, content: Text('No stored credentials. Please login once with username and password.')),
+      //   );
+      // }
+    } else {
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(backgroundColor: Colors.red, content: Text("Biometric login failed: $e")),
+    );
+  }
+}
+
+  Future<void> storeUserData(String token, String active, String username,
+      dynamic warehouse,String token2) async {
+
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+
+    // Save the data into SharedPreferences
+    await prefs.setString('token', token);
+    await prefs.setString('token2', token2);
+    await prefs.setString('department', active);
+    await prefs.setString('username', username);
+
+    // Handle warehouse based on its type
+    if (warehouse is int) {
+      await prefs.setInt('warehouse', warehouse);
+    } else if (warehouse is String) {
+      await prefs.setString('warehouse', warehouse);
+    }
+
+     // Optional: Confirm what's stored
+  for (String key in prefs.getKeys()) {
+  }
+    
+    //  else {}
+  }
+
+  void login(String email, String password, BuildContext context) async {
+    try {
+      var response = await http.post(
+        Uri.parse(url),
+        body: {"username": email, "password": password},
+      );
+
+      if (response.statusCode == 200) {
+        var responseData = jsonDecode(response.body);
+        var status = responseData['status'];
+
+        if (status == 'success') {
+          var token = responseData['token'];
+          var active = responseData['active'];
+          var name = responseData['name'];
+          var warehouse =
+              responseData['warehouse_id'] ?? 0; // Default to 0 if null
+var token2 = responseData['token'] ?? ''; // Default to empty string if null
+          try {
+            final jwt = JWT.decode(token);
+            var id = jwt.payload['id']; // Expected to be an int
+            SharedPreferences prefs = await SharedPreferences.getInstance();
+            await prefs.setInt('user_id', id); // Store user ID as an int
+            await prefs.setString('token', token);
+            await prefs.setString('username', name); // Store user name
+            await prefs.setInt('warehouse_id', warehouse); // Store warehouse ID
+            await prefs.setString('department', active);
+            await prefs.setString("token2", token);
+
+
+      
+
+            await storeUserData(token, active, name, warehouse,token2);
+          } catch (e) {}
+
+          // Handle navigation based on active role
+          Widget targetPage;
+          switch (active) {
+            case 'Information Technology':
+            case 'Accounts / Accounting':
+              targetPage = dashboard();
+              break;
+            case 'warehouse':
+              targetPage = WarehouseDashboard();
+              break;
+            case 'BDO':
+              targetPage = bdo_dashbord();
+              break;
+            case 'COO':
+              targetPage = admin_dashboard();
+              break;
+            case 'CEO':
+              targetPage = ceo_dashboard();
+              break;
+            case 'ADMIN':
+              targetPage = admin_dashboard();
+              break;
+            case 'BDM':
+              targetPage = bdm_dashbord();
+              break;
+            case 'Warehouse Admin':
+              targetPage = WarehouseAdmin();
+              break;
+            case 'Marketing':
+              targetPage = marketing_dashboard();
+              break;
+            case 'HR':
+              targetPage = HrDashboard();
+              break;
+            default:
+              targetPage = dashboard();
+          }
+
+          Navigator.push(
+              context, MaterialPageRoute(builder: (context) => targetPage));
+
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                backgroundColor: Colors.green,
+                content: Text('Successfully logged in.')),
+          );
+        } else {
+          // Show backend error message if available
+          String errorMessage = responseData['message'] ?? 'Login failed.';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(backgroundColor: Colors.red, content: Text(errorMessage)),
+          );
+        }
+      } else {
+        // Try to show backend error message if available
+        String errorMessage = 'An error occurred. Please try again.';
+        try {
+          var responseData = jsonDecode(response.body);
+          if (responseData['message'] != null) {
+            errorMessage = responseData['message'];
+          }
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: Colors.red, content: Text(errorMessage)),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('An error occurred. Please try again.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Color.fromARGB(255, 255, 255, 255),
+      body: SingleChildScrollView(
+        child: Container(
+          child: Column(
+            children: [
+              SizedBox(
+                height: 100,
+              ),
+              Image.asset(
+                "lib/assets/logo.png",
+                width: 100, // Change width to desired size
+                height: 100, // Change height to desired size
+                fit: BoxFit
+                    .contain, // Use BoxFit.contain to maintain aspect ratio
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 20, right: 20),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(
+                        10), // Adjust the radius as needed
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.5),
+                        spreadRadius: 5,
+                        blurRadius: 7,
+                        offset: Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          padding: EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Color.fromARGB(255, 15, 195, 219),
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(10),
+                              topRight: Radius.circular(10),
+                            ),
+                            border: Border.all(
+                                color: Color.fromARGB(255, 202, 202, 202)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color.fromARGB(255, 254, 252, 252)
+                                    .withOpacity(0.5),
+                                spreadRadius: 5,
+                                blurRadius: 7,
+                                offset: Offset(0, 1),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                " Sign in",
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              SizedBox(height: 13),
+                              // Add more widgets here as needed
+                            ],
+                          ),
+                        ),
+                        SizedBox(
+                          height: 20,
+                        ),
+                        TextField(
+                          controller: email,
+                          decoration: InputDecoration(
+                            labelText: 'Username',
+                            prefixIcon: Icon(Icons.person),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10.0),
+                              borderSide: BorderSide(color: Colors.grey),
+                            ),
+                            contentPadding: EdgeInsets.symmetric(vertical: 8.0),
+                          ),
+                        ),
+                        SizedBox(
+                          height: 15,
+                        ),
+                        TextField(
+                          controller: password,
+                          obscureText: true, // Hides the text while typing
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            prefixIcon: Icon(Icons.lock),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10.0),
+                              borderSide: BorderSide(color: Colors.grey),
+                            ),
+                            contentPadding: EdgeInsets.symmetric(vertical: 8.0),
+                          ),
+                        ),
+                        SizedBox(
+                          height: 15,
+                        ),
+                        ElevatedButton(
+                            onPressed: () {
+                              login(email.text, password.text, context);
+                            },
+                            style: ButtonStyle(
+                              backgroundColor: MaterialStateProperty.all<Color>(
+                                Color.fromARGB(255, 15, 195, 219),
+                              ),
+                              shape: MaterialStateProperty.all<
+                                  RoundedRectangleBorder>(
+                                RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                      1), // Set your desired border radius
+                                ),
+                              ),
+                              fixedSize: MaterialStateProperty.all<Size>(
+                                Size(300,
+                                    15), // Set your desired width and heigh
+                              ),
+                            ),
+                            child: Text(
+                              'Sign in',
+                              style: TextStyle(color: Colors.white),
+                            )),
+                        SizedBox(height: 10),
+                        ElevatedButton.icon(
+                          onPressed: biometricLogin,
+                          icon: Icon(Icons.fingerprint),
+                          label: Text("Login with Biometrics"),
+                          style: ElevatedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: Colors.grey[800],
+                            fixedSize: Size(300, 40),
+                          ),
+                        ),
+                        SizedBox(
+                          height: 20,
+                        ),
+                        SizedBox(
+                          height: 10,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
