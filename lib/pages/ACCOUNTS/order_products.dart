@@ -35,6 +35,14 @@ class _order_productsState extends State<order_products> {
   List<String> categories = ["All Categories"];
   String selectedCategory = "All Categories";
 
+  int currentPage = 1;
+  int totalProductCount = 0;
+  String? nextPageUrl;
+  String? previousPageUrl;
+  bool isProductLoading = false;
+  String searchQuery = "";
+  
+
   TextEditingController searchController = TextEditingController();
 
   @override
@@ -53,18 +61,14 @@ class _order_productsState extends State<order_products> {
             builder: (context) =>
                 bdo_dashbord()), // Replace AnotherPage with your target page
       );
-    }
-
-        else if (dep == "SD") {
+    } else if (dep == "SD") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
             builder: (context) =>
                 SdDashboard()), // Replace AnotherPage with your target page
       );
-    }
-    
-     else if (dep == "BDM") {
+    } else if (dep == "BDM") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -173,13 +177,29 @@ class _order_productsState extends State<order_products> {
     } catch (e) {}
   }
 
-  Future<void> fetchProductListid(var warehouse) async {
+  Future<void> fetchProductListid(
+    var warehouse, {
+    int page = 1,
+    String search = "",
+  }) async {
     final token = await getTokenFromPrefs();
     dep = await getdepFromPrefs();
 
+    setState(() {
+      isProductLoading = true;
+    });
+
     try {
+      final uri =
+          Uri.parse("$api/api/warehouse/products/$warehouse/get/").replace(
+        queryParameters: {
+          'page': page.toString(),
+          if (search.trim().isNotEmpty) 'search': search.trim(),
+        },
+      );
+
       final response = await http.get(
-        Uri.parse("$api/api/warehouse/products/$warehouse/"),
+        uri,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -188,37 +208,36 @@ class _order_productsState extends State<order_products> {
 
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
-        final List<dynamic> productsData = parsed['data'];
+
+        totalProductCount = parsed['count'] ?? 0;
+        nextPageUrl = parsed['next'];
+        previousPageUrl = parsed['previous'];
+        currentPage = page;
+
+        final List<dynamic> productsData = parsed['results']['data'] ?? [];
 
         List<Map<String, dynamic>> productList = [];
-        Set<String> categorySet = {}; // ✅ SAME AS Product_List PAGE
+        Set<String> categorySet = {};
 
         for (final p in productsData) {
-          // ✅ keep approval logic exactly
           if ((p['approval_status'] ?? '') != 'Approved') continue;
 
-          // ✅ collect category name (STRING ONLY)
           if (p['product_category_name'] != null &&
               p['product_category_name'].toString().trim().isNotEmpty) {
             categorySet.add(p['product_category_name']);
           }
 
-          // ✅ keep product data unchanged
           productList.add(Map<String, dynamic>.from(p));
         }
 
         setState(() {
           products = productList;
-
-          // ✅ categories as List<String>
           categories = ["All Categories", ...categorySet];
 
-          // ✅ reset invalid selection
           if (!categories.contains(selectedCategory)) {
             selectedCategory = "All Categories";
           }
 
-          // ✅ apply existing category filter logic
           filteredProducts = products.where((product) {
             if (selectedCategory == "All Categories") return true;
             return product['product_category_name'] == selectedCategory;
@@ -226,6 +245,10 @@ class _order_productsState extends State<order_products> {
         });
       }
     } catch (e) {
+    } finally {
+      setState(() {
+        isProductLoading = false;
+      });
     }
   }
 
@@ -397,19 +420,8 @@ class _order_productsState extends State<order_products> {
   }
 
   void _applyFilters() {
-    final query = searchController.text.toLowerCase();
-
-    setState(() {
-      filteredProducts = products.where((p) {
-        final matchesSearch = p['name'].toLowerCase().contains(query);
-
-        final matchesCategory = selectedCategoryId == null
-            ? true
-            : p['product_category_id'].toString() == selectedCategoryId;
-
-        return matchesSearch && matchesCategory;
-      }).toList();
-    });
+    searchQuery = searchController.text.trim();
+    fetchProductListid(warehouse, page: 1, search: searchQuery);
   }
 
   @override
@@ -435,16 +447,14 @@ class _order_productsState extends State<order_products> {
                       builder: (context) =>
                           bdo_dashbord()), // Replace AnotherPage with your target page
                 );
-              } 
-                  else if (dep == "SD") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) =>
-                SdDashboard()), // Replace AnotherPage with your target page
-      );
-    }
-              else if (dep == "BDM") {
+              } else if (dep == "SD") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) =>
+                          SdDashboard()), // Replace AnotherPage with your target page
+                );
+              } else if (dep == "BDM") {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
@@ -614,9 +624,58 @@ class _order_productsState extends State<order_products> {
                 onChanged: (_) => _applyFilters(),
               ),
             ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              color: Colors.white,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: previousPageUrl == null || isProductLoading
+                        ? null
+                        : () {
+                            fetchProductListid(
+                              warehouse,
+                              page: currentPage - 1,
+                              search: searchQuery,
+                            );
+                          },
+                    child: const Text("Previous"),
+                  ),
+                  Text(
+                    "Page $currentPage",
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: nextPageUrl == null || isProductLoading
+                        ? null
+                        : () {
+                            fetchProductListid(
+                              warehouse,
+                              page: currentPage + 1,
+                              search: searchQuery,
+                            );
+                          },
+                    child: const Text("Next"),
+                  ),
+                ],
+              ),
+            ),
             Expanded(
               child: RefreshIndicator(
-                onRefresh: () => fetchProductListid(warehouse),
+                onRefresh: () => fetchProductListid(
+                  warehouse,
+                  page: currentPage,
+                  search: searchQuery,
+                ),
                 child: ListView.builder(
                   itemCount: filteredProducts.length,
                   itemBuilder: (context, index) {
