@@ -145,7 +145,7 @@ class _admin_dashboardState extends State<dashboard> {
 
           var shippedOrdersToday = orderList.where((order) {
             return order['status'] == 'Shipped' &&
-                order['updated_at'] == formattedToday;
+                order['updated_at'] == formattedToday; 
           }).toList();
 
           setState(() {
