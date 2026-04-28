@@ -106,8 +106,6 @@ class _order_requestState extends State<order_request> {
   final TextEditingController parcelServiceNoteController =
       TextEditingController();
 
-      
-
   @override
   void initState() {
     super.initState();
@@ -2871,6 +2869,20 @@ class _order_requestState extends State<order_request> {
                                   width: double.infinity,
                                   child: ElevatedButton(
                                     onPressed: () async {
+                                      if (selectedCourierServiceId == null) {
+                                        ScaffoldMessenger.of(context)
+                                            .clearSnackBars();
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                                "Please select parcel service"),
+                                            backgroundColor: Colors.red,
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                        return;
+                                      }
                                       if (selectpaystatus == "COD") {
                                         // Validate COD Amount
                                         if (codamountcontroller.text

@@ -4467,14 +4467,16 @@ class _OrderReviewState extends State<OrderReview> {
     final String status = ord?['status']?.toString().toLowerCase() ?? '';
 
     final String dept = (dep ?? '').toString().toLowerCase();
-   final bool canShowParcelTopSection =
-    ord != null &&
-    (
-      (dept == "bdo" && ord["status"] == "Invoice Created") ||
-      (dept != "bdo" &&
-          (ord["status"] == "Invoice Created" ||
-              ord["status"] == "Invoice Approved"))
-    );
+    final bool canShowParcelTopSection = ord != null &&
+        ((dept == "bdo" && ord["status"] == "Invoice Created") ||
+            (dept == "bdm" &&
+                (ord["status"] == "Invoice Created" ||
+                    ord["status"] == "Invoice Approved")) ||
+            (dept != "bdo" &&
+                dept != "bdm" &&
+                (ord["status"] == "Invoice Created" ||
+                    ord["status"] == "Invoice Approved" ||
+                    ord["status"] == "Waiting For Confirmation")));
 
     final bool showAddProductButton =
         dept != 'bdo' || (dept == 'bdo' && status == 'invoice created');
@@ -4943,8 +4945,6 @@ class _OrderReviewState extends State<OrderReview> {
                             ),
 
                             SizedBox(height: 4.0),
-
-                            
 
                             if (canShowParcelTopSection)
                               Row(
