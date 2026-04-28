@@ -101,6 +101,12 @@ class _order_requestState extends State<order_request> {
   Set<int> expandedRows = {};
   var famid;
   var staffid;
+  List<Map<String, dynamic>> courierdata = [];
+  int? selectedCourierServiceId;
+  final TextEditingController parcelServiceNoteController =
+      TextEditingController();
+
+      
 
   @override
   void initState() {
@@ -112,6 +118,7 @@ class _order_requestState extends State<order_request> {
   void initdata() async {
     getstate();
     getcompany();
+    getcourierservices();
     dep = await getdepFromPrefs();
 
     if (dep == "BDO" || dep == "BDM") {
@@ -149,6 +156,41 @@ class _order_requestState extends State<order_request> {
     } finally {
       // Optional: keep disabled or reset after done
       // setState(() => isCreating = false); // Uncomment if you want to re-enable
+    }
+  }
+
+  Future<void> getcourierservices() async {
+    try {
+      final token = await gettokenFromPrefs();
+
+      final response = await http.get(
+        Uri.parse('$api/api/parcal/service/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+
+        List<Map<String, dynamic>> courierList = [];
+
+        if (parsed['data'] != null && parsed['data'] is List) {
+          for (var item in parsed['data']) {
+            courierList.add({
+              'id': item['id'],
+              'name': item['name'],
+            });
+          }
+        }
+
+        setState(() {
+          courierdata = courierList;
+        });
+      }
+    } catch (e) {
+      debugPrint("Courier service fetch error: $e");
     }
   }
 
@@ -274,6 +316,8 @@ class _order_requestState extends State<order_request> {
         'total_amount': tot,
         'bank': selectedbankId,
         'payment_method': selectpaymethod,
+        'parcel_service': selectedCourierServiceId,
+        'parcel_service_note': parcelServiceNoteController.text.trim(),
       };
 
       // ⚠️ If your API expects a list for warehouses, pass a list:
@@ -299,6 +343,7 @@ class _order_requestState extends State<order_request> {
       );
       final orderId = _extractOrderId(response.body);
 
+      print("Order Create Response: ${response.statusCode} - ${response.body}");
       if (response.statusCode == 201) {
         setState(() {
           createdOrderId = orderId;
@@ -1088,6 +1133,9 @@ class _order_requestState extends State<order_request> {
   @override
   void dispose() {
     textEditingController.dispose();
+    searchController.dispose();
+    parcelServiceNoteController.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
 
@@ -1231,7 +1279,7 @@ class _order_requestState extends State<order_request> {
                     height: 15,
                   ),
                   Text(
-                    "ORDER REQUEST ",
+                    "ORDER REQUEST",
                     style: TextStyle(
                         fontSize: 20,
                         letterSpacing: 9.0,
@@ -2366,6 +2414,96 @@ class _order_requestState extends State<order_request> {
                                       ),
                                     ],
                                   ),
+                                ),
+                              ),
+
+                              SizedBox(height: 8),
+
+                              Text(
+                                "Courier Service",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(height: 5),
+
+                              Padding(
+                                padding: const EdgeInsets.only(right: 10),
+                                child: Container(
+                                  height: 49,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.grey),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<int>(
+                                      value: selectedCourierServiceId,
+                                      isExpanded: true,
+                                      hint: const Text(
+                                        "Select Courier Service",
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                      icon: const Icon(Icons.arrow_drop_down),
+                                      onChanged: (int? newValue) {
+                                        setState(() {
+                                          selectedCourierServiceId = newValue;
+                                        });
+                                      },
+                                      items: courierdata
+                                          .map<DropdownMenuItem<int>>(
+                                              (service) {
+                                        return DropdownMenuItem<int>(
+                                          value: service['id'],
+                                          child: Text(
+                                            service['name'] ?? '',
+                                            style:
+                                                const TextStyle(fontSize: 12),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                              SizedBox(height: 8),
+
+                              Text(
+                                "Courier Service Note",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(height: 5),
+
+                              Padding(
+                                padding: const EdgeInsets.only(right: 10),
+                                child: TextField(
+                                  controller: parcelServiceNoteController,
+                                  maxLines: 3,
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter courier service note',
+                                    hintStyle: const TextStyle(fontSize: 12),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 12,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                      borderSide:
+                                          const BorderSide(color: Colors.grey),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                      borderSide:
+                                          const BorderSide(color: Colors.blue),
+                                    ),
+                                  ),
+                                  style: const TextStyle(fontSize: 12),
                                 ),
                               ),
 

@@ -56,6 +56,7 @@ class _OrderReviewState extends State<OrderReview> {
   bool showFamilyDropdown = false;
   bool showCompanyDropdown = false;
   String? cod_status;
+  bool showParcelNoteField = false;
   String? advance_cod;
   double approvedGrvAmount = 0.0;
   double refundReceiptAmount = 0.0;
@@ -67,6 +68,9 @@ class _OrderReviewState extends State<OrderReview> {
   int currentPage = 1;
   int totalPages = 1;
   String searchQuery = "";
+  bool showParcelServiceDropdown = false;
+  final TextEditingController parcelServiceNoteController =
+      TextEditingController();
 
   String? currentOrderStatus; // REAL status from API
   bool statusSubmitted = false; // Track submit action
@@ -813,57 +817,90 @@ class _OrderReviewState extends State<OrderReview> {
     }
   }
 
-  void showParcelServiceDialog(BuildContext context, var id) {
+  void showParcelServiceDialog(
+      BuildContext context, var id, dynamic currentParcelServiceId) {
+    selectedserviceId = currentParcelServiceId != null
+        ? int.tryParse(currentParcelServiceId.toString())
+        : null;
+
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Select Parcel Service'),
-          content: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10.0),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey, width: 1.0),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButton<int>(
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setDialogState) {
+            return AlertDialog(
+              title: const Text('Select Parcel Service'),
+              content: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey, width: 1.0),
+                ),
+                child: DropdownButton<int>(
                   isExpanded: true,
-                  underline: SizedBox(), // Removes default underline
-                  hint: Text('Select a Parcel Service'),
-                  value: selectedserviceId,
-                  items: courierdata.map((item) {
+                  underline: const SizedBox(),
+                  hint: const Text('Select a Parcel Service'),
+                  value: courierdata.any(
+                    (item) =>
+                        item['id'].toString() == selectedserviceId?.toString(),
+                  )
+                      ? int.tryParse(selectedserviceId.toString())
+                      : null,
+                  items: courierdata.map<DropdownMenuItem<int>>((item) {
                     return DropdownMenuItem<int>(
-                      value: item['id'],
-                      child: Text(item['name']),
+                      value: int.tryParse(item['id'].toString()),
+                      child: Text(
+                        item['name']?.toString() ?? '',
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     );
                   }).toList(),
-                  onChanged: (value) {
+                  onChanged: (int? value) {
+                    setDialogState(() {
+                      selectedserviceId = value;
+                    });
+
                     setState(() {
                       selectedserviceId = value;
                     });
                   },
                 ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: Text('Close'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue, // Set the background color
               ),
-              child: Text('Submit', style: TextStyle(color: Colors.white)),
-              onPressed: () {
-                updateparcel(selectedserviceId, id);
-              },
-            ),
-          ],
+              actions: [
+                TextButton(
+                  child: const Text('Close'),
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                  },
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                  ),
+                  child: const Text(
+                    'Submit',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onPressed: () async {
+                    if (selectedserviceId == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please select parcel service'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+
+                    final success = await updateparcel(selectedserviceId, id);
+
+                    if (success && Navigator.canPop(dialogContext)) {
+                      Navigator.of(dialogContext).pop();
+                    }
+                  },
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -1178,7 +1215,7 @@ class _OrderReviewState extends State<OrderReview> {
       var response = await http.get(
         Uri.parse('$api/api/parcal/service/'),
         headers: {
-          'Authorization': ' Bearer $token',
+          'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
@@ -1206,6 +1243,68 @@ class _OrderReviewState extends State<OrderReview> {
         ;
       }
     } catch (error) {}
+  }
+
+  String getCourierName(dynamic parcelServiceId) {
+    if (parcelServiceId == null) return 'Select Parcel Service';
+
+    final matched = courierdata.where(
+      (e) => e['id'].toString() == parcelServiceId.toString(),
+    );
+
+    if (matched.isEmpty) return parcelServiceId.toString();
+
+    return matched.first['name']?.toString() ?? parcelServiceId.toString();
+  }
+
+  Future<void> updateOrderParcelDetails() async {
+    try {
+      final token = await getTokenFromPrefs();
+
+      final body = {
+        'parcel_service': selectedserviceId,
+        'parcel_service_note': parcelServiceNoteController.text.trim(),
+      };
+
+      final response = await http.put(
+        Uri.parse('$api/api/orders/update/${widget.id}/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200) {
+        await fetchOrderItems();
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Parcel service updated successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to update parcel service'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Parcel update error: $e");
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error updating parcel service'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> SendTrackingId(
@@ -1738,44 +1837,62 @@ class _OrderReviewState extends State<OrderReview> {
     }
   }
 
-  Future<void> updateparcel(var parcel, var orderId) async {
+  Future<bool> updateparcel(var parcel, var orderId) async {
     try {
       final token = await getTokenFromPrefs();
+
       var response = await http.put(
         Uri.parse('$api/api/warehouse/detail/$orderId/'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
-        body: jsonEncode(
-          {
-            'parcel_service': parcel,
-          },
-        ),
+        body: jsonEncode({
+          'parcel_service': parcel,
+        }),
       );
+
+      print('updateparcel response: ${response.statusCode} ${response.body}');
+
       if (response.statusCode == 200) {
+        await fetchOrderItems();
+
+        if (!mounted) return true;
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(' updated successfully'),
+          const SnackBar(
+            content: Text('Parcel service updated successfully'),
+            backgroundColor: Colors.green,
             duration: Duration(seconds: 2),
           ),
         );
-        fetchOrderItems();
+
+        return true;
       } else {
+        if (!mounted) return false;
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update '),
+          const SnackBar(
+            content: Text('Failed to update parcel service'),
+            backgroundColor: Colors.red,
             duration: Duration(seconds: 2),
           ),
         );
+
+        return false;
       }
     } catch (error) {
+      if (!mounted) return false;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error updating '),
+        const SnackBar(
+          content: Text('Error updating parcel service'),
+          backgroundColor: Colors.red,
           duration: Duration(seconds: 2),
         ),
       );
+
+      return false;
     }
   }
 
@@ -3022,6 +3139,8 @@ class _OrderReviewState extends State<OrderReview> {
         },
       );
 
+      print("Order Items Response: ${response.statusCode} - ${response.body}");
+
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
         List<Map<String, dynamic>> tempGrvList = [];
@@ -3059,6 +3178,9 @@ class _OrderReviewState extends State<OrderReview> {
         }
 
         ord = parsed['order'] ?? {};
+        selectedserviceId = ord['parcel_service'];
+        parcelServiceNoteController.text =
+            ord['parcel_service_note']?.toString() ?? '';
         codamount.text = ord['cod_amount']?.toString() ?? '';
         advanceController.text = ord['adv_cod_amount']?.toString() ?? '';
 
@@ -3145,7 +3267,8 @@ class _OrderReviewState extends State<OrderReview> {
             'breadth': warehouse['breadth'] ?? '0',
             'height': warehouse['height'] ?? '0',
             'image': warehouse['image'] ?? '',
-            'parcel_service': warehouse['parcel_service'] ?? '',
+            'parcel_service_id': warehouse['parcel_service_id'],
+            'parcel_service_name': warehouse['parcel_service_name'] ?? '',
             'tracking_id': warehouse['tracking_id'] ?? '',
             'shipping_charge': warehouse['shipping_charge'] ?? '0.0',
             'status': warehouse['status'] ?? '',
@@ -3871,424 +3994,420 @@ class _OrderReviewState extends State<OrderReview> {
     }
   }
 
- void _openCustomerSelector(BuildContext context) {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) {
-      return StatefulBuilder(
-        builder: (context, setModalState) {
-          if (customer.isEmpty) {
-            getcustomer(page: 1, refreshModal: setModalState);
-          }
+  void _openCustomerSelector(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            if (customer.isEmpty) {
+              getcustomer(page: 1, refreshModal: setModalState);
+            }
 
-          return DraggableScrollableSheet(
-            initialChildSize: 0.75,
-            minChildSize: 0.50,
-            maxChildSize: 0.95,
-            expand: false,
-            builder: (context, scrollController) {
-              return Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(24),
+            return DraggableScrollableSheet(
+              initialChildSize: 0.75,
+              minChildSize: 0.50,
+              maxChildSize: 0.95,
+              expand: false,
+              builder: (context, scrollController) {
+                return Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
                   ),
-                ),
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    top: 12,
-                    bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-                  ),
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade300,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.person_search,
-                              color: Colors.blue,
-                              size: 22,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Text(
-                              'Select Customer',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                            },
-                            icon: const Icon(Icons.close),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      TextField(
-                        decoration: InputDecoration(
-                          hintText: 'Search by customer name',
-                          prefixIcon: const Icon(Icons.search),
-                          filled: true,
-                          fillColor: Colors.grey.shade100,
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 14,
-                            horizontal: 14,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(
-                              color: Colors.grey.shade300,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(
-                              color: Colors.blue,
-                              width: 1.4,
-                            ),
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 12,
+                      bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(20),
                           ),
                         ),
-                        onChanged: (value) {
-                          searchQuery = value;
-                          getcustomer(
-                            page: 1,
-                            search: value,
-                            refreshModal: setModalState,
-                          );
-                        },
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Row(
+                        const SizedBox(height: 14),
+                        Row(
                           children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: currentPage > 1
-                                    ? () {
-                                        getcustomer(
-                                          page: currentPage - 1,
-                                          search: searchQuery,
-                                          refreshModal: setModalState,
-                                        );
-                                      }
-                                    : null,
-                                icon: const Icon(Icons.chevron_left, size: 18),
-                                label: const Text("Prev"),
-                                style: ElevatedButton.styleFrom(
-                                  elevation: 0,
-                                  backgroundColor: Colors.blue,
-                                  foregroundColor: Colors.white,
-                                  disabledBackgroundColor:
-                                      Colors.grey.shade300,
-                                  disabledForegroundColor:
-                                      Colors.grey.shade600,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 12),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 10,
-                              ),
+                              padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: Colors.blue.shade50,
                                 borderRadius: BorderRadius.circular(12),
-                                border:
-                                    Border.all(color: Colors.grey.shade300),
                               ),
-                              child: Text(
-                                "Page $currentPage / $totalPages",
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                ),
+                              child: const Icon(
+                                Icons.person_search,
+                                color: Colors.blue,
+                                size: 22,
                               ),
                             ),
                             const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: currentPage < totalPages
-                                    ? () {
-                                        getcustomer(
-                                          page: currentPage + 1,
-                                          search: searchQuery,
-                                          refreshModal: setModalState,
-                                        );
-                                      }
-                                    : null,
-                                icon: const Icon(Icons.chevron_right, size: 18),
-                                label: const Text("Next"),
-                                style: ElevatedButton.styleFrom(
-                                  elevation: 0,
-                                  backgroundColor: Colors.blue,
-                                  foregroundColor: Colors.white,
-                                  disabledBackgroundColor:
-                                      Colors.grey.shade300,
-                                  disabledForegroundColor:
-                                      Colors.grey.shade600,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 12),
+                            const Expanded(
+                              child: Text(
+                                'Select Customer',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.black87,
                                 ),
                               ),
+                            ),
+                            IconButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                              },
+                              icon: const Icon(Icons.close),
                             ),
                           ],
                         ),
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      Expanded(
-                        child: customer.isEmpty
-                            ? Center(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.search_off,
-                                      size: 46,
-                                      color: Colors.grey.shade400,
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Text(
-                                      "No customers found",
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey.shade600,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : ListView.separated(
-                                controller: scrollController,
-                                itemCount: customer.length,
-                                separatorBuilder: (_, __) =>
-                                    const SizedBox(height: 10),
-                                itemBuilder: (context, index) {
-                                  final c = customer[index];
-                                  final bool isSelected =
-                                      selectedCustomer?['id'] == c['id'];
-
-                                  return Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(16),
-                                      onTap: () async {
-                                        final confirmed =
-                                            await _showCustomerConfirmPopup(
-                                                context, c);
-
-                                        if (confirmed == true) {
-                                          setState(() {
-                                            selectedCustomer = c;
-                                          });
-
-                                          await updatecustomer();
-                                          Navigator.pop(context);
+                        const SizedBox(height: 14),
+                        TextField(
+                          decoration: InputDecoration(
+                            hintText: 'Search by customer name',
+                            prefixIcon: const Icon(Icons.search),
+                            filled: true,
+                            fillColor: Colors.grey.shade100,
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 14,
+                              horizontal: 14,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide.none,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(
+                                color: Colors.blue,
+                                width: 1.4,
+                              ),
+                            ),
+                          ),
+                          onChanged: (value) {
+                            searchQuery = value;
+                            getcustomer(
+                              page: 1,
+                              search: value,
+                              refreshModal: setModalState,
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: currentPage > 1
+                                      ? () {
+                                          getcustomer(
+                                            page: currentPage - 1,
+                                            search: searchQuery,
+                                            refreshModal: setModalState,
+                                          );
                                         }
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 14,
-                                          vertical: 14,
+                                      : null,
+                                  icon:
+                                      const Icon(Icons.chevron_left, size: 18),
+                                  label: const Text("Prev"),
+                                  style: ElevatedButton.styleFrom(
+                                    elevation: 0,
+                                    backgroundColor: Colors.blue,
+                                    foregroundColor: Colors.white,
+                                    disabledBackgroundColor:
+                                        Colors.grey.shade300,
+                                    disabledForegroundColor:
+                                        Colors.grey.shade600,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
+                                ),
+                                child: Text(
+                                  "Page $currentPage / $totalPages",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: currentPage < totalPages
+                                      ? () {
+                                          getcustomer(
+                                            page: currentPage + 1,
+                                            search: searchQuery,
+                                            refreshModal: setModalState,
+                                          );
+                                        }
+                                      : null,
+                                  icon:
+                                      const Icon(Icons.chevron_right, size: 18),
+                                  label: const Text("Next"),
+                                  style: ElevatedButton.styleFrom(
+                                    elevation: 0,
+                                    backgroundColor: Colors.blue,
+                                    foregroundColor: Colors.white,
+                                    disabledBackgroundColor:
+                                        Colors.grey.shade300,
+                                    disabledForegroundColor:
+                                        Colors.grey.shade600,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Expanded(
+                          child: customer.isEmpty
+                              ? Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.search_off,
+                                        size: 46,
+                                        color: Colors.grey.shade400,
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Text(
+                                        "No customers found",
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey.shade600,
+                                          fontWeight: FontWeight.w500,
                                         ),
-                                        decoration: BoxDecoration(
-                                          color: isSelected
-                                              ? Colors.blue.shade50
-                                              : Colors.white,
-                                          borderRadius:
-                                              BorderRadius.circular(16),
-                                          border: Border.all(
-                                            color: isSelected
-                                                ? Colors.blue
-                                                : Colors.grey.shade300,
-                                            width: isSelected ? 1.3 : 1,
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : ListView.separated(
+                                  controller: scrollController,
+                                  itemCount: customer.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(height: 10),
+                                  itemBuilder: (context, index) {
+                                    final c = customer[index];
+                                    final bool isSelected =
+                                        selectedCustomer?['id'] == c['id'];
+
+                                    return Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(16),
+                                        onTap: () async {
+                                          final confirmed =
+                                              await _showCustomerConfirmPopup(
+                                                  context, c);
+
+                                          if (confirmed == true) {
+                                            setState(() {
+                                              selectedCustomer = c;
+                                            });
+
+                                            await updatecustomer();
+                                            Navigator.pop(context);
+                                          }
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 14,
                                           ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(
-                                                  0.04),
-                                              blurRadius: 10,
-                                              offset: const Offset(0, 3),
-                                            ),
-                                          ],
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Container(
-                                              width: 42,
-                                              height: 42,
-                                              decoration: BoxDecoration(
-                                                color: Colors.blue.shade100,
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                              ),
-                                              child: const Icon(
-                                                Icons.person,
-                                                color: Colors.blue,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    c['name'] ?? '',
-                                                    style: const TextStyle(
-                                                      fontSize: 15,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color: Colors.black87,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    "Tap to update billing customer",
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      color:
-                                                          Colors.grey.shade600,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            Icon(
-                                              isSelected
-                                                  ? Icons.check_circle
-                                                  : Icons.arrow_forward_ios,
-                                              size: isSelected ? 22 : 16,
+                                          decoration: BoxDecoration(
+                                            color: isSelected
+                                                ? Colors.blue.shade50
+                                                : Colors.white,
+                                            borderRadius:
+                                                BorderRadius.circular(16),
+                                            border: Border.all(
                                               color: isSelected
                                                   ? Colors.blue
-                                                  : Colors.grey.shade500,
+                                                  : Colors.grey.shade300,
+                                              width: isSelected ? 1.3 : 1,
                                             ),
-                                          ],
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black
+                                                    .withOpacity(0.04),
+                                                blurRadius: 10,
+                                                offset: const Offset(0, 3),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                width: 42,
+                                                height: 42,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.blue.shade100,
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                child: const Icon(
+                                                  Icons.person,
+                                                  color: Colors.blue,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      c['name'] ?? '',
+                                                      style: const TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: Colors.black87,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      "Tap to update billing customer",
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors
+                                                            .grey.shade600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              Icon(
+                                                isSelected
+                                                    ? Icons.check_circle
+                                                    : Icons.arrow_forward_ios,
+                                                size: isSelected ? 22 : 16,
+                                                color: isSelected
+                                                    ? Colors.blue
+                                                    : Colors.grey.shade500,
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  );
-                                },
-                              ),
-                      ),
-                    ],
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
-          );
-        },
-      );
-    },
-  );
-}
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<bool?> _showCustomerConfirmPopup(
-    BuildContext context, Map<String, dynamic> customer) {
-  return showDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) {
-      return AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-        ),
-        title: Row(
-          children: const [
-            Icon(Icons.verified_user, color: Colors.blue),
-            SizedBox(width: 8),
-            Text(
-              'Confirm Update',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        content: RichText(
-          text: TextSpan(
-            style: DefaultTextStyle.of(context).style.copyWith(fontSize: 14),
-            children: [
-              const TextSpan(text: 'Change billing customer to\n\n'),
-              TextSpan(
-                text: customer['name'] ?? '',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+      BuildContext context, Map<String, dynamic> customer) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          title: Row(
+            children: const [
+              Icon(Icons.verified_user, color: Colors.blue),
+              SizedBox(width: 8),
+              Text(
+                'Confirm Update',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              const TextSpan(text: ' ?'),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+          content: RichText(
+            text: TextSpan(
+              style: DefaultTextStyle.of(context).style.copyWith(fontSize: 14),
+              children: [
+                const TextSpan(text: 'Change billing customer to\n\n'),
+                TextSpan(
+                  text: customer['name'] ?? '',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const TextSpan(text: ' ?'),
+              ],
             ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Update'),
           ),
-        ],
-      );
-    },
-  );
-}
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Update'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   Future<bool?> _confirmCustomerUpdate(BuildContext context) {
     return showDialog<bool>(
@@ -4315,11 +4434,47 @@ class _OrderReviewState extends State<OrderReview> {
     );
   }
 
+  Widget _simpleEditIcon(VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: const Padding(
+        padding: EdgeInsets.all(4),
+        child: Icon(
+          Icons.edit,
+          size: 16,
+          color: Colors.blue,
+        ),
+      ),
+    );
+  }
+
+  Widget _orderInfoLabel(String text) {
+    return SizedBox(
+      width: 120,
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final String status = ord?['status']?.toString().toLowerCase() ?? '';
 
     final String dept = (dep ?? '').toString().toLowerCase();
+   final bool canShowParcelTopSection =
+    ord != null &&
+    (
+      (dept == "bdo" && ord["status"] == "Invoice Created") ||
+      (dept != "bdo" &&
+          (ord["status"] == "Invoice Created" ||
+              ord["status"] == "Invoice Approved"))
+    );
 
     final bool showAddProductButton =
         dept != 'bdo' || (dept == 'bdo' && status == 'invoice created');
@@ -4502,268 +4657,464 @@ class _OrderReviewState extends State<OrderReview> {
                             SizedBox(height: 4.0),
                             if (dep != "BDM" && dep != "BDO")
                               Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  Text(
-                                    'Payment Method',
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                  Spacer(),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        showPayStatusDropdown =
-                                            !showPayStatusDropdown;
-                                      });
-                                    },
+                                  _orderInfoLabel('Payment Method'),
+                                  const SizedBox(width: 8),
+                                  Expanded(
                                     child: showPayStatusDropdown
-                                        ? Container(
-                                            width: 120,
-                                            child:
-                                                DropdownButtonFormField<String>(
-                                              value: selectedPayStatus,
-                                              items: paystatus.map((status) {
-                                                return DropdownMenuItem<String>(
-                                                  value: status,
-                                                  child: Text(status),
-                                                );
-                                              }).toList(),
-                                              onChanged: (String? newValue) {
-                                                setState(() {
-                                                  selectedPayStatus = newValue;
-                                                  showPayStatusDropdown = false;
-                                                });
-                                                updateorderpay();
-                                              },
-                                              decoration: InputDecoration(
-                                                contentPadding:
-                                                    EdgeInsets.symmetric(
-                                                        horizontal: 8),
-                                                border: OutlineInputBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                              ),
-                                              style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.black),
-                                            ))
-                                        : Text(
-                                            ord != null
-                                                ? '${ord["payment_status"]}'
-                                                : 'Loading...',
-                                            style: TextStyle(fontSize: 12),
-                                          ),
-                                  ),
-                                ],
-                              ),
-
-                            SizedBox(height: 4.0),
-                            if (dep != "BDM" && dep != "BDO")
-                              Row(
-                                children: [
-                                  Text(
-                                    'COD Type',
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                  Spacer(),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        showCodTypeDropdown =
-                                            !showCodTypeDropdown;
-                                        showPaymentMethodDropdown =
-                                            false; // close other dropdown
-                                      });
-                                    },
-                                    child: showCodTypeDropdown
-                                        ? Container(
-                                            width: 130,
-                                            child:
-                                                DropdownButtonFormField<String>(
-                                              value: cod_status == ""
-                                                  ? null
-                                                  : cod_status,
-                                              items: codtype.map((status) {
-                                                return DropdownMenuItem<String>(
-                                                  value: status,
-                                                  child: Text(status),
-                                                );
-                                              }).toList(),
-                                              onChanged: (String? newValue) {
-                                                setState(() {
-                                                  cod_status = newValue;
-                                                  showCodTypeDropdown = false;
-                                                });
-                                                updateordercodtype();
-                                              },
-                                              decoration: InputDecoration(
-                                                contentPadding:
-                                                    EdgeInsets.symmetric(
-                                                        horizontal: 8),
-                                                border: OutlineInputBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                              ),
-                                              style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.black),
-                                            ),
-                                          )
-                                        : Text(
-                                            ord != null
-                                                ? '${ord["cod_status"]}'
-                                                : 'Loading...',
-                                            style: TextStyle(fontSize: 12),
-                                          ),
-                                  )
-                                ],
-                              ),
-
-                            if (dep != "BDM" && dep != "BDO")
-                              SizedBox(
-                                height: 4,
-                              ),
-
-                            if (dep != "BDM" && dep != "BDO")
-                              Row(
-                                children: [
-                                  Text(
-                                    'Division',
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                  Spacer(),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        showFamilyDropdown =
-                                            !showFamilyDropdown;
-                                      });
-                                    },
-                                    child: showFamilyDropdown
-                                        ? Container(
-                                            width: 120,
-                                            child:
-                                                DropdownButtonFormField<String>(
-                                              value: selectedfamily ??
-                                                  (ord != null
-                                                      ? ord["family_id"]
-                                                          ?.toString()
-                                                      : null),
-                                              hint: Text(ord != null
-                                                  ? ord["family"] ??
-                                                      "Select Division"
-                                                  : "Select Division"),
-                                              items: fam.map<
-                                                      DropdownMenuItem<String>>(
-                                                  (Map<String, dynamic> item) {
-                                                return DropdownMenuItem<String>(
-                                                  value: item['id'].toString(),
-                                                  child: Text(item['name']),
-                                                );
-                                              }).toList(),
-                                              onChanged: (String? newValue) {
-                                                setState(() {
-                                                  selectedfamily = newValue;
-                                                  showFamilyDropdown = false;
-                                                });
-                                                updateorderfamily();
-                                              },
-                                              decoration: InputDecoration(
-                                                contentPadding:
-                                                    EdgeInsets.symmetric(
-                                                        horizontal: 8),
-                                                border: OutlineInputBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                              ),
-                                              style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.black),
-                                            ))
-                                        : Text(
-                                            ord != null
-                                                ? ord["family"] ?? 'None'
-                                                : 'Loading...',
-                                            style: TextStyle(fontSize: 12),
-                                          ),
-                                  ),
-                                ],
-                              ),
-                            SizedBox(height: 4.0),
-
-                            Row(
-                              children: [
-                                GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      showCompanyDropdown =
-                                          !showCompanyDropdown;
-                                    });
-                                  },
-                                  child: showCompanyDropdown
-                                      ? Container(
-                                          width: 140,
-                                          child:
-                                              DropdownButtonFormField<String>(
-                                            value: selectedCompany ??
-                                                (ord != null
-                                                    ? ord['company']['id']
-                                                        .toString()
-                                                    : null),
-                                            hint: Text(ord != null
-                                                ? ord['company']['name'] ??
-                                                    'Select Company'
-                                                : 'Select Company'),
-                                            items: company
-                                                .map<DropdownMenuItem<String>>(
-                                                    (companyItem) {
+                                        ? DropdownButtonFormField<String>(
+                                            value: selectedPayStatus,
+                                            isExpanded: true,
+                                            items: paystatus.map((status) {
                                               return DropdownMenuItem<String>(
-                                                value: companyItem['id']
-                                                    .toString(),
-                                                child:
-                                                    Text(companyItem['name']),
+                                                value: status,
+                                                child: Text(status,
+                                                    overflow:
+                                                        TextOverflow.ellipsis),
                                               );
                                             }).toList(),
                                             onChanged: (String? newValue) {
                                               setState(() {
-                                                selectedCompany = newValue;
-                                                showCompanyDropdown = false;
+                                                selectedPayStatus = newValue;
+                                                showPayStatusDropdown = false;
                                               });
-                                              updateordercompany(); // your function to handle update
+                                              updateorderpay();
                                             },
                                             decoration: InputDecoration(
+                                              isDense: true,
                                               contentPadding:
-                                                  EdgeInsets.symmetric(
-                                                      horizontal: 8),
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 8),
                                               border: OutlineInputBorder(
                                                 borderRadius:
                                                     BorderRadius.circular(8),
                                               ),
                                             ),
-                                            style: TextStyle(
+                                            style: const TextStyle(
                                                 fontSize: 12,
                                                 color: Colors.black),
+                                          )
+                                        : Text(
+                                            ord != null
+                                                ? '${ord["payment_status"]}'
+                                                : 'Loading...',
+                                            textAlign: TextAlign.right,
+                                            overflow: TextOverflow.ellipsis,
+                                            style:
+                                                const TextStyle(fontSize: 12),
                                           ),
+                                  ),
+                                  _simpleEditIcon(() {
+                                    setState(() {
+                                      showPayStatusDropdown =
+                                          !showPayStatusDropdown;
+                                      showCodTypeDropdown = false;
+                                      showFamilyDropdown = false;
+                                      showCompanyDropdown = false;
+                                      showParcelServiceDropdown = false;
+                                      showParcelNoteField = false;
+                                    });
+                                  }),
+                                ],
+                              ),
+
+                            const SizedBox(height: 4),
+
+                            if (dep != "BDM" && dep != "BDO")
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  _orderInfoLabel('COD Type'),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: showCodTypeDropdown
+                                        ? DropdownButtonFormField<String>(
+                                            value: cod_status == ""
+                                                ? null
+                                                : cod_status,
+                                            isExpanded: true,
+                                            items: codtype.map((status) {
+                                              return DropdownMenuItem<String>(
+                                                value: status,
+                                                child: Text(status,
+                                                    overflow:
+                                                        TextOverflow.ellipsis),
+                                              );
+                                            }).toList(),
+                                            onChanged: (String? newValue) {
+                                              setState(() {
+                                                cod_status = newValue;
+                                                showCodTypeDropdown = false;
+                                              });
+                                              updateordercodtype();
+                                            },
+                                            decoration: InputDecoration(
+                                              isDense: true,
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 8),
+                                              border: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                            ),
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.black),
+                                          )
+                                        : Text(
+                                            ord != null
+                                                ? '${ord["cod_status"]}'
+                                                : 'Loading...',
+                                            textAlign: TextAlign.right,
+                                            overflow: TextOverflow.ellipsis,
+                                            style:
+                                                const TextStyle(fontSize: 12),
+                                          ),
+                                  ),
+                                  _simpleEditIcon(() {
+                                    setState(() {
+                                      showCodTypeDropdown =
+                                          !showCodTypeDropdown;
+                                      showPayStatusDropdown = false;
+                                      showFamilyDropdown = false;
+                                      showCompanyDropdown = false;
+                                      showParcelServiceDropdown = false;
+                                      showParcelNoteField = false;
+                                    });
+                                  }),
+                                ],
+                              ),
+
+                            const SizedBox(height: 4),
+
+                            if (dep != "BDM" && dep != "BDO")
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  _orderInfoLabel('Division'),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: showFamilyDropdown
+                                        ? DropdownButtonFormField<String>(
+                                            value: selectedfamily ??
+                                                (ord != null
+                                                    ? ord["family_id"]
+                                                        ?.toString()
+                                                    : null),
+                                            isExpanded: true,
+                                            hint: Text(
+                                              ord != null
+                                                  ? ord["family"] ??
+                                                      "Select Division"
+                                                  : "Select Division",
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            items: fam
+                                                .map<DropdownMenuItem<String>>(
+                                                    (item) {
+                                              return DropdownMenuItem<String>(
+                                                value: item['id'].toString(),
+                                                child: Text(item['name'],
+                                                    overflow:
+                                                        TextOverflow.ellipsis),
+                                              );
+                                            }).toList(),
+                                            onChanged: (String? newValue) {
+                                              setState(() {
+                                                selectedfamily = newValue;
+                                                showFamilyDropdown = false;
+                                              });
+                                              updateorderfamily();
+                                            },
+                                            decoration: InputDecoration(
+                                              isDense: true,
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 8),
+                                              border: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                            ),
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.black),
+                                          )
+                                        : Text(
+                                            ord != null
+                                                ? ord["family"] ?? 'None'
+                                                : 'Loading...',
+                                            textAlign: TextAlign.right,
+                                            overflow: TextOverflow.ellipsis,
+                                            style:
+                                                const TextStyle(fontSize: 12),
+                                          ),
+                                  ),
+                                  _simpleEditIcon(() {
+                                    setState(() {
+                                      showFamilyDropdown = !showFamilyDropdown;
+                                      showPayStatusDropdown = false;
+                                      showCodTypeDropdown = false;
+                                      showCompanyDropdown = false;
+                                      showParcelServiceDropdown = false;
+                                      showParcelNoteField = false;
+                                    });
+                                  }),
+                                ],
+                              ),
+
+                            const SizedBox(height: 4),
+
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                _orderInfoLabel('Company'),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: showCompanyDropdown
+                                      ? DropdownButtonFormField<String>(
+                                          value: selectedCompany ??
+                                              (ord != null
+                                                  ? ord['company']['id']
+                                                      .toString()
+                                                  : null),
+                                          isExpanded: true,
+                                          hint: Text(
+                                            ord != null
+                                                ? ord['company']['name'] ??
+                                                    'Select Company'
+                                                : 'Select Company',
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          items: company
+                                              .map<DropdownMenuItem<String>>(
+                                                  (companyItem) {
+                                            return DropdownMenuItem<String>(
+                                              value:
+                                                  companyItem['id'].toString(),
+                                              child: Text(
+                                                companyItem['name'],
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            );
+                                          }).toList(),
+                                          onChanged: (String? newValue) {
+                                            setState(() {
+                                              selectedCompany = newValue;
+                                              showCompanyDropdown = false;
+                                            });
+                                            updateordercompany();
+                                          },
+                                          decoration: InputDecoration(
+                                            isDense: true,
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 8, vertical: 8),
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.black),
                                         )
                                       : Text(
                                           ord != null
                                               ? ord['company']['name'] ??
                                                   'Select Company'
                                               : 'Loading...',
-                                          style: TextStyle(fontSize: 12),
+                                          textAlign: TextAlign.right,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontSize: 12),
                                         ),
                                 ),
+                                _simpleEditIcon(() {
+                                  setState(() {
+                                    showCompanyDropdown = !showCompanyDropdown;
+                                  });
+                                }),
                               ],
                             ),
+
                             SizedBox(height: 4.0),
+
+                            
+
+                            if (canShowParcelTopSection)
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  _orderInfoLabel('Parcel Service'),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: showParcelServiceDropdown
+                                        ? DropdownButtonFormField<int>(
+                                            value: courierdata.any(
+                                              (e) =>
+                                                  e['id'].toString() ==
+                                                  selectedserviceId?.toString(),
+                                            )
+                                                ? int.tryParse(selectedserviceId
+                                                    .toString())
+                                                : null,
+                                            isExpanded: true,
+                                            hint: const Text(
+                                              'Select Service',
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            items: courierdata
+                                                .map<DropdownMenuItem<int>>(
+                                                    (item) {
+                                              return DropdownMenuItem<int>(
+                                                value: int.tryParse(
+                                                    item['id'].toString()),
+                                                child: Text(
+                                                  item['name']?.toString() ??
+                                                      '',
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              );
+                                            }).toList(),
+                                            onChanged: (int? newValue) {
+                                              setState(() {
+                                                selectedserviceId = newValue;
+                                                showParcelServiceDropdown =
+                                                    false;
+                                              });
+                                              updateOrderParcelDetails();
+                                            },
+                                            decoration: InputDecoration(
+                                              isDense: true,
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 8),
+                                              border: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                            ),
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.black),
+                                          )
+                                        : Text(
+                                            ord != null
+                                                ? getCourierName(
+                                                    ord['parcel_service'])
+                                                : 'Loading...',
+                                            textAlign: TextAlign.right,
+                                            overflow: TextOverflow.ellipsis,
+                                            style:
+                                                const TextStyle(fontSize: 12),
+                                          ),
+                                  ),
+                                  _simpleEditIcon(() {
+                                    setState(() {
+                                      showParcelServiceDropdown =
+                                          !showParcelServiceDropdown;
+                                      showParcelNoteField = false;
+                                      showPayStatusDropdown = false;
+                                      showCodTypeDropdown = false;
+                                      showFamilyDropdown = false;
+                                      showCompanyDropdown = false;
+                                    });
+                                  }),
+                                ],
+                              ),
+
+                            if (canShowParcelTopSection)
+                              const SizedBox(height: 4),
+
+                            if (canShowParcelTopSection)
+                              Row(
+                                crossAxisAlignment: showParcelNoteField
+                                    ? CrossAxisAlignment.start
+                                    : CrossAxisAlignment.center,
+                                children: [
+                                  _orderInfoLabel('Parcel Note'),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: showParcelNoteField
+                                        ? TextField(
+                                            controller:
+                                                parcelServiceNoteController,
+                                            minLines: 1,
+                                            maxLines: 2,
+                                            style:
+                                                const TextStyle(fontSize: 12),
+                                            decoration: InputDecoration(
+                                              isDense: true,
+                                              hintText: 'Enter parcel note',
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 8),
+                                              border: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                            ),
+                                            onSubmitted: (_) {
+                                              setState(() {
+                                                showParcelNoteField = false;
+                                              });
+                                              updateOrderParcelDetails();
+                                            },
+                                          )
+                                        : Text(
+                                            parcelServiceNoteController.text
+                                                    .trim()
+                                                    .isNotEmpty
+                                                ? parcelServiceNoteController
+                                                    .text
+                                                    .trim()
+                                                : 'No note',
+                                            textAlign: TextAlign.right,
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                            style:
+                                                const TextStyle(fontSize: 12),
+                                          ),
+                                  ),
+                                  showParcelNoteField
+                                      ? IconButton(
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(
+                                            minWidth: 32,
+                                            minHeight: 32,
+                                          ),
+                                          icon: const Icon(
+                                            Icons.check_circle,
+                                            color: Colors.green,
+                                            size: 20,
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              showParcelNoteField = false;
+                                            });
+                                            updateOrderParcelDetails();
+                                          },
+                                        )
+                                      : _simpleEditIcon(() {
+                                          setState(() {
+                                            showParcelNoteField = true;
+                                            showParcelServiceDropdown = false;
+                                            showPayStatusDropdown = false;
+                                            showCodTypeDropdown = false;
+                                            showFamilyDropdown = false;
+                                            showCompanyDropdown = false;
+                                          });
+                                        }),
+                                ],
+                              ),
 
                             if (ord != null && ord["status"] == "Shipped")
                               Padding(
@@ -7110,7 +7461,9 @@ class _OrderReviewState extends State<OrderReview> {
                                           onTap: () {
                                             if (dep != "BDM" && dep != "BDO") {
                                               showParcelServiceDialog(
-                                                  context, order['id']);
+                                                  context,
+                                                  order['id'],
+                                                  order['parcel_service_id']);
                                             }
                                           },
                                           child: Row(
@@ -7142,9 +7495,17 @@ class _OrderReviewState extends State<OrderReview> {
                                                 ),
                                               ),
                                               Text(
-                                                order['parcel_service'] ??
-                                                    'N/A',
-                                                style: TextStyle(fontSize: 14),
+                                                order['parcel_service_name'] !=
+                                                            null &&
+                                                        order['parcel_service_name']
+                                                            .toString()
+                                                            .trim()
+                                                            .isNotEmpty
+                                                    ? order['parcel_service_name']
+                                                        .toString()
+                                                    : 'N/A',
+                                                style: const TextStyle(
+                                                    fontSize: 14),
                                               ),
                                             ],
                                           ),
