@@ -49,6 +49,7 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
   TextEditingController receivedDateController = TextEditingController();
   String? selectedStatus;
   final TextEditingController noteController = TextEditingController();
+  final TextEditingController parcelNoteController = TextEditingController();
   @override
   void initState() {
     super.initState();
@@ -99,38 +100,38 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
 
     return builder.toBytes();
   }
-File? selectedImageFile;
+
+  File? selectedImageFile;
   Uint8List? selectedImageBytes; // store compressed output
-Future<void> selectSingleImage() async {
-  try {
-    final XFile? picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxHeight: 1800,
-      maxWidth: 1800,
-      imageQuality: 90,
-    );
+  Future<void> selectSingleImage() async {
+    try {
+      final XFile? picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxHeight: 1800,
+        maxWidth: 1800,
+        imageQuality: 90,
+      );
 
-    if (picked == null) return;
+      if (picked == null) return;
 
-    final file = File(picked.path);
+      final file = File(picked.path);
 
-    Uint8List originalBytes = await file.readAsBytes();
-    Uint8List compressedBytes = await compressImage(originalBytes);
+      Uint8List originalBytes = await file.readAsBytes();
+      Uint8List compressedBytes = await compressImage(originalBytes);
 
-    // ✅ WRITE COMPRESSED BYTES BACK TO FILE
-    final compressedFile = await file.writeAsBytes(
-      compressedBytes,
-      flush: true,
-    );
+      // ✅ WRITE COMPRESSED BYTES BACK TO FILE
+      final compressedFile = await file.writeAsBytes(
+        compressedBytes,
+        flush: true,
+      );
 
-    setState(() {
-      selectedImageFile = compressedFile;   // <-- IMPORTANT
-      selectedImageBytes = compressedBytes; // for preview
-    });
-
-  } catch (e) {
+      setState(() {
+        selectedImageFile = compressedFile; // <-- IMPORTANT
+        selectedImageBytes = compressedBytes; // for preview
+      });
+    } catch (e) {}
   }
-}
+
   Future<void> selectMultipleImages() async {
     try {
       final List<XFile>? picked = await picker.pickMultiImage(
@@ -152,15 +153,12 @@ Future<void> selectSingleImage() async {
 
         // Step 3: Add compressed output
         finalBytes.add(compressedBytes);
-
-       
       }
 
       setState(() {
         selectedImageslist = finalBytes;
       });
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   Future<Uint8List> compressImage(Uint8List bytes) async {
@@ -309,7 +307,6 @@ Future<void> selectSingleImage() async {
                       if (compressed != null) {
                         setState(() {
                           selectedImage = compressed;
-                         
                         });
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                           content: Text("Image selected and compressed."),
@@ -487,7 +484,7 @@ Future<void> selectSingleImage() async {
         },
         body: jsonEncode({}),
       );
-    
+
       if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text("Order unlocked successfully"),
@@ -629,7 +626,7 @@ Future<void> selectSingleImage() async {
       var response = await http.get(
         Uri.parse('$api/api/company/getadd/'),
         headers: {
-          'Authorization': ' Bearer $token',
+          'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
@@ -872,140 +869,140 @@ Future<void> selectSingleImage() async {
       }
     } catch (error) {}
   }
-Widget _detailRow(String label, dynamic value) {
-  return Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: RichText(
-      text: TextSpan(
-        style: const TextStyle(color: Colors.black87, fontSize: 13),
-        children: [
-          TextSpan(
-            text: '$label: ',
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          TextSpan(
-            text: value?.toString() ?? 'N/A',
-          ),
-        ],
-      ),
-      softWrap: true,
-    ),
-  );
-}
 
-Widget _imagePreview(String url) {
-  return Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Image.network(
-        url,
-        width: double.infinity,
-        height: 180,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Container(
-          height: 120,
-          color: Colors.grey.shade200,
-          child: const Icon(Icons.image_not_supported,
-              size: 40, color: Colors.grey),
+  Widget _detailRow(String label, dynamic value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: RichText(
+        text: TextSpan(
+          style: const TextStyle(color: Colors.black87, fontSize: 13),
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            TextSpan(
+              text: value?.toString() ?? 'N/A',
+            ),
+          ],
+        ),
+        softWrap: true,
+      ),
+    );
+  }
+
+  Widget _imagePreview(String url) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          url,
+          width: double.infinity,
+          height: 180,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            height: 120,
+            color: Colors.grey.shade200,
+            child: const Icon(Icons.image_not_supported,
+                size: 40, color: Colors.grey),
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   void showBoxDetailsDialog(
       BuildContext context, Map<String, dynamic> boxDetails) {
     int? selectedManagerId;
     String? selectedManagerName;
 
-   showDialog(
-  context: context,
-  builder: (BuildContext context) {
-    return AlertDialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      title: const Text(
-        'Box Details',
-        style: TextStyle(fontWeight: FontWeight.w600),
-      ),
-      content: SizedBox(
-        width: MediaQuery.of(context).size.width * 0.9,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-
-              _detailRow('Box', boxDetails['box']),
-              _detailRow('Packed By', boxDetails['packed_by']),
-              _detailRow('Shipping Charge', boxDetails['shipping_charge']),
-              _detailRow('Parcel Service', boxDetails['parcel_service']),
-              _detailRow('Tracking ID', boxDetails['tracking_id']),
-              _detailRow('Status', boxDetails['status']),
-              _detailRow('Shipped Date', boxDetails['shipped_date']),
-
-              const SizedBox(height: 10),
-
-              if (boxDetails['image'] != null)
-                _imagePreview('$api${boxDetails['image']}'),
-
-              if (boxDetails['image_before'] != null)
-                _imagePreview('$api${boxDetails['image_before']}'),
-
-              const SizedBox(height: 16),
-
-              /// 🔹 Verify By Dropdown
-              DropdownButtonFormField<Map<String, dynamic>>(
-                isExpanded: true, // ✅ CRITICAL FIX
-                value: selectedManagerId != null
-                    ? manager.firstWhere(
-                        (e) => e['id'] == selectedManagerId,
-                        orElse: () => manager.first,
-                      )
-                    : null,
-                hint: const Text('Select here...'),
-                items: manager.map((m) {
-                  return DropdownMenuItem<Map<String, dynamic>>(
-                    value: m,
-                    child: Text(
-                      m['name'],
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  setState(() {
-                    selectedManagerName = val!['name'];
-                    selectedManagerId = val['id'];
-                  });
-                },
-                decoration: const InputDecoration(
-                  labelText: 'Verify By',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-            ],
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          title: const Text(
+            'Box Details',
+            style: TextStyle(fontWeight: FontWeight.w600),
           ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-          onPressed: () {
-            updateverifiedby(boxDetails['id'], selectedManagerId);
-            Navigator.of(context).pop();
-          },
-          child: const Text('Save', style: TextStyle(color: Colors.white)),
-        ),
-      ],
-    );
-  },
-);
+          content: SizedBox(
+            width: MediaQuery.of(context).size.width * 0.9,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _detailRow('Box', boxDetails['box']),
+                  _detailRow('Packed By', boxDetails['packed_by']),
+                  _detailRow('Shipping Charge', boxDetails['shipping_charge']),
+                  _detailRow('Parcel Service', boxDetails['parcel_service']),
+                  _detailRow('Tracking ID', boxDetails['tracking_id']),
+                  _detailRow('Status', boxDetails['status']),
+                  _detailRow('Shipped Date', boxDetails['shipped_date']),
 
+                  const SizedBox(height: 10),
+
+                  if (boxDetails['image'] != null)
+                    _imagePreview('$api${boxDetails['image']}'),
+
+                  if (boxDetails['image_before'] != null)
+                    _imagePreview('$api${boxDetails['image_before']}'),
+
+                  const SizedBox(height: 16),
+
+                  /// 🔹 Verify By Dropdown
+                  DropdownButtonFormField<Map<String, dynamic>>(
+                    isExpanded: true, // ✅ CRITICAL FIX
+                    value: selectedManagerId != null
+                        ? manager.firstWhere(
+                            (e) => e['id'] == selectedManagerId,
+                            orElse: () => manager.first,
+                          )
+                        : null,
+                    hint: const Text('Select here...'),
+                    items: manager.map((m) {
+                      return DropdownMenuItem<Map<String, dynamic>>(
+                        value: m,
+                        child: Text(
+                          m['name'],
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        selectedManagerName = val!['name'];
+                        selectedManagerId = val['id'];
+                      });
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'Verify By',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+              onPressed: () {
+                updateverifiedby(boxDetails['id'], selectedManagerId);
+                Navigator.of(context).pop();
+              },
+              child: const Text('Save', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void Editbox(var order, BuildContext context) {
@@ -1020,11 +1017,12 @@ Widget _imagePreview(String url) {
             ? order['packed_by_id']
             : int.tryParse(order['packed_by_id'].toString()))
         : null;
-    selectedserviceId = order['parcel_service_id'] != null
-        ? (order['parcel_service_id'] is int
-            ? order['parcel_service_id']
-            : int.tryParse(order['parcel_service_id'].toString()))
+    selectedserviceId = ord != null && ord['parcel_service'] != null
+        ? int.tryParse(ord['parcel_service'].toString())
         : null;
+
+    parcelNoteController.text =
+        ord != null ? ord['parcel_service_note']?.toString() ?? '' : '';
 
     showDialog(
       context: context,
@@ -1202,6 +1200,23 @@ Widget _imagePreview(String url) {
                   ),
                   SizedBox(height: 8),
 
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      parcelNoteController.text.isNotEmpty
+                          ? parcelNoteController.text
+                          : 'No note',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+
+                  SizedBox(height: 8),
+
                   // Status Dropdown
                   DropdownButtonFormField<String>(
                     value: selectedStatus,
@@ -1285,16 +1300,19 @@ Widget _imagePreview(String url) {
                 onPressed: () => Navigator.pop(context),
               ),
               ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                updateboxdetails(
-  order,
-  selectedImageFile, // ✅ NOT null now
-  null,
-  selectedDate,
-  context,
-);
-                },
+               onPressed: () async {
+  Navigator.pop(context);
+
+  await updateOrderParcelService();
+
+  updateboxdetails(
+    order,
+    selectedImageFile,
+    null,
+    selectedDate,
+    context,
+  );
+},
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue, // 👈 Button color
                   foregroundColor: Colors.white, // 👈 Text/icon color
@@ -1323,7 +1341,6 @@ Widget _imagePreview(String url) {
           'order': widget.id,
         }),
       );
-
 
       if (response.statusCode == 201) {
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
@@ -1359,7 +1376,6 @@ Widget _imagePreview(String url) {
         }),
       );
 
-
       if (response.statusCode == 201) {
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
           const SnackBar(
@@ -1393,7 +1409,6 @@ Widget _imagePreview(String url) {
           'order': widget.id,
         }),
       );
-
 
       if (response.statusCode == 201) {
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
@@ -1499,6 +1514,69 @@ Widget _imagePreview(String url) {
     }
   }
 
+ Future<bool> updateOrderParcelService() async {
+  try {
+    final token = await getTokenFromPrefs();
+
+    final response = await http.put(
+      Uri.parse('$api/api/shipping/${widget.id}/order/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'parcel_service': selectedserviceId,
+        'parcel_service_note': parcelNoteController.text.trim(),
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      await fetchOrderItems();
+
+      if (!mounted) return true;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Parcel service updated successfully'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      return true;
+    } else {
+      debugPrint('Parcel service update failed: ${response.statusCode}');
+      debugPrint('Response: ${response.body}');
+
+      if (!mounted) return false;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to update parcel service'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      return false;
+    }
+  } catch (e) {
+    debugPrint('Parcel service update error: $e');
+
+    if (!mounted) return false;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Error updating parcel service'),
+        backgroundColor: Colors.red,
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    return false;
+  }
+}
+
   void updateboxdetails(
     var order,
     File? image1,
@@ -1530,6 +1608,7 @@ Widget _imagePreview(String url) {
         request.fields['parcel_service'] = selectedserviceId.toString();
       }
 
+      request.fields['parcel_service_note'] = parcelNoteController.text.trim();
       request.fields['status'] = selectedStatus ?? '';
 
       if (selectedManagerId == null) {
@@ -1546,7 +1625,6 @@ Widget _imagePreview(String url) {
         Uint8List original = await image1.readAsBytes();
         Uint8List compressed = await compressImage(original);
 
-       
         request.files.add(
           http.MultipartFile.fromBytes(
             'image',
@@ -1561,7 +1639,6 @@ Widget _imagePreview(String url) {
         Uint8List original = await image2.readAsBytes();
         Uint8List compressed = await compressImage(original);
 
-      
         request.files.add(
           http.MultipartFile.fromBytes(
             'image_before',
@@ -1978,7 +2055,8 @@ Widget _imagePreview(String url) {
       }
     } catch (e) {}
   }
-int boxCount = 0;
+
+  int boxCount = 0;
 
   bool flag = false;
   var dep;
@@ -2007,8 +2085,8 @@ int boxCount = 0;
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
         ord = parsed['order'];
-          int fetchedBoxCount =
-          int.tryParse(parsed['order']['box_count']?.toString() ?? '0') ?? 0;
+        int fetchedBoxCount =
+            int.tryParse(parsed['order']['box_count']?.toString() ?? '0') ?? 0;
 
         List<dynamic> itemsData = parsed['items'];
         getaddress(ord['customer']['id']);
@@ -2085,7 +2163,7 @@ int boxCount = 0;
           payableAmount = calculatedPayableAmount;
           totalDiscount = calculatedTotalDiscount;
           Balance = remainingAmount;
-           boxCount = fetchedBoxCount;
+          boxCount = fetchedBoxCount;
         });
       } else {}
     } catch (error) {}
@@ -2994,136 +3072,134 @@ int boxCount = 0;
 //                 ),
 //               ),
               SizedBox(height: 10),
-         Center(
-  child: Padding(
-    padding: const EdgeInsets.all(12.0),
-    child: Container(
-      width: 320,
-      padding: const EdgeInsets.all(14.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Container(
+                    width: 320,
+                    padding: const EdgeInsets.all(14.0),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        /// 🔹 Header
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.blue,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              Icon(Icons.inventory_2_outlined,
+                                  color: Colors.white, size: 18),
+                              SizedBox(width: 6),
+                              Text(
+                                "Box Count",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
 
-          /// 🔹 Header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.blue,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.inventory_2_outlined,
-                    color: Colors.white, size: 18),
-                SizedBox(width: 6),
-                Text(
-                  "Box Count",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
+                        const SizedBox(height: 14),
+
+                        /// 🔹 Input Field
+                        Text(
+                          "Enter Box Count",
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+
+                        TextField(
+                          controller: count,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            // hintText: 'e.g. 2',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        /// 🔹 Submit Button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 44,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Addboxcount(context);
+                              updatecount();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              elevation: 4,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text(
+                              "Save Box Count",
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        /// 🔹 Current Box Count Display
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            'Current Box Count: $boxCount',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          /// 🔹 Input Field
-          Text(
-            "Enter Box Count",
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey[700],
-            ),
-          ),
-          const SizedBox(height: 6),
-
-          TextField(
-            controller: count,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              // hintText: 'e.g. 2',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
               ),
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          /// 🔹 Submit Button
-          SizedBox(
-            width: double.infinity,
-            height: 44,
-            child: ElevatedButton(
-              onPressed: () {
-                Addboxcount(context);
-                updatecount();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text(
-                "Save Box Count",
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          /// 🔹 Current Box Count Display
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              'Current Box Count: $boxCount',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  ),
-),
-
 
               Center(
                 child: Padding(
