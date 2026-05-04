@@ -794,94 +794,492 @@ class _order_requestState extends State<order_request> {
     } catch (error) {}
   }
 
-  Future<void> getcustomer2() async {
-    ;
+  Future<void> getcustomer2({String search = ''}) async {
     try {
-      // final dep = await getdepFromPrefs();
       final token = await gettokenFromPrefs();
 
-      final jwt = JWT.decode(token!);
-      var name = jwt.payload['name'];
-      ;
-      ;
+      final queryParameters = <String, String>{};
 
-      List<Map<String, dynamic>> managerlist = [];
-
-      var response = await http.get(
-        Uri.parse('$api/api/staff/customers/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      ;
-
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-        var productsData = parsed['data'];
-
-        List<Map<String, dynamic>> newCustomers = [];
-
-        for (var productData in productsData) {
-          newCustomers.add({
-            'id': productData['id'],
-            'name': productData['name'],
-            'created_at': productData['created_at'],
-          });
-        }
-        setState(() {
-          customer = newCustomers;
-        });
-
-        ;
-      } else {
-        throw Exception("Failed to load customer data");
+      if (search.trim().isNotEmpty) {
+        queryParameters['search'] = search.trim();
       }
-    } catch (error) {
-      ;
-    }
-  }
 
-  Future<void> getcustomer({String search = '', int page = 1}) async {
-    try {
-      final token = await gettokenFromPrefs();
+      final uri = Uri.parse('$api/api/staff/customers/').replace(
+        queryParameters: queryParameters,
+      );
 
       final response = await http.get(
-        Uri.parse('$api/api/customers/?search=$search&page=$page'),
+        uri,
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
 
+      debugPrint("Staff Customer API URL: $uri");
+      debugPrint("Staff Customer API Status: ${response.statusCode}");
+
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
-        final List<dynamic> customersData = parsed['results'] ?? [];
 
-        List<Map<String, dynamic>> newCustomers = customersData.map((item) {
+        List<dynamic> customersData = [];
+
+        if (parsed is Map && parsed['data'] is List) {
+          customersData = parsed['data'];
+        } else if (parsed is Map && parsed['results'] is List) {
+          customersData = parsed['results'];
+        } else if (parsed is List) {
+          customersData = parsed;
+        }
+
+        final List<Map<String, dynamic>> newCustomers =
+            customersData.map((item) {
           return {
             'id': item['id'],
-            'name': item['name'],
-            'phone': item['phone'],
-            'state': item['state_name'],
-            'gst': item['gst'],
+            'name': item['name'] ?? '',
+            'created_at': item['created_at'],
+            'phone': item['phone'] ?? '',
+            'state': item['state_name'] ?? item['state'] ?? '',
+            'gst': item['gst'] ?? '',
           };
         }).toList();
 
-        setState(() {
-          if (page == 1) {
-            customer = newCustomers;
-          } else {
-            customer.addAll(newCustomers);
-          }
-        });
-
-        if (parsed['next'] != null) {
-          await getcustomer(search: search, page: page + 1);
+        debugPrint("Staff customer count: ${newCustomers.length}");
+        if (newCustomers.isNotEmpty) {
+          debugPrint("First staff customer: ${newCustomers.first}");
         }
+
+        if (!mounted) return;
+
+        setState(() {
+          customer = newCustomers;
+        });
+      } else {
+        debugPrint("Staff Customer API Error: ${response.body}");
       }
-    } catch (e) {}
+    } catch (e) {
+      debugPrint("Staff customer fetch error: $e");
+    }
+  }
+
+  Future<void> _openCustomerSelector() async {
+    final TextEditingController modalSearchController = TextEditingController();
+    final FocusNode modalSearchFocusNode = FocusNode();
+
+    Timer? modalDebounce;
+    bool isSearching = false;
+    bool isInitialLoading = true;
+    List<Map<String, dynamic>> modalCustomers = [];
+
+    final bool isStaffCustomer = dep == "BDO" || dep == "BDM";
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (bottomSheetContext) {
+        return StatefulBuilder(
+          builder: (modalContext, modalSetState) {
+            Future<void> loadInitialCustomers() async {
+              final result = await fetchCustomersForDropdown(
+                staffCustomer: isStaffCustomer,
+              );
+
+              if (!mounted) return;
+
+              modalSetState(() {
+                modalCustomers = result;
+                isInitialLoading = false;
+              });
+            }
+
+            Future<void> searchCustomers(String value) async {
+              final searchText = value.trim();
+
+              if (searchText.length < 2) {
+                final result = await fetchCustomersForDropdown(
+                  staffCustomer: isStaffCustomer,
+                );
+
+                if (!mounted) return;
+
+                modalSetState(() {
+                  modalCustomers = result;
+                  isSearching = false;
+                });
+                return;
+              }
+
+              modalSetState(() {
+                isSearching = true;
+              });
+
+              final result = await fetchCustomersForDropdown(
+                search: searchText,
+                staffCustomer: isStaffCustomer,
+              );
+
+              if (!mounted) return;
+
+              modalSetState(() {
+                modalCustomers = result;
+                isSearching = false;
+              });
+            }
+
+            if (isInitialLoading) {
+              Future.microtask(loadInitialCustomers);
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(bottomSheetContext).viewInsets.bottom,
+              ),
+              child: Container(
+                height: MediaQuery.of(context).size.height * 0.75,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(22),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 10),
+                    Container(
+                      width: 45,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              "Select Customer",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              FocusScope.of(modalContext).unfocus();
+                              Navigator.pop(bottomSheetContext);
+                            },
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                      child: TextField(
+                        controller: modalSearchController,
+                        focusNode: modalSearchFocusNode,
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: "Search customer by name or phone...",
+                          hintStyle: const TextStyle(fontSize: 13),
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          suffixIcon: modalSearchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  onPressed: () async {
+                                    modalSearchController.clear();
+                                    modalDebounce?.cancel();
+
+                                    modalSetState(() {
+                                      isSearching = true;
+                                    });
+
+                                    final result =
+                                        await fetchCustomersForDropdown(
+                                      staffCustomer: isStaffCustomer,
+                                    );
+
+                                    if (!mounted) return;
+
+                                    modalSetState(() {
+                                      modalCustomers = result;
+                                      isSearching = false;
+                                    });
+                                  },
+                                )
+                              : null,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          modalSetState(() {});
+
+                          if (modalDebounce?.isActive ?? false) {
+                            modalDebounce!.cancel();
+                          }
+
+                          modalDebounce = Timer(
+                            const Duration(milliseconds: 500),
+                            () async {
+                              await searchCustomers(value);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    if (isInitialLoading || isSearching)
+                      const Expanded(
+                        child: Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    else if (modalCustomers.isEmpty)
+                      const Expanded(
+                        child: Center(
+                          child: Text(
+                            "No customers found",
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Expanded(
+                        child: ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                          itemCount: modalCustomers.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final item = modalCustomers[index];
+
+                            final int? customerId = item['id'];
+                            final String customerName =
+                                item['name']?.toString() ?? '';
+                            final String phone =
+                                item['phone']?.toString() ?? '';
+                            final String state =
+                                item['state']?.toString() ?? '';
+
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: CircleAvatar(
+                                backgroundColor: Colors.blue.withOpacity(0.08),
+                                child: Text(
+                                  customerName.isNotEmpty
+                                      ? customerName[0].toUpperCase()
+                                      : "?",
+                                  style: const TextStyle(
+                                    color: Colors.blue,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                customerName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              subtitle: Text(
+                                [
+                                  if (phone.isNotEmpty) phone,
+                                  if (state.isNotEmpty) state,
+                                ].join(" • "),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              trailing: const Icon(
+                                Icons.chevron_right,
+                                size: 20,
+                              ),
+                              onTap: () async {
+                                if (customerId == null) return;
+
+                                FocusScope.of(modalContext).unfocus();
+
+                                setState(() {
+                                  selectedCustomerId = customerId;
+                                  selectedCustomerName = customerName;
+                                  selectedAddressId = null;
+                                  addres = [];
+                                });
+
+                                Navigator.pop(bottomSheetContext);
+
+                                await getaddress(customerId);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    modalDebounce?.cancel();
+
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    modalSearchController.dispose();
+    modalSearchFocusNode.dispose();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchCustomersForDropdown({
+    String search = '',
+    bool staffCustomer = false,
+  }) async {
+    try {
+      final token = await gettokenFromPrefs();
+
+      final endpoint =
+          staffCustomer ? '$api/api/staff/customers/' : '$api/api/customers/';
+
+      final queryParameters = <String, String>{};
+
+      if (search.trim().isNotEmpty) {
+        queryParameters['search'] = search.trim();
+      }
+
+      final uri = Uri.parse(endpoint).replace(
+        queryParameters: queryParameters,
+      );
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      debugPrint("Customer Dropdown API URL: $uri");
+      debugPrint("Customer Dropdown API Status: ${response.statusCode}");
+
+      if (response.statusCode != 200) {
+        debugPrint("Customer Dropdown API Error: ${response.body}");
+        return [];
+      }
+
+      final parsed = jsonDecode(response.body);
+
+      List<dynamic> customersData = [];
+
+      if (parsed is Map && parsed['results'] is List) {
+        customersData = parsed['results'];
+      } else if (parsed is Map && parsed['data'] is List) {
+        customersData = parsed['data'];
+      } else if (parsed is List) {
+        customersData = parsed;
+      }
+
+      final customers = customersData.map<Map<String, dynamic>>((item) {
+        return {
+          'id': item['id'],
+          'name': item['name'] ?? '',
+          'created_at': item['created_at'],
+          'phone': item['phone'] ?? '',
+          'state': item['state_name'] ?? item['state'] ?? '',
+          'gst': item['gst'] ?? '',
+        };
+      }).toList();
+
+      debugPrint("Customer Dropdown Count: ${customers.length}");
+
+      return customers;
+    } catch (e) {
+      debugPrint("Customer dropdown fetch error: $e");
+      return [];
+    }
+  }
+
+  Future<void> getcustomer({String search = ''}) async {
+    try {
+      final token = await gettokenFromPrefs();
+
+      final queryParameters = <String, String>{};
+
+      if (search.trim().isNotEmpty) {
+        queryParameters['search'] = search.trim();
+      }
+
+      final uri = Uri.parse('$api/api/customers/').replace(
+        queryParameters: queryParameters,
+      );
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      debugPrint("Customer API URL: $uri");
+      debugPrint("Customer API Status: ${response.statusCode}");
+
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+
+        List<dynamic> customersData = [];
+
+        if (parsed is Map && parsed['results'] is List) {
+          customersData = parsed['results'];
+        } else if (parsed is Map && parsed['data'] is List) {
+          customersData = parsed['data'];
+        } else if (parsed is List) {
+          customersData = parsed;
+        }
+
+        final List<Map<String, dynamic>> newCustomers =
+            customersData.map((item) {
+          return {
+            'id': item['id'],
+            'name': item['name'] ?? '',
+            'phone': item['phone'] ?? '',
+            'state': item['state_name'] ?? item['state'] ?? '',
+            'gst': item['gst'] ?? '',
+          };
+        }).toList();
+
+        debugPrint("Customer count: ${newCustomers.length}");
+        if (newCustomers.isNotEmpty) {
+          debugPrint("First customer: ${newCustomers.first}");
+        }
+
+        if (!mounted) return;
+
+        setState(() {
+          customer = newCustomers;
+        });
+      } else {
+        debugPrint("Customer API Error: ${response.body}");
+      }
+    } catch (e) {
+      debugPrint("Customer fetch error: $e");
+    }
   }
 
   List<Map<String, dynamic>> stat = [];
@@ -1997,161 +2395,52 @@ class _order_requestState extends State<order_request> {
                                   selectedmode == 'invoice')
                                 Padding(
                                   padding: const EdgeInsets.only(right: 10),
-                                  child: LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      return DropdownButtonHideUnderline(
-                                        child: Container(
-                                          height: 46,
-                                          decoration: BoxDecoration(
-                                            border: Border.all(
-                                                color: Colors.grey, width: 1.0),
-                                            borderRadius:
-                                                BorderRadius.circular(8.0),
-                                          ),
-                                          child: DropdownButton2<int>(
-                                            isExpanded: true,
-                                            hint: Text(
-                                              'Select a Customer',
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(8),
+                                    onTap: () async {
+                                      await _openCustomerSelector();
+                                    },
+                                    child: Container(
+                                      height: 46,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                            color: Colors.grey, width: 1.0),
+                                        borderRadius:
+                                            BorderRadius.circular(8.0),
+                                        color: Colors.white,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              selectedCustomerName ??
+                                                  "Select a Customer",
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                               style: TextStyle(
                                                 fontSize: 12,
                                                 color:
-                                                    Theme.of(context).hintColor,
+                                                    selectedCustomerName == null
+                                                        ? Theme.of(context)
+                                                            .hintColor
+                                                        : Colors.black,
+                                                fontWeight:
+                                                    selectedCustomerName == null
+                                                        ? FontWeight.normal
+                                                        : FontWeight.w500,
                                               ),
                                             ),
-                                            items: customer.map((item) {
-                                              return DropdownMenuItem<int>(
-                                                value: item['id'],
-                                                child: Text(
-                                                  item['name'] ?? '',
-                                                  style: const TextStyle(
-                                                      fontSize: 12),
-                                                ),
-                                              );
-                                            }).toList(),
-                                            value: selectedCustomerId,
-                                            onChanged: (value) async {
-                                              if (value == null) return;
-
-                                              final selectedCustomer =
-                                                  customer.firstWhere(
-                                                (item) => item['id'] == value,
-                                                orElse: () => {},
-                                              );
-
-                                              setState(() {
-                                                selectedCustomerId = value;
-                                                selectedCustomerName =
-                                                    selectedCustomer['name'];
-                                                selectedAddressId = null;
-                                                addres = [];
-                                              });
-
-                                              await getaddress(value);
-                                            },
-                                            buttonStyleData:
-                                                const ButtonStyleData(
-                                              padding: EdgeInsets.symmetric(
-                                                  horizontal: 16),
-                                              height: 40,
-                                            ),
-                                            dropdownStyleData:
-                                                const DropdownStyleData(
-                                              maxHeight: 300,
-                                            ),
-                                            menuItemStyleData:
-                                                const MenuItemStyleData(
-                                              height: 40,
-                                            ),
-                                            dropdownSearchData:
-                                                DropdownSearchData(
-                                              searchController:
-                                                  textEditingController,
-                                              searchInnerWidgetHeight: 50,
-                                              searchInnerWidget: Container(
-                                                height: 50,
-                                                padding: const EdgeInsets.only(
-                                                  top: 8,
-                                                  bottom: 4,
-                                                  right: 8,
-                                                  left: 8,
-                                                ),
-                                                child: TextFormField(
-                                                  controller:
-                                                      textEditingController,
-                                                  expands: true,
-                                                  maxLines: null,
-                                                  decoration: InputDecoration(
-                                                    isDense: true,
-                                                    contentPadding:
-                                                        const EdgeInsets
-                                                            .symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 8,
-                                                    ),
-                                                    hintText:
-                                                        'Search customer...',
-                                                    hintStyle: const TextStyle(
-                                                        fontSize: 12),
-                                                    border: OutlineInputBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              8),
-                                                    ),
-                                                  ),
-                                                  onChanged: (value) {
-                                                    if (_debounce?.isActive ??
-                                                        false)
-                                                      _debounce!.cancel();
-
-                                                    _debounce = Timer(
-                                                        const Duration(
-                                                            milliseconds: 500),
-                                                        () async {
-                                                      setState(() {
-                                                        selectedCustomerId =
-                                                            null;
-                                                        selectedCustomerName =
-                                                            null;
-                                                        selectedAddressId =
-                                                            null;
-                                                        addres = [];
-                                                        customer = [];
-                                                      });
-
-                                                      if (dep == "BDO" ||
-                                                          dep == "BDM") {
-                                                        await getcustomer2();
-                                                      } else {
-                                                        await getcustomer(
-                                                            search: value);
-                                                      }
-                                                    });
-                                                  },
-                                                ),
-                                              ),
-                                              searchMatchFn:
-                                                  (item, searchValue) {
-                                                final childText =
-                                                    (item.child is Text)
-                                                        ? ((item.child as Text)
-                                                                .data ??
-                                                            '')
-                                                        : '';
-                                                return childText
-                                                    .toLowerCase()
-                                                    .contains(searchValue
-                                                        .toLowerCase());
-                                              },
-                                            ),
-                                            onMenuStateChange: (isOpen) {
-                                              if (!isOpen) {
-                                                textEditingController.clear();
-                                              }
-                                            },
                                           ),
-                                        ),
-                                      );
-                                    },
+                                          const Icon(
+                                            Icons.keyboard_arrow_down,
+                                            size: 22,
+                                            color: Colors.grey,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
 
