@@ -112,11 +112,12 @@ class _bdo_customer_listState extends State<bdo_customer_list> {
         List<Map<String, dynamic>> managerlist = [];
 
         for (var productData in productsData) {
-          managerlist.add({
-            'id': productData['id'],
-            'name': productData['name'],
-            'created_at': productData['created_at']
-          });
+               managerlist.add({
+  'id': productData['id'],
+  'name': productData['name'],
+  'phone': productData['phone'],
+  'created_at': productData['created_at']
+});
         }
 
         setState(() {
@@ -130,19 +131,22 @@ class _bdo_customer_listState extends State<bdo_customer_list> {
     }
   }
 
-  void _filterProducts(String query) {
-    setState(() {
-      if (query.isEmpty) {
-        filteredProducts = List.from(customer); // Show all if search is empty
-      } else {
-        filteredProducts = customer
-            .where((product) =>
-                product['name'].toLowerCase().contains(query.toLowerCase()))
-            .toList(); // Filter based on query
-      }
-    });
-  }
+ void _filterProducts(String query) {
+  setState(() {
+    if (query.isEmpty) {
+      filteredProducts = List.from(customer);
+    } else {
+      final lowerQuery = query.toLowerCase();
 
+      filteredProducts = customer.where((product) {
+        final name = product['name']?.toString().toLowerCase() ?? '';
+        final phone = product['phone']?.toString().toLowerCase() ?? '';
+
+        return name.contains(lowerQuery) || phone.contains(lowerQuery);
+      }).toList();
+    }
+  });
+}
   void logout() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.remove('userId');

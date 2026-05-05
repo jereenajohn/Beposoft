@@ -141,62 +141,72 @@ class _bdm_customer_listState extends State<bdm_customer_list> {
     } catch (error) {}
   }
 
-  Future<void> getcustomer({String? url}) async {
-    try {
-      final token = await gettokenFromPrefs();
+ Future<void> getcustomer({String? url}) async {
+  try {
+    final token = await gettokenFromPrefs();
 
-      final requestUrl = url ?? '$api/api/customers/?page=$currentPage&search=$searchQuery';
+    if (family.isEmpty) {
+      print("Family ID is empty. Cannot fetch customers.");
+      return;
+    }
 
-      var response = await http.get(
-        Uri.parse(requestUrl),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
+    final requestUrl = url ??
+        '$api/api/customers/division/$family/?page=$currentPage&search=${Uri.encodeComponent(searchQuery)}';
 
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
+    print("Customer API URL: $requestUrl");
 
-        nextPageUrl = parsed['next'];
-        previousPageUrl = parsed['previous'];
+    var response = await http.get(
+      Uri.parse(requestUrl),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
 
-        int count = parsed['count'];
-        totalPages = (count / 10).ceil(); // DRF default page size
+    print("Customer API Status: ${response.statusCode}");
+    print("Customer API Body: ${response.body}");
 
-        List results = parsed['results'];
+    if (response.statusCode == 200) {
+      final parsed = jsonDecode(response.body);
 
-        List<Map<String, dynamic>> managerlist = [];
+      nextPageUrl = parsed['next'];
+      previousPageUrl = parsed['previous'];
 
-        for (var productData in results) {
-          if (familyName == productData['family']) {
-            managerlist.add({
-              'id': productData['id'],
-              'name': productData['name'],
-              'created_at': productData['created_at'],
-              'phone': productData['phone'],
-              'state_name': productData['state_name'],
-              'family': productData['family'],
-            });
-          }
-        }
+      int count = parsed['count'] ?? 0;
+      totalPages = count == 0 ? 1 : (count / 10).ceil();
 
-        setState(() {
-          customer = managerlist;
-          filteredProducts = List.from(customer);
+      List results = parsed['results'] ?? [];
+
+      List<Map<String, dynamic>> managerlist = [];
+
+      for (var productData in results) {
+        managerlist.add({
+          'id': productData['id'],
+          'name': productData['name'],
+          'created_at': productData['created_at'],
+          'phone': productData['phone'],
+          'state_name': productData['state_name'],
+          'family': productData['family'],
         });
       }
-    } catch (e) {
+
+      setState(() {
+        customer = managerlist;
+        filteredProducts = List.from(customer);
+      });
+    } else {
+      print("Failed to fetch customers: ${response.statusCode}");
     }
+  } catch (e) {
+    print("Customer fetch error: $e");
   }
+}
 
   void _filterProducts(String query) {
   searchQuery = query;
   currentPage = 1;
-
   getcustomer();
 }
-
   void logout() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.remove('userId');
