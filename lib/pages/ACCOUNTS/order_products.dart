@@ -15,6 +15,7 @@ import 'package:beposoft/pages/api.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 
 class order_products extends StatefulWidget {
   const order_products({super.key});
@@ -41,7 +42,7 @@ class _order_productsState extends State<order_products> {
   String? previousPageUrl;
   bool isProductLoading = false;
   String searchQuery = "";
-  
+  Timer? _searchDebounce;
 
   TextEditingController searchController = TextEditingController();
 
@@ -421,7 +422,18 @@ class _order_productsState extends State<order_products> {
 
   void _applyFilters() {
     searchQuery = searchController.text.trim();
-    fetchProductListid(warehouse, page: 1, search: searchQuery);
+
+    if (_searchDebounce?.isActive ?? false) {
+      _searchDebounce!.cancel();
+    }
+
+    _searchDebounce = Timer(const Duration(milliseconds: 500), () {
+      fetchProductListid(
+        warehouse,
+        page: 1,
+        search: searchQuery,
+      );
+    });
   }
 
   @override
@@ -564,7 +576,13 @@ class _order_productsState extends State<order_products> {
                                 (selectedId == defaultWarehouse);
                           });
 
-                          await fetchProductListid(selectedId);
+                          searchQuery = searchController.text.trim();
+
+                          await fetchProductListid(
+                            selectedId,
+                            page: 1,
+                            search: searchQuery,
+                          );
                         }
                       },
                     ),
@@ -599,11 +617,16 @@ class _order_productsState extends State<order_products> {
                         if (value != null) {
                           setState(() {
                             selectedCategory = value;
-                            filteredProducts = products.where((product) {
-                              if (value == "All Categories") return true;
-                              return product['product_category_name'] == value;
-                            }).toList();
                           });
+
+                          filteredProducts = products.where((product) {
+                            if (selectedCategory == "All Categories")
+                              return true;
+                            return product['product_category_name'] ==
+                                selectedCategory;
+                          }).toList();
+
+                          setState(() {});
                         }
                       },
                     ),
