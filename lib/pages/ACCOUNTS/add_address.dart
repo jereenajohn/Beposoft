@@ -20,108 +20,87 @@ class add_address extends StatefulWidget {
 
   final int customerid;
   final name;
+
   @override
   State<add_address> createState() => _add_addressState();
 }
 
 class _add_addressState extends State<add_address> {
   double number = 0.00;
+
   late TextEditingController customer;
   TextEditingController name = TextEditingController();
   TextEditingController address = TextEditingController();
-
   TextEditingController zipcode = TextEditingController();
   TextEditingController city = TextEditingController();
   TextEditingController state = TextEditingController();
-
   TextEditingController country = TextEditingController();
   TextEditingController phone = TextEditingController();
   TextEditingController altphone = TextEditingController();
-
   TextEditingController email = TextEditingController();
+
   List<Map<String, dynamic>> statess = [];
   List<Map<String, dynamic>> customers = [];
+  List<Map<String, dynamic>> addres = [];
 
   String? selectstate;
   int? selectedStateId;
   String? selectedCustomerId;
 
+  var allocatedstates;
+  var family;
+  String? department;
+
+  bool isStateLoading = false;
+
   final TextEditingController _controller = TextEditingController();
-  void incrementNumber() {
-    setState(() {
-      number +=
-          0.01; // Increment by 0.01 (you can adjust the increment value as needed)
-      _controller.text = number.toStringAsFixed(2);
-    });
+
+  drower d = drower();
+
+  List<String> categories = ["Joishya", 'Hanvi', 'nimitha', 'Hari'];
+  String selectededu = "Hari";
+
+  @override
+  void initState() {
+    super.initState();
+
+    customer = TextEditingController(text: widget.name);
+
+    getprofiledata();
+    getcustomers();
+    getaddress();
   }
 
-  void logout() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.remove('userId');
-    await prefs.remove('token');
+  @override
+  void dispose() {
+    customer.dispose();
+    name.dispose();
+    address.dispose();
+    zipcode.dispose();
+    city.dispose();
+    state.dispose();
+    country.dispose();
+    phone.dispose();
+    altphone.dispose();
+    email.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
 
-    // Use a post-frame callback to show the SnackBar after the current frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (ScaffoldMessenger.of(context).mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Logged out successfully'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+  void incrementNumber() {
+    setState(() {
+      number += 0.01;
+      _controller.text = number.toStringAsFixed(2);
     });
-
-    // Wait for the SnackBar to disappear before navigating
-    await Future.delayed(Duration(seconds: 2));
-
-    // Navigate to the HomePage after the snackbar is shown
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => login()),
-    );
   }
 
   void decrementNumber() {
     setState(() {
       if (number >= 0.01) {
-        number -=
-            0.01; // Decrement by 0.01 (you can adjust the decrement value as needed)
+        number -= 0.01;
         _controller.text = number.toStringAsFixed(2);
       }
     });
-  }
-
-  drower d = drower();
-  Widget _buildDropdownTile(
-      BuildContext context, String title, List<String> options) {
-    return ExpansionTile(
-      title: Text(title),
-      children: options.map((option) {
-        return ListTile(
-          title: Text(option),
-          onTap: () {
-            Navigator.pop(context);
-            d.navigateToSelectedPage(
-                context, option); // Navigate to selected page
-          },
-        );
-      }).toList(),
-    );
-  }
-
-  List<String> categories = ["Joishya", 'Hanvi', 'nimitha', 'Hari'];
-  String selectededu = "Hari";
-  // List<String> state = ["Kerala", 'Tamilnadu', 'Karnataka', 'Gujarat'];
-  // String selectstate = "Kerala";
-
-  @override
-  void initState() {
-    getstates();
-    getcustomers();
-    getaddress();
-    customer = TextEditingController(text: widget.name);
-    super.initState();
   }
 
   Future<String?> gettokenFromPrefs() async {
@@ -129,99 +108,90 @@ class _add_addressState extends State<add_address> {
     return prefs.getString('token');
   }
 
-  List<Map<String, dynamic>> addres = [];
+  Future<String?> getdepFromPrefs() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getString('department');
+  }
 
-  Future<void> getaddress() async {
+  Future<void> getprofiledata() async {
     try {
       final token = await gettokenFromPrefs();
+      final dep = await getdepFromPrefs();
+
+      if (token == null || token.isEmpty) {
+        getstates();
+        return;
+      }
 
       var response = await http.get(
-        Uri.parse('$api/api/add/customer/address/${widget.customerid}/'),
+        Uri.parse("$api/api/profile/"),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
 
-      List<Map<String, dynamic>> addresslist = [];
-
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
         var productsData = parsed['data'];
 
-        for (var productData in productsData) {
-          // String imageUrl = "${productData['image']}";
-          addresslist.add({
-            'id': productData['id'],
-            'name': productData['name'],
-            'email': productData['email'],
-            'zipcode': productData['zipcode'],
-            'address': productData['address'],
-            'phone': productData['phone'],
-            'country': productData['country'],
-            'city': productData['city'],
-            'state': productData['state'],
-          });
-        }
         setState(() {
-          addres = addresslist;
+          department = dep;
+          allocatedstates = productsData['allocated_states'];
+          family = productsData['family'];
         });
-      }
-    } catch (error) {}
-  }
 
-  Future<void> getcustomers() async {
-    try {
-      final token = await gettokenFromPrefs();
-
-      var response = await http.get(
-        Uri.parse('$api/api/customers/'),
-        headers: {
-          'Authorization': '$token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      List<Map<String, dynamic>> customerlist = [];
-
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-        var productsData = parsed['data'];
-
-        for (var productData in productsData) {
-          customerlist.add({
-            'id': productData['id'],
-            'name': productData['name'],
-          });
-        }
-
+        getstates();
+      } else {
         setState(() {
-          customers = customerlist;
-
-          // After fetching customers, set the customer name and ID
-          setCustomerName();
+          department = dep;
         });
+
+        getstates();
       }
-    } catch (error) {}
-  }
-
-  void setCustomerName() {
-    // Find the customer with the matching ID
-    final selectedCustomer = customers.firstWhere(
-      (customer) => customer['id'] == widget.customerid,
-      orElse: () => {},
-    );
-
-    // If a matching customer is found, set the name in the text field and save the customer ID
-    if (selectedCustomer.isNotEmpty) {
-      customer.text = selectedCustomer['name'];
-      selectedCustomerId =
-          selectedCustomer['id'].toString(); // Store the customer ID
+    } catch (error) {
+      getstates();
     }
+  }
+
+  List<int> _getAllocatedStateIds() {
+    List<int> ids = [];
+
+    if (allocatedstates == null) {
+      return ids;
+    }
+
+    if (allocatedstates is List) {
+      for (var item in allocatedstates) {
+        if (item == null) continue;
+
+        if (item is int) {
+          ids.add(item);
+        } else if (item is String) {
+          final parsedId = int.tryParse(item);
+          if (parsedId != null) {
+            ids.add(parsedId);
+          }
+        } else if (item is Map) {
+          if (item['id'] != null) {
+            final parsedId = int.tryParse(item['id'].toString());
+            if (parsedId != null) {
+              ids.add(parsedId);
+            }
+          }
+        }
+      }
+    }
+
+    return ids;
   }
 
   Future<void> getstates() async {
     try {
+      setState(() {
+        isStateLoading = true;
+      });
+
       final token = await gettokenFromPrefs();
 
       var response = await http.get(
@@ -244,8 +214,126 @@ class _add_addressState extends State<add_address> {
             'name': productData['name'],
           });
         }
+
+        if (department == "BDO") {
+          final allocatedStateIds = _getAllocatedStateIds();
+
+          stateslist = stateslist.where((stateData) {
+            final stateId = int.tryParse(stateData['id'].toString());
+            return stateId != null && allocatedStateIds.contains(stateId);
+          }).toList();
+        }
+
         setState(() {
           statess = stateslist;
+
+          if (statess.isNotEmpty) {
+            selectstate = statess.first['name'].toString();
+            selectedStateId = int.tryParse(statess.first['id'].toString());
+          } else {
+            selectstate = null;
+            selectedStateId = null;
+          }
+
+          isStateLoading = false;
+        });
+      } else {
+        setState(() {
+          statess = [];
+          selectstate = null;
+          selectedStateId = null;
+          isStateLoading = false;
+        });
+      }
+    } catch (error) {
+      setState(() {
+        statess = [];
+        selectstate = null;
+        selectedStateId = null;
+        isStateLoading = false;
+      });
+    }
+  }
+
+  Future<void> getcustomers() async {
+    try {
+      final token = await gettokenFromPrefs();
+
+      var response = await http.get(
+        Uri.parse('$api/api/customers/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      List<Map<String, dynamic>> customerlist = [];
+
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+        var productsData = parsed['data'];
+
+        for (var productData in productsData) {
+          customerlist.add({
+            'id': productData['id'],
+            'name': productData['name'],
+          });
+        }
+
+        setState(() {
+          customers = customerlist;
+          setCustomerName();
+        });
+      }
+    } catch (error) {}
+  }
+
+  void setCustomerName() {
+    final selectedCustomer = customers.firstWhere(
+      (customer) => customer['id'] == widget.customerid,
+      orElse: () => {},
+    );
+
+    if (selectedCustomer.isNotEmpty) {
+      customer.text = selectedCustomer['name'].toString();
+      selectedCustomerId = selectedCustomer['id'].toString();
+    }
+  }
+
+  Future<void> getaddress() async {
+    try {
+      final token = await gettokenFromPrefs();
+
+      var response = await http.get(
+        Uri.parse('$api/api/add/customer/address/${widget.customerid}/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      List<Map<String, dynamic>> addresslist = [];
+
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+        var productsData = parsed['data'];
+
+        for (var productData in productsData) {
+          addresslist.add({
+            'id': productData['id'],
+            'name': productData['name'],
+            'email': productData['email'],
+            'zipcode': productData['zipcode'],
+            'address': productData['address'],
+            'phone': productData['phone'],
+            'country': productData['country'],
+            'city': productData['city'],
+            'state': productData['state'],
+          });
+        }
+
+        setState(() {
+          addres = addresslist;
         });
       }
     } catch (error) {}
@@ -285,35 +373,45 @@ class _add_addressState extends State<add_address> {
           "email": email,
         }),
       );
+
       if (response.statusCode == 200) {
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-          SnackBar(
+          const SnackBar(
             backgroundColor: Colors.green,
             content: Text('Address added Successfully.'),
           ),
         );
+
         Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (context) => add_address(
-                    customerid: widget.customerid, name: widget.name)));
+          context,
+          MaterialPageRoute(
+            builder: (context) => add_address(
+              customerid: widget.customerid,
+              name: widget.name,
+            ),
+          ),
+        );
       } else {
         String errorMsg = 'Adding address failed.';
+
         try {
           final Map<String, dynamic> errorBody = jsonDecode(response.body);
+
           if (errorBody.containsKey('errors')) {
             final errors = errorBody['errors'] as Map<String, dynamic>;
             if (errors.isNotEmpty) {
-              // Get the first error message
               final firstError = errors.values.first;
               if (firstError is List && firstError.isNotEmpty) {
                 errorMsg = firstError.first.toString();
+              } else {
+                errorMsg = firstError.toString();
               }
             }
+          } else if (errorBody.containsKey('message')) {
+            errorMsg = errorBody['message'].toString();
           }
-        } catch (e) {
-          // Ignore JSON parse errors, fallback to default message
-        }
+        } catch (e) {}
+
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
           SnackBar(
             backgroundColor: Colors.red,
@@ -323,59 +421,89 @@ class _add_addressState extends State<add_address> {
       }
     } catch (e) {
       ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-        SnackBar(
+        const SnackBar(
+          backgroundColor: Colors.red,
           content: Text('Enter valid information'),
         ),
       );
     }
   }
 
-  Future<String?> getdepFromPrefs() async {
+  void logout() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    return prefs.getString('department');
+    await prefs.remove('userId');
+    await prefs.remove('token');
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (ScaffoldMessenger.of(context).mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Logged out successfully'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    });
+
+    await Future.delayed(const Duration(seconds: 2));
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => login()),
+    );
+  }
+
+  Widget _buildDropdownTile(
+    BuildContext context,
+    String title,
+    List<String> options,
+  ) {
+    return ExpansionTile(
+      title: Text(title),
+      children: options.map((option) {
+        return ListTile(
+          title: Text(option),
+          onTap: () {
+            Navigator.pop(context);
+            d.navigateToSelectedPage(context, option);
+          },
+        );
+      }).toList(),
+    );
   }
 
   Future<void> _navigateBack() async {
     final dep = await getdepFromPrefs();
+
     if (dep == "BDO") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                bdo_dashbord()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => bdo_dashbord()),
       );
     } else if (dep == "BDM") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                bdm_dashbord()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => bdm_dashbord()),
       );
     } else if (dep == "warehouse") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                WarehouseDashboard()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => WarehouseDashboard()),
       );
-    } else if(dep=="CEO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => ceo_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="COO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => ceo_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if (dep == "Warehouse Admin") {
+    } else if (dep == "CEO") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                WarehouseAdmin()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
+      );
+    } else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
+      );
+    } else if (dep == "Warehouse Admin") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => WarehouseAdmin()),
       );
     } else {
       Navigator.pushReplacement(
@@ -385,23 +513,82 @@ else if (dep == "Warehouse Admin") {
     }
   }
 
+  Widget _buildStateDropdown() {
+    return Container(
+      width: double.infinity,
+      height: 49,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 10),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<Map<String, dynamic>>(
+            value: statess.isNotEmpty && selectedStateId != null
+                ? statess.firstWhere(
+                    (element) =>
+                        int.tryParse(element['id'].toString()) ==
+                        selectedStateId,
+                    orElse: () => statess[0],
+                  )
+                : null,
+            onChanged: statess.isNotEmpty
+                ? (Map<String, dynamic>? newValue) {
+                    if (newValue == null) return;
+
+                    setState(() {
+                      selectstate = newValue['name'].toString();
+                      selectedStateId =
+                          int.tryParse(newValue['id'].toString());
+                    });
+                  }
+                : null,
+            items: statess.map<DropdownMenuItem<Map<String, dynamic>>>(
+              (Map<String, dynamic> stateData) {
+                return DropdownMenuItem<Map<String, dynamic>>(
+                  value: stateData,
+                  child: Text(
+                    stateData['name'].toString(),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              },
+            ).toList(),
+            hint: Text(
+              isStateLoading
+                  ? 'Loading states...'
+                  : department == "BDO"
+                      ? 'No allocated states available'
+                      : 'No states available',
+            ),
+            icon: const Icon(Icons.arrow_drop_down),
+            isExpanded: true,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        // Trigger the navigation logic when the back swipe occurs
         _navigateBack();
-        return false; // Prevent the default back navigation behavior
+        return false;
       },
       child: Scaffold(
-        backgroundColor: Color.fromARGB(242, 255, 255, 255),
+        backgroundColor: const Color.fromARGB(242, 255, 255, 255),
         appBar: AppBar(
-          title: Text(
+          title: const Text(
             "Add Address",
             style: TextStyle(fontSize: 14, color: Colors.grey),
           ),
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back), // Custom back arrow
+            icon: const Icon(Icons.arrow_back),
             onPressed: () async {
               Navigator.pop(context);
             },
@@ -421,21 +608,23 @@ else if (dep == "Warehouse Admin") {
               color: Colors.white,
               child: Column(
                 children: [
-                  SizedBox(height: 20),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 95),
+                  const SizedBox(height: 20),
+                  const Padding(
+                    padding: EdgeInsets.only(left: 95),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
                         Text(
                           "Add Address",
                           style: TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.bold),
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  SizedBox(height: 15),
+                  const SizedBox(height: 15),
                   SizedBox(
                     height: 230,
                     width: 340,
@@ -446,7 +635,8 @@ else if (dep == "Warehouse Admin") {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(10.0),
                           border: Border.all(
-                              color: Color.fromARGB(255, 236, 236, 236)),
+                            color: const Color.fromARGB(255, 236, 236, 236),
+                          ),
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(13.0),
@@ -457,42 +647,49 @@ else if (dep == "Warehouse Admin") {
                                 controller: customer,
                                 decoration: InputDecoration(
                                   labelText: 'Customer Name',
-                                  prefixIcon: Icon(Icons.local_offer),
+                                  prefixIcon: const Icon(Icons.local_offer),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10.0),
-                                    borderSide: BorderSide(color: Colors.grey),
+                                    borderSide:
+                                        const BorderSide(color: Colors.grey),
                                   ),
-                                  contentPadding:
-                                      EdgeInsets.symmetric(vertical: 8.0),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 8.0,
+                                  ),
                                 ),
                               ),
-                              SizedBox(height: 10),
-                              Text("Shipping Address Name",
-                                  style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold)),
-                              SizedBox(height: 10),
+                              const SizedBox(height: 10),
+                              const Text(
+                                "Shipping Address Name",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
                               TextField(
                                 controller: name,
                                 decoration: InputDecoration(
                                   labelText: 'name',
-                                  prefixIcon: Icon(Icons.local_offer),
+                                  prefixIcon: const Icon(Icons.local_offer),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10.0),
-                                    borderSide: BorderSide(color: Colors.grey),
+                                    borderSide:
+                                        const BorderSide(color: Colors.grey),
                                   ),
-                                  contentPadding:
-                                      EdgeInsets.symmetric(vertical: 8.0),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 8.0,
+                                  ),
                                 ),
                               ),
-                              SizedBox(height: 10),
+                              const SizedBox(height: 10),
                             ],
                           ),
                         ),
                       ),
                     ),
                   ),
-                  SizedBox(height: 15),
+                  const SizedBox(height: 15),
                   SizedBox(
                     height: 750,
                     width: 340,
@@ -506,44 +703,53 @@ else if (dep == "Warehouse Admin") {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(10.0),
                           border: Border.all(
-                              color: Color.fromARGB(255, 236, 236, 236)),
+                            color: const Color.fromARGB(255, 236, 236, 236),
+                          ),
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(10.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              SizedBox(height: 20),
-                              Text("Address/Building Name/ Building Number ",
-                                  style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold)),
-                              SizedBox(height: 13),
+                              const SizedBox(height: 20),
+                              const Text(
+                                "Address/Building Name/ Building Number ",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 13),
                               TextField(
                                 controller: address,
                                 decoration: InputDecoration(
                                   labelText: 'Address',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10.0),
-                                    borderSide: BorderSide(color: Colors.grey),
+                                    borderSide:
+                                        const BorderSide(color: Colors.grey),
                                   ),
-                                  contentPadding:
-                                      EdgeInsets.symmetric(vertical: 8.0),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 8.0,
+                                  ),
                                 ),
                               ),
-                              SizedBox(height: 10),
+                              const SizedBox(height: 10),
                               Row(
                                 children: [
                                   Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Text("Zip code",
-                                          style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.bold)),
-                                      SizedBox(height: 10),
-                                      Container(
+                                      const Text(
+                                        "Zip code",
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      SizedBox(
                                         width: 144,
                                         child: TextField(
                                           controller: zipcode,
@@ -552,30 +758,33 @@ else if (dep == "Warehouse Admin") {
                                             border: OutlineInputBorder(
                                               borderRadius:
                                                   BorderRadius.circular(10.0),
-                                              borderSide: BorderSide(
-                                                  color: Colors.grey),
+                                              borderSide: const BorderSide(
+                                                color: Colors.grey,
+                                              ),
                                             ),
                                             contentPadding:
-                                                EdgeInsets.symmetric(
-                                                    vertical: 8.0),
+                                                const EdgeInsets.symmetric(
+                                              vertical: 8.0,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ],
                                   ),
-                                  SizedBox(
-                                    width: 13,
-                                  ),
+                                  const SizedBox(width: 13),
                                   Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Text("City",
-                                          style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.bold)),
-                                      SizedBox(height: 10),
-                                      Container(
+                                      const Text(
+                                        "City",
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      SizedBox(
                                         width: 144,
                                         child: TextField(
                                           controller: city,
@@ -584,167 +793,133 @@ else if (dep == "Warehouse Admin") {
                                             border: OutlineInputBorder(
                                               borderRadius:
                                                   BorderRadius.circular(10.0),
-                                              borderSide: BorderSide(
-                                                  color: Colors.grey),
+                                              borderSide: const BorderSide(
+                                                color: Colors.grey,
+                                              ),
                                             ),
                                             contentPadding:
-                                                EdgeInsets.symmetric(
-                                                    vertical: 8.0),
+                                                const EdgeInsets.symmetric(
+                                              vertical: 8.0,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ],
-                                  )
+                                  ),
                                 ],
                               ),
-                              SizedBox(height: 10),
-                              Text("State *:",
-                                  style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold)),
-                              SizedBox(height: 10),
-                              Container(
-                                width:
-                                    double.infinity, // Use full width available
-                                height: 49,
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: InputDecorator(
-                                  decoration: InputDecoration(
-                                    border: InputBorder.none,
-                                    contentPadding: EdgeInsets.symmetric(
-                                        horizontal:
-                                            10), // Adjust padding as needed
-                                  ),
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<Map<String, dynamic>>(
-                                      value: statess.isNotEmpty
-                                          ? statess.firstWhere(
-                                              (element) =>
-                                                  element['name'] ==
-                                                  selectstate,
-                                              orElse: () => statess[0],
-                                            )
-                                          : null,
-                                      onChanged: statess.isNotEmpty
-                                          ? (Map<String, dynamic>? newValue) {
-                                              setState(() {
-                                                selectstate = newValue!['name'];
-                                                selectedStateId = newValue[
-                                                    'id']; // Store the selected state's ID
-                                              });
-                                            }
-                                          : null,
-                                      items: statess.isNotEmpty
-                                          ? statess.map<
-                                              DropdownMenuItem<
-                                                  Map<String, dynamic>>>(
-                                              (Map<String, dynamic> state) {
-                                                return DropdownMenuItem<
-                                                    Map<String, dynamic>>(
-                                                  value: state,
-                                                  child: Text(state['name']),
-                                                );
-                                              },
-                                            ).toList()
-                                          : [
-                                              DropdownMenuItem(
-                                                child:
-                                                    Text('No states available'),
-                                                value: null,
-                                              ),
-                                            ],
-                                      icon: Icon(Icons.arrow_drop_down),
-                                      isExpanded:
-                                          true, // Ensure dropdown takes full width
-                                    ),
-                                  ),
+                              const SizedBox(height: 10),
+                              const Text(
+                                "State *:",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              SizedBox(height: 20),
-                              Text("Country ",
-                                  style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold)),
-                              SizedBox(height: 10),
+                              const SizedBox(height: 10),
+                              _buildStateDropdown(),
+                              const SizedBox(height: 20),
+                              const Text(
+                                "Country ",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
                               TextField(
                                 controller: country,
                                 decoration: InputDecoration(
                                   labelText: 'Country',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10.0),
-                                    borderSide: BorderSide(color: Colors.grey),
+                                    borderSide:
+                                        const BorderSide(color: Colors.grey),
                                   ),
-                                  contentPadding:
-                                      EdgeInsets.symmetric(vertical: 8.0),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 8.0,
+                                  ),
                                 ),
                               ),
-                              SizedBox(height: 30),
+                              const SizedBox(height: 30),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Container(
                                     height: 1,
                                     width: 300,
-                                    color: Color.fromARGB(255, 215, 201, 201),
+                                    color: const Color.fromARGB(
+                                        255, 215, 201, 201),
                                   ),
                                 ],
                               ),
-                              SizedBox(height: 10),
-                              Text("Phone Number * : ",
-                                  style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold)),
-                              SizedBox(height: 10),
+                              const SizedBox(height: 10),
+                              const Text(
+                                "Phone Number * : ",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
                               TextField(
                                 controller: phone,
                                 decoration: InputDecoration(
                                   labelText: 'Phone Number',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10.0),
-                                    borderSide: BorderSide(color: Colors.grey),
+                                    borderSide:
+                                        const BorderSide(color: Colors.grey),
                                   ),
-                                  contentPadding:
-                                      EdgeInsets.symmetric(vertical: 8.0),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 8.0,
+                                  ),
                                 ),
                               ),
-                              SizedBox(height: 10),
-
-                               Text("Alternate Number * : ",
-                                  style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold)),
-                              SizedBox(height: 10),
+                              const SizedBox(height: 10),
+                              const Text(
+                                "Alternate Number * : ",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
                               TextField(
                                 controller: altphone,
                                 decoration: InputDecoration(
                                   labelText: 'Alt Number',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10.0),
-                                    borderSide: BorderSide(color: Colors.grey),
+                                    borderSide:
+                                        const BorderSide(color: Colors.grey),
                                   ),
-                                  contentPadding:
-                                      EdgeInsets.symmetric(vertical: 8.0),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 8.0,
+                                  ),
                                 ),
                               ),
-                              SizedBox(height: 10),
-                              Text("Mail Id : ",
-                                  style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold)),
-                              SizedBox(height: 10),
+                              const SizedBox(height: 10),
+                              const Text(
+                                "Mail Id : ",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
                               TextField(
                                 controller: email,
                                 decoration: InputDecoration(
                                   labelText: 'Mail Id',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10.0),
-                                    borderSide: BorderSide(color: Colors.grey),
+                                    borderSide:
+                                        const BorderSide(color: Colors.grey),
                                   ),
-                                  contentPadding:
-                                      EdgeInsets.symmetric(vertical: 8.0),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 8.0,
+                                  ),
                                 ),
                               ),
                             ],
@@ -753,34 +928,37 @@ else if (dep == "Warehouse Admin") {
                       ),
                     ),
                   ),
-                  SizedBox(height: 20),
+                  const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Container(
                         height: 1,
                         width: 300,
-                        color: Color.fromARGB(255, 215, 201, 201),
+                        color: const Color.fromARGB(255, 215, 201, 201),
                       ),
                     ],
                   ),
-                  SizedBox(height: 13),
+                  const SizedBox(height: 13),
                   Padding(
                     padding: const EdgeInsets.only(),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        SizedBox(width: 13),
+                        const SizedBox(width: 13),
                         SizedBox(
                           width: 200,
                           child: ElevatedButton(
                             onPressed: () {
-                              if (selectstate == null || selectstate!.isEmpty) {
+                              if (selectedStateId == null ||
+                                  selectstate == null ||
+                                  selectstate!.isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                      content: Text("Please select a state")),
+                                  const SnackBar(
+                                    content: Text("Please select a state"),
+                                  ),
                                 );
-                                return; // don't proceed
+                                return;
                               }
 
                               addaddress(
@@ -797,7 +975,8 @@ else if (dep == "Warehouse Admin") {
                               );
                             },
                             style: ButtonStyle(
-                              backgroundColor: MaterialStateProperty.all<Color>(
+                              backgroundColor:
+                                  MaterialStateProperty.all<Color>(
                                 Colors.blue,
                               ),
                               shape: MaterialStateProperty.all<
@@ -807,30 +986,32 @@ else if (dep == "Warehouse Admin") {
                                 ),
                               ),
                               fixedSize: MaterialStateProperty.all<Size>(
-                                Size(95, 15),
+                                const Size(95, 15),
                               ),
                             ),
-                            child: Text("Submit",
-                                style: TextStyle(color: Colors.white)),
+                            child: const Text(
+                              "Submit",
+                              style: TextStyle(color: Colors.white),
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  SizedBox(height: 35),
-
-                  // Display addresses in table format
+                  const SizedBox(height: 35),
                   Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Customer Addresses',
                           style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold),
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                        SizedBox(height: 10),
+                        const SizedBox(height: 10),
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: DataTable(
@@ -840,29 +1021,38 @@ else if (dep == "Warehouse Admin") {
                               DataColumn(label: Text('Edit')),
                             ],
                             rows: addres
-                                .map((address) => DataRow(cells: [
-                                      DataCell(Text(widget.name)),
-                                      DataCell(Text(address['address'])),
+                                .map(
+                                  (addressData) => DataRow(
+                                    cells: [
+                                      DataCell(Text(widget.name.toString())),
+                                      DataCell(
+                                        Text(
+                                          addressData['address']?.toString() ??
+                                              '',
+                                        ),
+                                      ),
                                       DataCell(
                                         IconButton(
-                                          icon: Icon(Icons.edit),
+                                          icon: const Icon(Icons.edit),
                                           onPressed: () {
                                             Navigator.push(
                                               context,
                                               MaterialPageRoute(
                                                 builder: (context) =>
                                                     Editaddress(
-                                                        addresid: address['id'],
-                                                        customerid:
-                                                            widget.customerid,
-                                                        customername:
-                                                            widget.name),
+                                                  addresid: addressData['id'],
+                                                  customerid:
+                                                      widget.customerid,
+                                                  customername: widget.name,
+                                                ),
                                               ),
                                             );
                                           },
                                         ),
                                       ),
-                                    ]))
+                                    ],
+                                  ),
+                                )
                                 .toList(),
                           ),
                         ),

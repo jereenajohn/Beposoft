@@ -40,15 +40,62 @@ class _add_product_variantState extends State<add_product_variant> {
     );
   }
 
-  Widget buildProductTable() {
-    if (widget.type == 'single') {
-      // Display single products
-      if (singleProducts.isNotEmpty) {
-        final product = singleProducts.first;
+ Widget buildProductTable() {
+  String formatStock(dynamic value) {
+    if (value == null) return "0";
 
-        return DataTable(
-          columnSpacing: 45,
+    final double? stockValue = double.tryParse(value.toString());
+
+    if (stockValue == null) return "0";
+
+    if (stockValue == stockValue.toInt()) {
+      return stockValue.toInt().toString();
+    }
+
+    return stockValue.toStringAsFixed(2);
+  }
+
+  Widget stockBadge(dynamic stockValue) {
+    final double stock = double.tryParse(stockValue?.toString() ?? "0") ?? 0;
+    final bool isOutOfStock = stock <= 0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: isOutOfStock
+            ? const Color(0xFFFFEBEE)
+            : const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isOutOfStock
+              ? const Color(0xFFFFCDD2)
+              : const Color(0xFFBFDBFE),
+        ),
+      ),
+      child: Text(
+        isOutOfStock ? "Out" : formatStock(stockValue),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: isOutOfStock
+              ? const Color(0xFFD32F2F)
+              : const Color(0xFF1D4ED8),
+        ),
+      ),
+    );
+  }
+
+  if (widget.type == 'single') {
+    if (singleProducts.isNotEmpty) {
+      final product = singleProducts.first;
+
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columnSpacing: 35,
           headingRowHeight: 40,
+          dataRowMinHeight: 58,
+          dataRowMaxHeight: 68,
           columns: const <DataColumn>[
             DataColumn(
               label: Text(
@@ -70,6 +117,15 @@ class _add_product_variantState extends State<add_product_variant> {
             ),
             DataColumn(
               label: Text(
+                'Stock',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
                 'Actions',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
@@ -77,47 +133,68 @@ class _add_product_variantState extends State<add_product_variant> {
                 ),
               ),
             ),
-            // DataColumn(
-            //   label: Text(
-            //     'Delete',
-            //     style: TextStyle(
-            //       fontWeight: FontWeight.bold,
-            //       fontSize: 14,
-            //     ),
-            //   ),
-            // ),
           ],
           rows: [
             DataRow(
               cells: <DataCell>[
                 DataCell(
-                  Text(
-                    product['name'] ?? '',
-                    style: const TextStyle(fontSize: 12),
+                  SizedBox(
+                    width: 150,
+                    child: Text(
+                      product['name']?.toString() ?? '',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                 ),
                 DataCell(
-                  Image.network(
-                    '$api${product['image']}',
-                    width: 30,
-                    height: 30,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(Icons.image_not_supported);
-                    },
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      '$api${product['image']}',
+                      width: 45,
+                      height: 45,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          width: 45,
+                          height: 45,
+                          color: Colors.grey.shade200,
+                          child: const Icon(
+                            Icons.image_not_supported,
+                            size: 20,
+                            color: Colors.grey,
+                          ),
+                        );
+                      },
+                    ),
                   ),
+                ),
+                DataCell(
+                  stockBadge(product['stock']),
                 ),
                 DataCell(
                   ElevatedButton(
                     onPressed: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (context)=>update_product(id: product['id'],type:widget.type)));
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => update_product(
+                            id: product['id'],
+                            type: widget.type,
+                          ),
+                        ),
+                      );
                     },
                     style: ElevatedButton.styleFrom(
                       foregroundColor: Colors.white,
                       backgroundColor: Colors.blue,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      minimumSize: const Size(50, 20),
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      minimumSize: const Size(55, 28),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8.0),
                       ),
@@ -128,39 +205,32 @@ class _add_product_variantState extends State<add_product_variant> {
                     ),
                   ),
                 ),
-                // DataCell(
-                //   ElevatedButton(
-                //     onPressed: () {
-                //       deleteProduct(product['id'], context);
-                //     },
-                //     style: ElevatedButton.styleFrom(
-                //       foregroundColor: Colors.white,
-                //       backgroundColor: Colors.red,
-                //       padding: const EdgeInsets.symmetric(
-                //           horizontal: 8, vertical: 4),
-                //       minimumSize: const Size(50, 20),
-                //       shape: RoundedRectangleBorder(
-                //         borderRadius: BorderRadius.circular(8.0),
-                //       ),
-                //     ),
-                //     child: const Text(
-                //       'Delete',
-                //       style: TextStyle(fontSize: 10),
-                //     ),
-                //   ),
-                // ),
               ],
             ),
           ],
-        );
-      } else {
-        return const Text('No products available');
-      }
-    } else if (widget.type == 'variant') {
-      // Display variant products
-      return DataTable(
-        columnSpacing: 45,
+        ),
+      );
+    } else {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('No products available'),
+      );
+    }
+  } else if (widget.type == 'variant') {
+    if (variantProducts.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('No variant products available'),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columnSpacing: 35,
         headingRowHeight: 40,
+        dataRowMinHeight: 58,
+        dataRowMaxHeight: 68,
         columns: const <DataColumn>[
           DataColumn(
             label: Text(
@@ -182,6 +252,15 @@ class _add_product_variantState extends State<add_product_variant> {
           ),
           DataColumn(
             label: Text(
+              'Stock',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          DataColumn(
+            label: Text(
               'Actions',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
@@ -189,46 +268,68 @@ class _add_product_variantState extends State<add_product_variant> {
               ),
             ),
           ),
-          // DataColumn(
-          //   label: Text(
-          //     'Delete',
-          //     style: TextStyle(
-          //       fontWeight: FontWeight.bold,
-          //       fontSize: 14,
-          //     ),
-          //   ),
-          // ),
         ],
         rows: variantProducts.map((variant) {
           return DataRow(
             cells: <DataCell>[
               DataCell(
-                Text(
-                  variant['name'] ?? '',
-                  style: const TextStyle(fontSize: 12),
+                SizedBox(
+                  width: 150,
+                  child: Text(
+                    variant['name']?.toString() ?? '',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 ),
               ),
               DataCell(
-                Image.network(
-                  '${api}${variant['image']}',
-                  width: 50,
-                  height: 40,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Icon(Icons.image_not_supported);
-                  },
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    '${api}${variant['image']}',
+                    width: 45,
+                    height: 45,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: 45,
+                        height: 45,
+                        color: Colors.grey.shade200,
+                        child: const Icon(
+                          Icons.image_not_supported,
+                          size: 20,
+                          color: Colors.grey,
+                        ),
+                      );
+                    },
+                  ),
                 ),
+              ),
+              DataCell(
+                stockBadge(variant['stock']),
               ),
               DataCell(
                 ElevatedButton(
                   onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context)=>update_product(id: variant['id'],type:widget.type)));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => update_product(
+                          id: variant['id'],
+                          type: widget.type,
+                        ),
+                      ),
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     foregroundColor: Colors.white,
                     backgroundColor: Colors.blue,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: const Size(50, 20),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    minimumSize: const Size(55, 28),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8.0),
                     ),
@@ -239,34 +340,18 @@ class _add_product_variantState extends State<add_product_variant> {
                   ),
                 ),
               ),
-              // DataCell(
-              //   ElevatedButton(
-              //     onPressed: () {
-              //       deleteProduct(variant['id'], context);
-              //     },
-              //     style: ElevatedButton.styleFrom(
-              //       foregroundColor: Colors.white,
-              //       backgroundColor: Colors.red,
-              //       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              //       minimumSize: const Size(50, 20),
-              //       shape: RoundedRectangleBorder(
-              //         borderRadius: BorderRadius.circular(8.0),
-              //       ),
-              //     ),
-              //     child: const Text(
-              //       'Delete',
-              //       style: TextStyle(fontSize: 10),
-              //     ),
-              //   ),
-              // ),
             ],
           );
         }).toList(),
-      );
-    } else {
-      return const Text('No products available');
-    }
+      ),
+    );
+  } else {
+    return const Padding(
+      padding: EdgeInsets.all(16),
+      child: Text('No products available'),
+    );
   }
+}
 
 // Method to handle editing a product
   void _editProduct(Map<String, dynamic> product) {

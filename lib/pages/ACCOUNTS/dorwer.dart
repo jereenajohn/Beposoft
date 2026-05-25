@@ -1,11 +1,14 @@
 import 'package:beposoft/Sales%20Directors/DSR_BDO_List.dart';
 import 'package:beposoft/Sales%20Directors/sd_confirm_call_duration.dart';
 import 'package:beposoft/pages/ACCOUNTS/BDO_call_List.dart';
-import 'package:beposoft/pages/ACCOUNTS/Staff_exit_form_page.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_Expenses.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_Recipt.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_bank.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_credit_note.dart';
+import 'package:beposoft/pages/BDM/add_team_member.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:beposoft/pages/ACCOUNTS/add_customer_type.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_daily_sales_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_new_customer.dart';
@@ -39,17 +42,20 @@ import 'package:beposoft/pages/ACCOUNTS/expence_reeport.dart';
 import 'package:beposoft/pages/ACCOUNTS/expense_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/finance_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/grv_list.dart';
+import 'package:beposoft/pages/ACCOUNTS/gstreportpage.dart';
 import 'package:beposoft/pages/ACCOUNTS/internal_tranfer.dart';
 import 'package:beposoft/pages/ACCOUNTS/monthlyprocyclingskating.dart';
 import 'package:beposoft/pages/ACCOUNTS/new_grv.dart';
 import 'package:beposoft/pages/ACCOUNTS/new_performa_products.dart';
 import 'package:beposoft/pages/ACCOUNTS/new_product.dart';
+import 'package:beposoft/pages/ACCOUNTS/order_items_excel_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/order_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/order_products.dart';
 import 'package:beposoft/pages/ACCOUNTS/order_recipts_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/performa_invoice_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/post_office_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/product_list.dart';
+import 'package:beposoft/pages/ACCOUNTS/product_stock_report_page.dart';
 import 'package:beposoft/pages/ACCOUNTS/purchase_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/purchase_request_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/purchase_request_products.dart';
@@ -59,8 +65,8 @@ import 'package:beposoft/pages/ACCOUNTS/recipts_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/refund.dart';
 import 'package:beposoft/pages/ACCOUNTS/refund_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/sales_report.dart';
+import 'package:beposoft/pages/ACCOUNTS/shipping_address_excel_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/sold_product_report.dart';
-import 'package:beposoft/pages/ACCOUNTS/staff_exit_form_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/statewise_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/status_wise_orders_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/stock_report.dart';
@@ -74,7 +80,6 @@ import 'package:beposoft/pages/ADMIN/sales_report_excel.dart';
 import 'package:beposoft/pages/BDM/Add_Bdo_present_data.dart';
 import 'package:beposoft/pages/BDM/Bdos_dsr_list.dart';
 import 'package:beposoft/pages/BDM/active_bdo_list.dart';
-import 'package:beposoft/pages/BDM/add_team_member.dart';
 import 'package:beposoft/pages/BDM/approve_bdo__call_duration.dart';
 import 'package:beposoft/pages/BDM/bdm_add_daily_sales_report.dart';
 import 'package:beposoft/pages/BDM/bdm_customer_list.dart';
@@ -99,7 +104,7 @@ import 'package:beposoft/pages/BDM/bdm_order_list.dart';
 import 'package:flutter/material.dart';
 
 class drower {
-  void navigateToSelectedPage(BuildContext context, String option) {
+  Future<void> navigateToSelectedPage(BuildContext context, String option) async {
     // Navigate to the selected page based on the option
     switch (option) {
       case 'Add Customer':
@@ -114,7 +119,6 @@ class drower {
           MaterialPageRoute(builder: (context) => customer_list()),
         );
         break;
-
       case 'Customer Type':
         Navigator.push(
           context,
@@ -146,6 +150,13 @@ class drower {
           MaterialPageRoute(builder: (context) => TeamWiseReport()),
         );
         break;
+
+      case 'Add Team Members':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => AddTeamMembers()),
+        );
+        break;
       case 'Add Warehouse':
         Navigator.push(
           context,
@@ -164,20 +175,6 @@ class drower {
           MaterialPageRoute(builder: (context) => staff_list()),
         );
         break;
-
-      case 'Staff Exit Form':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => EmployeeExitFormPage()),
-        );
-        break;
-      case 'Staff Exit List':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => EmployeeExitListPage()),
-        );
-        break;
-
       case 'Add Credit Note':
         Navigator.push(
           context,
@@ -212,6 +209,11 @@ class drower {
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => inernal_transfer()),
+        );
+      case 'GST Report':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => GSTReportPage()),
         );
 
       case 'Transfer List':
@@ -534,6 +536,41 @@ class drower {
               builder: (context) => CyclingProductwiseStatewiseReport()),
         );
         break;
+     case 'Order Items Excel Report':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => OrderItemsExcelReport()),
+        );
+
+      case 'Shipping Address Excel Report':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ShippingAddressExcelReport(
+              warehouseId: 1,
+              fromDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+              toDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+            ),
+          ),
+        );
+
+      case 'Product Stock Report':
+        final prefs = await SharedPreferences.getInstance();
+        final int warehouseId = prefs.getInt('warehouse') ?? 1;
+        final String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProductStockReportPage(
+              warehouseId: warehouseId,
+              fromDate: today,
+              toDate: today,
+            ),
+          ),
+        );
+        break;
+
       case 'Cycling & Skating Daily Excel':
         Navigator.push(
           context,
@@ -791,7 +828,6 @@ class drower {
           MaterialPageRoute(builder: (context) => BdoViewCallduration()),
         );
         break;
-
       case 'Product List':
         Navigator.push(
           context,
@@ -920,6 +956,47 @@ class drower {
   void navigateToSelectedPage3(BuildContext context, String option) {
     // Navigate to the selected page based on the option
     switch (option) {
+      case 'Add Team':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => AddTeam()),
+        );
+        break;
+
+      case 'Add Team Members':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => AddTeamMembers()),
+        );
+        break;
+
+      case 'View Call Duration List':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => approvebdocallduration()),
+        );
+        break;
+
+      case 'Add Team Members':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => AddTeamMembers()),
+        );
+        break;
+
+      case 'Approve BDO Call Duration':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => SdConfirmCallDuration()),
+        );
+        break;
+
+      case 'Add BDO Attendence':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => BdmReportAdd()),
+        );
+        break;
       case 'New Proforma Invoice':
         Navigator.push(
           context,
@@ -993,13 +1070,6 @@ class drower {
         );
         break;
 
-      case 'Add BDO Attendence':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => BdmReportAdd()),
-        );
-        break;
-
       case 'Add Active Bdo Data':
         Navigator.push(
           context,
@@ -1010,43 +1080,6 @@ class drower {
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => BdmOverallReportPage()),
-        );
-        break;
-
-         case 'Add Team':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => AddTeam()),
-        );
-        break;
-
-        case 'Add Team Members':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => AddTeamMembers()),
-        );
-        break;
-
-        
-
-      case 'View Call Duration List':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => approvebdocallduration()),
-        );
-        break;
-
-          case 'Add Team Members':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => AddTeamMembers()),
-        );
-        break;
-
-      case 'Approve BDO Call Duration':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => SdConfirmCallDuration()),
         );
         break;
 
