@@ -149,6 +149,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   String categoryStartDate = "";
   String categoryEndDate = "";
   bool showAllCategories = false;
+  double dashboardTotalLandingCostAmount = 0.0;
 
   List<Map<String, dynamic>> familyAnalysisCards = [];
   Map<String, dynamic> familyAnalysisOverall = {};
@@ -171,6 +172,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   int dashboardTotalStock = 0;
   double dashboardTotalRetailAmount = 0.0;
   bool dashboardInventoryLoading = false;
+  double dashboardTotalSellingAmount = 0.0;
 
   // int getFamilyPresentCount(String familyName) {
   //   return familyAttendanceData.where((item) {
@@ -354,6 +356,26 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     }
   }
 
+  String _formatDashboardAmount(dynamic value) {
+    final double amount = _asDouble(value);
+    final double absAmount = amount.abs();
+    final String sign = amount < 0 ? "-" : "";
+
+    if (absAmount >= 10000000) {
+      return "$sign₹${(absAmount / 10000000).toStringAsFixed(2)} Cr";
+    }
+
+    if (absAmount >= 100000) {
+      return "$sign₹${(absAmount / 100000).toStringAsFixed(2)} L";
+    }
+
+    if (absAmount >= 1000) {
+      return "$sign₹${(absAmount / 1000).toStringAsFixed(2)}K";
+    }
+
+    return "$sign${_currency.format(absAmount)}";
+  }
+
   Future<String?> getWarehouseFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     int? warehouseId = prefs.getInt('warehouse');
@@ -393,6 +415,11 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
             dashboardTotalStock = _asInt(summary['total_stock']);
             dashboardTotalRetailAmount =
                 _asDouble(summary['total_retail_amount']);
+            dashboardTotalLandingCostAmount =
+                _asDouble(summary['total_landing_cost_amount']);
+
+            dashboardTotalSellingAmount =
+                _asDouble(summary['total_selling_amount']);
             dashboardInventoryLoading = false;
           });
         } else {
@@ -2168,6 +2195,60 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     );
   }
 
+  Widget _buildDashboardLineItem({
+    required String title,
+    required String value,
+    IconData? icon,
+  }) {
+    return Container(
+      width: double.infinity,
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.22),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(
+              icon,
+              color: Colors.white,
+              size: 14,
+            ),
+            const SizedBox(width: 6),
+          ],
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.88),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (value.isNotEmpty)
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget dashboardCards() {
     final bankSummary = _asMap(beposoftSummary['bank_summary']);
     final todayData = _asMap(bankSummary['today_data']);
@@ -2176,6 +2257,11 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     final totalStaffs = _asInt(staffSummary['total_staffs']);
     final activeStaffs = _asInt(staffSummary['active_staffs']);
     final deactiveStaffs = _asInt(staffSummary['deactive_staffs']);
+
+    final totalFamilyPresentCount = familySummaryTeamCards.fold<int>(
+      0,
+      (sum, item) => sum + _asInt(item['present_count']),
+    );
 
     final withInternalTransfer = _asMap(todayData['with_internal_transfer']);
     final financeOpeningBalance =
@@ -2190,9 +2276,22 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     final purchaseCount = _asInt(purchaseSummary['total_count']);
     final purchaseAmount = _asDouble(purchaseSummary['total_amount']);
 
+    // final billAmountSummary = _asMap(beposoftSummary['bill_amount_summary']);
+    // final currentMonthBillData =
+    //     _asMap(billAmountSummary['current_month_data']);
+
+    // final currentMonthBillAmount =
+    //     _asDouble(currentMonthBillData['total_amount']);
+
     final assetSummary = _asMap(beposoftSummary['asset_summary']);
     final assetCount = _asInt(assetSummary['total_count']);
     final assetAmount = _asDouble(assetSummary['total_amount']);
+
+    final billAmountSummary = _asMap(beposoftSummary['bill_amount_summary']);
+    final currentMonthBillData =
+        _asMap(billAmountSummary['current_month_data']);
+    final currentMonthBillAmount =
+        _asDouble(currentMonthBillData['total_amount']);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
@@ -2202,17 +2301,18 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
         physics: const NeverScrollableScrollPhysics(),
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: 0.88,
+        childAspectRatio: 0.80,
         children: [
           _buildDashboardCard(
             title: "Sales",
             icon: Icons.bar_chart_rounded,
-            value: _currency.format(
-              _asDouble(productsData?['month_total_amount']),
+            value: _formatDashboardAmount(
+              productsData?['month_total_amount'],
             ),
             lines: [
-              "Orders: ${_asInt(productsData?['month_count'])}",
-              "Monthly sales report",
+              "Today's Invoices: ${_asInt(productsData?['today_count'])}",
+              "Volume: ${_formatDashboardAmount(productsData?['today_total_amount'])}",
+              "Total Invoices: ${_asInt(productsData?['month_count'])}",
             ],
             onTap: () {
               Navigator.push(
@@ -2224,10 +2324,11 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
           _buildDashboardCard(
             title: "Finance",
             icon: Icons.account_balance_wallet_rounded,
-            value: "Today's Balance",
+            valueLabel: "CB",
+            value: _formatDashboardAmount(financeClosingBalance),
             lines: [
-              "Opening: ${_currency.format(financeOpeningBalance)}",
-              "Closing: ${_currency.format(financeClosingBalance)}",
+              "Credit: ${_formatDashboardAmount(financeCredit)}",
+              "Debit: ${_formatDashboardAmount(financeDebit)}",
             ],
             onTap: () {
               Navigator.push(
@@ -2237,12 +2338,23 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
             },
           ),
           _buildDashboardCard(
-            title: "Logistics",
+            title: "Logistics (DGM)",
             icon: Icons.inventory_2_rounded,
-            value: "Daily Goods",
+            value: _formatDashboardAmount(currentMonthBillAmount),
             lines: [
-              "Movement report",
-              "Dispatch & parcel tracking",
+              dgmLoading
+                  ? "Amount: Loading..."
+                  : "PO Amount: ${_formatDashboardAmount(monthTotalParcelAmount)}",
+              dgmLoading
+                  ? "Weight: Loading."
+                  : "Weight: ${monthTotalWeight.toStringAsFixed(2)} kg",
+              // "Total Amount: ${_formatDashboardAmount(currentMonthBillAmount)}",
+              // dgmLoading
+              //     ? "Total Amount: Loading."
+              //     : "Total Amount: ${_formatDashboardAmount(currentMonthBillAmount)}",
+              dgmLoading
+                  ? "Avg: Loading."
+                  : "Avg: ₹${monthAverage.toStringAsFixed(2)}/kg",
             ],
             onTap: () {
               Navigator.push(
@@ -2260,15 +2372,21 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
             bottom: Column(
               children: [
                 _buildEmployeeColumnItem(
-                  title: "Active",
+                  title: "Hired",
                   value: "$activeStaffs",
                   icon: Icons.check_circle_rounded,
                 ),
                 const SizedBox(height: 6),
                 _buildEmployeeColumnItem(
-                  title: "Inactive",
+                  title: "Resigned",
                   value: "$deactiveStaffs",
                   icon: Icons.cancel_rounded,
+                ),
+                const SizedBox(height: 6),
+                _buildEmployeeColumnItem(
+                  title: "Present",
+                  value: "$totalFamilyPresentCount",
+                  icon: Icons.person_pin_circle_rounded,
                 ),
               ],
             ),
@@ -2282,7 +2400,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
           _buildDashboardCard(
             title: "Assets",
             icon: Icons.local_shipping_rounded,
-            value: _currency.format(assetAmount),
+            value: _formatDashboardAmount(assetAmount),
             lines: [
               "Count: $assetCount",
               "Asset management",
@@ -2297,10 +2415,10 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
           _buildDashboardCard(
             title: "Purchase",
             icon: Icons.shopping_bag_rounded,
-            value: _currency.format(purchaseAmount),
+            value: _formatDashboardAmount(purchaseAmount),
             lines: [
-              "Count: $purchaseCount",
-              "Suppliers & bills",
+              "Invoices: $purchaseCount",
+              "Suppliers & Invoices",
             ],
             onTap: () {
               Navigator.push(
@@ -2313,12 +2431,20 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
           _buildDashboardCard(
             title: "Inventory",
             icon: Icons.warehouse_rounded,
+            valueLabel: "WH",
             value: dashboardInventoryLoading
                 ? "Loading..."
-                : "Stock: $dashboardTotalStock",
+                : _formatDashboardAmount(dashboardTotalSellingAmount),
             lines: [
-              "Retail: ${_currency.format(dashboardTotalRetailAmount)}",
-              "Warehouse summary",
+              dashboardInventoryLoading
+                  ? "Retail: Loading..."
+                  : "Retail: ${_formatDashboardAmount(dashboardTotalRetailAmount)}",
+              dashboardInventoryLoading
+                  ? "Landing: Loading..."
+                  : "Landing: ${_formatDashboardAmount(dashboardTotalLandingCostAmount)}",
+              // dashboardInventoryLoading
+              //     ? "Stock: Loading..."
+              //     : "Stock: $dashboardTotalStock",
             ],
             onTap: () {
               Navigator.push(
@@ -2348,8 +2474,9 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     required String title,
     required IconData icon,
     required String value,
-    required List<String> lines,
+    required List<dynamic> lines,
     required VoidCallback onTap,
+    String valueLabel = "",
     Widget? bottom,
   }) {
     return Material(
@@ -2377,78 +2504,113 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
               ),
             ],
           ),
-          child: Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(13),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          child: Padding(
+            padding: const EdgeInsets.all(11),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
                         ),
-                        Container(
-                          height: 34,
-                          width: 34,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.20),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.22),
-                            ),
-                          ),
-                          child: Icon(
-                            icon,
-                            color: Colors.white,
-                            size: 19,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      value,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 8),
-                    ...lines.take(3).map(
-                          (line) => Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Text(
-                              line,
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.82),
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
+                    Container(
+                      height: 31,
+                      width: 31,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.20),
+                        borderRadius: BorderRadius.circular(11),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.22),
                         ),
-                    const Spacer(),
-                    if (bottom != null) bottom,
+                      ),
+                      child: Icon(
+                        icon,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                if (value.isNotEmpty)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          valueLabel.isNotEmpty
+                              ? "$valueLabel - $value"
+                              : value,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                if (value.isNotEmpty) const SizedBox(height: 7),
+                // ...lines.take(3).map((line) {
+                ...lines.map((line) {
+                  if (line is Widget) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 5),
+                      child: Container(
+                        width: double.infinity,
+                        height: 28,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.14),
+                          borderRadius: BorderRadius.circular(11),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.22),
+                          ),
+                        ),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: line,
+                        ),
+                      ),
+                    );
+                  }
+
+                  final text = line?.toString() ?? '';
+                  final parts = text.split(':');
+
+                  final String titleText =
+                      parts.length > 1 ? parts.first.trim() : text.trim();
+
+                  final String valueText =
+                      parts.length > 1 ? parts.sublist(1).join(':').trim() : "";
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 5),
+                    child: _buildDashboardLineItem(
+                      title: titleText,
+                      value: valueText,
+                    ),
+                  );
+                }).toList(),
+                if (bottom != null) ...[
+                  const SizedBox(height: 8),
+                  bottom,
+                ] else
+                  const Spacer(),
+              ],
+            ),
           ),
         ),
       ),
@@ -4224,14 +4386,24 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   Widget _buildDropdownTile(
       BuildContext context, String title, List<String> options) {
     return ExpansionTile(
-      title: Text(title),
+      backgroundColor: Colors.white,
+      collapsedBackgroundColor: Colors.white,
+      iconColor: Colors.black,
+      collapsedIconColor: Colors.black,
+      title: Text(
+        title,
+        style: const TextStyle(color: Colors.black),
+      ),
       children: options.map((option) {
         return ListTile(
-          title: Text(option),
+          tileColor: Colors.white,
+          title: Text(
+            option,
+            style: const TextStyle(color: Colors.black),
+          ),
           onTap: () {
             Navigator.pop(context);
-            d.navigateToSelectedPage(
-                context, option); // Navigate to selected page
+            d.navigateToSelectedPage(context, option);
           },
         );
       }).toList(),
@@ -5346,7 +5518,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
       home: RefreshIndicator(
         onRefresh: _refreshDashboard,
         child: Scaffold(
-          backgroundColor: const Color.fromARGB(255, 252, 247, 247),
+          backgroundColor: Colors.white,
           appBar: AppBar(
             elevation: 0,
             backgroundColor: Colors.white,
@@ -5363,580 +5535,594 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
             ],
           ),
           drawer: Drawer(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: <Widget>[
-                DrawerHeader(
+            backgroundColor: Colors.white,
+            child: Container(
+              color: Colors.white,
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: <Widget>[
+                  DrawerHeader(
                     decoration: BoxDecoration(
-                      color: Colors.grey[200],
+                      color: Colors.white,
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Image.asset(
-                          "lib/assets/beposoftt.png",
-                          width: 150, // Change width to desired size
-                          height: 150, // Change height to desired size
-                          fit: BoxFit
-                              .contain, // Use BoxFit.contain to maintain aspect ratio
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: Image.asset(
+                            "lib/assets/appstore.png",
+                            width: 90,
+                            height: 90,
+                            fit: BoxFit.cover,
+                          ),
                         ),
                       ],
-                    )),
-                // ListTile(
-                //   leading: Icon(Icons.dashboard),
-                //   title: Text('Dashboard'),
-                //   onTap: () {
-                //     Navigator.push(context,
-                //         MaterialPageRoute(builder: (context) => Graph()));
-                //   },
-                // ),
+                    ),
+                  ),
+                  // ListTile(
+                  //   leading: Icon(Icons.dashboard),
+                  //   title: Text('Dashboard'),
+                  //   onTap: () {
+                  //     Navigator.push(context,
+                  //         MaterialPageRoute(builder: (context) => Graph()));
+                  //   },
+                  // ),
 
-                _buildDropdownTile(context, 'Customers', [
-                  'Add Customer',
-                  'Customers',
-                  'customer Transfer',
-                  'customer Transfer list',
-                  'Customer Type',
-                ]),
-                _buildDropdownTile(context, 'Recipt', [
-                  'Add Recipt',
-                  'Recipt List',
-                  'Bank Recipt',
-                  'Advance Recipt',
-                  'Order Recipt',
-                  'COD Transfer',
-                  'COD Transfer List',
-                ]),
+                  _buildDropdownTile(context, 'Customers', [
+                    'Add Customer',
+                    'Customers',
+                    'customer Transfer',
+                    'customer Transfer list',
+                    'Customer Type',
+                  ]),
+                  _buildDropdownTile(context, 'Recipt', [
+                    'Add Recipt',
+                    'Recipt List',
+                    'Bank Recipt',
+                    'Advance Recipt',
+                    'Order Recipt',
+                    'COD Transfer',
+                    'COD Transfer List',
+                  ]),
 
-                // ListTile(
-                //   leading: Icon(Icons.dashboard),
-                //   title: Text('Call Report'),
-                //   onTap: () {
-                //     Navigator.push(context,
-                //         MaterialPageRoute(builder: (context) => CallLog()));
-                //   },
-                // ),
-                _buildDropdownTile(context, 'Proforma Invoice', [
-                  'New Proforma Invoice',
-                  'Proforma Invoice List',
-                ]),
-                _buildDropdownTile(context, 'Delivery Note', [
-                  'Delivery Note List(To Print)',
-                  'Delivery Note List(Packing under Progress)',
-                  'Delivery Note List(Packed)',
-                  'Delivery Note List(Ready to ship)',
-                  'Delivery Note List(Shipped)',
-                  'Daily Goods Movement'
-                ]),
-                _buildDropdownTile(context, 'Orders', [
-                  'New Orders',
-                  'Orders List',
-                  'Invoice Created',
-                  'Invoice Approved',
-                  'Waiting For Confirmation',
-                  'To Print',
-                  'Packing Under Progress',
-                  'Packed',
-                  'Ready to ship',
-                  'Shipped',
-                  'Invoice Rejected'
-                ]),
-                Divider(),
-                Text("Others"),
-                Divider(),
-                _buildDropdownTile(context, 'Purchase', [
-                  'Product List',
-                  'Purchase request',
-                  'Purchase request List',
-                  'Product Add',
-                ]),
-                _buildDropdownTile(context, 'Expence', [
-                  'Add Expence',
-                  'Expence List',
-                ]),
-                _buildDropdownTile(
-                    context, 'GRV', ['Create New GRV', 'GRVs List']),
-                _buildDropdownTile(context, 'Internal Transfer',
-                    ['Add Transfer', 'Transfer List']),
+                  // ListTile(
+                  //   leading: Icon(Icons.dashboard),
+                  //   title: Text('Call Report'),
+                  //   onTap: () {
+                  //     Navigator.push(context,
+                  //         MaterialPageRoute(builder: (context) => CallLog()));
+                  //   },
+                  // ),
+                  _buildDropdownTile(context, 'Proforma Invoice', [
+                    'New Proforma Invoice',
+                    'Proforma Invoice List',
+                  ]),
+                  _buildDropdownTile(context, 'Delivery Note', [
+                    'Delivery Note List(To Print)',
+                    'Delivery Note List(Packing under Progress)',
+                    'Delivery Note List(Packed)',
+                    'Delivery Note List(Ready to ship)',
+                    'Delivery Note List(Shipped)',
+                    'Daily Goods Movement'
+                  ]),
+                  _buildDropdownTile(context, 'Orders', [
+                    'New Orders',
+                    'Orders List',
+                    'Invoice Created',
+                    'Invoice Approved',
+                    'Waiting For Confirmation',
+                    'To Print',
+                    'Packing Under Progress',
+                    'Packed',
+                    'Ready to ship',
+                    'Shipped',
+                    'Invoice Rejected'
+                  ]),
+                  Divider(),
+                  Text("Others"),
+                  Divider(),
+                  _buildDropdownTile(context, 'Purchase', [
+                    'Product List',
+                    'Purchase request',
+                    'Purchase request List',
+                    'Product Add',
+                  ]),
+                  _buildDropdownTile(context, 'Expence', [
+                    'Add Expence',
+                    'Expence List',
+                  ]),
+                  _buildDropdownTile(
+                      context, 'GRV', ['Create New GRV', 'GRVs List']),
+                  _buildDropdownTile(context, 'Internal Transfer',
+                      ['Add Transfer', 'Transfer List']),
 
-                _buildDropdownTile(context, 'Daily Sales Reports',
-                    ['Add Team', 'Team wise Report']),
+                  _buildDropdownTile(context, 'Daily Sales Reports',
+                      ['Add Team', 'Team wise Report']),
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Purchase Invoice'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => CreatePurchaseProductList()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Purchase Invoice List'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => SellerInvoiceListPage()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Activit Log'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => Activity_log()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Bank Type'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_bank_type()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                // ListTile(
-                //   leading: Icon(Icons.person),
-                //   title: Text('call Log'),
-                //   onTap: () {
-                //     Navigator.push(context,
-                //         MaterialPageRoute(builder: (context) => CallLog()));
-                //     // Navigate to the Settings page or perform any other action
-                //   },
-                // ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Purchase Invoice'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  CreatePurchaseProductList()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Purchase Invoice List'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => SellerInvoiceListPage()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Activit Log'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => Activity_log()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Bank Type'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_bank_type()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  // ListTile(
+                  //   leading: Icon(Icons.person),
+                  //   title: Text('call Log'),
+                  //   onTap: () {
+                  //     Navigator.push(context,
+                  //         MaterialPageRoute(builder: (context) => CallLog()));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Add Supplier'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_supplier()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Add Supplier'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_supplier()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                //                       ListTile(
-                //               leading: Icon(Icons.person),
-                //               title: Text('Add Daily sales report'),
-                //               onTap: () {
-                //                 Navigator.push(context,
-                //                     MaterialPageRoute(builder: (context) => AddDailySalesReport()));
-                //                 // Navigate to the Settings page or perform any other action
-                //               },
-                //             ),
+                  //                       ListTile(
+                  //               leading: Icon(Icons.person),
+                  //               title: Text('Add Daily sales report'),
+                  //               onTap: () {
+                  //                 Navigator.push(context,
+                  //                     MaterialPageRoute(builder: (context) => AddDailySalesReport()));
+                  //                 // Navigate to the Settings page or perform any other action
+                  //               },
+                  //             ),
 
-                //               ListTile(
-                //               leading: Icon(Icons.person),
-                //               title: Text('Daily BDO sales report'),
-                //               onTap: () {
-                //                 Navigator.push(context,
-                //                     MaterialPageRoute(builder: (context) => DailySalesReportViewPage()));
-                //                 // Navigate to the Settings page or perform any other action
-                //               },
-                //             ),
+                  //               ListTile(
+                  //               leading: Icon(Icons.person),
+                  //               title: Text('Daily BDO sales report'),
+                  //               onTap: () {
+                  //                 Navigator.push(context,
+                  //                     MaterialPageRoute(builder: (context) => DailySalesReportViewPage()));
+                  //                 // Navigate to the Settings page or perform any other action
+                  //               },
+                  //             ),
 
-                //               ListTile(
-                //               leading: Icon(Icons.person),
-                //               title: Text('All Users sales report'),
-                //               onTap: () {
-                //                 Navigator.push(
-                //                     context,
-                //                     MaterialPageRoute(
-                //                         builder: (context) =>
-                //                             AllUsersDailySalesReportPage()));
-                //                 // Navigate to the Settings page or perform any other action
-                //               },
-                //             ),
+                  //               ListTile(
+                  //               leading: Icon(Icons.person),
+                  //               title: Text('All Users sales report'),
+                  //               onTap: () {
+                  //                 Navigator.push(
+                  //                     context,
+                  //                     MaterialPageRoute(
+                  //                         builder: (context) =>
+                  //                             AllUsersDailySalesReportPage()));
+                  //                 // Navigate to the Settings page or perform any other action
+                  //               },
+                  //             ),
 
-                //              ListTile(
-                //               leading: Icon(Icons.person),
-                //               title: Text('Categorywise sales report'),
-                //               onTap: () {
-                //                 Navigator.push(
-                //                     context,
-                //                     MaterialPageRoute(
-                //                         builder: (context) =>
-                //                             CategorywiseSalesReport()));
-                //                 // Navigate to the Settings page or perform any other action
-                //               },
-                //             ),
-                //  ListTile(
-                //               leading: Icon(Icons.person),
-                //               title: Text('All users Categorywise sales report'),
-                //               onTap: () {
-                //                 Navigator.push(
-                //                     context,
-                //                     MaterialPageRoute(
-                //                         builder: (context) =>
-                //                             UserwiseCategorywiseSalesReport()));
-                //                 // Navigate to the Settings page or perform any other action
-                //               },
-                //             ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Company'),
-                  onTap: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (context) => add_company()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Country'),
-                  onTap: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (context) => add_country()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Currency'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_currency()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Approve Products'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => Approve_products()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Add EMI'),
-                  onTap: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (context) => add_Emi()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Asset Management'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => AssetManegment()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  //              ListTile(
+                  //               leading: Icon(Icons.person),
+                  //               title: Text('Categorywise sales report'),
+                  //               onTap: () {
+                  //                 Navigator.push(
+                  //                     context,
+                  //                     MaterialPageRoute(
+                  //                         builder: (context) =>
+                  //                             CategorywiseSalesReport()));
+                  //                 // Navigate to the Settings page or perform any other action
+                  //               },
+                  //             ),
+                  //  ListTile(
+                  //               leading: Icon(Icons.person),
+                  //               title: Text('All users Categorywise sales report'),
+                  //               onTap: () {
+                  //                 Navigator.push(
+                  //                     context,
+                  //                     MaterialPageRoute(
+                  //                         builder: (context) =>
+                  //                             UserwiseCategorywiseSalesReport()));
+                  //                 // Navigate to the Settings page or perform any other action
+                  //               },
+                  //             ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Company'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_company()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Country'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_country()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Currency'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_currency()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Approve Products'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => Approve_products()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Add EMI'),
+                    onTap: () {
+                      Navigator.push(context,
+                          MaterialPageRoute(builder: (context) => add_Emi()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Asset Management'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => AssetManegment()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                // ListTile(
-                //   leading: Icon(Icons.person),
-                //   title: Text('Product Stock Report Page'),
-                //   onTap: () {
-                //     Navigator.push(
-                //       context,
-                //       MaterialPageRoute(
-                //         builder: (context) => ProductStockReportPage(
-                //           warehouseId: selectedWarehouseId,
-                //           fromDate: fromDate,
-                //           toDate: toDate,
-                //         ),
-                //       ),
-                //     );
-                   
-                //   },
-                // ),
+                  // ListTile(
+                  //   leading: Icon(Icons.person),
+                  //   title: Text('Product Stock Report Page'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //       context,
+                  //       MaterialPageRoute(
+                  //         builder: (context) => ProductStockReportPage(
+                  //           warehouseId: selectedWarehouseId,
+                  //           fromDate: fromDate,
+                  //           toDate: toDate,
+                  //         ),
+                  //       ),
+                  //     );
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Category'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_categories()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Bulk Upload Orders'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => UploadBulkProducts()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  //   },
+                  // ),
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Bulk Upload Customers'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => UploadBulkcustomer()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Category'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_categories()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Bulk Upload Orders'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => UploadBulkProducts()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Add Purpose of payment'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_purpose_of_payment()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                //   ListTile(
-                //   leading: Icon(Icons.person),
-                //   title: Text('Bulk Upload'),
-                //   onTap: () {
-                //     Navigator.push(context,
-                //         MaterialPageRoute(builder: (context) => OrderBulkUpload()));
-                //     // Navigate to the Settings page or perform any other action
-                //   },
-                // ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Bulk Upload Customers'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => UploadBulkcustomer()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                // ListTile(
-                //   leading: Icon(Icons.person),
-                //   title: Text('Add Team'),
-                //   onTap: () {
-                //     Navigator.push(context,
-                //         MaterialPageRoute(builder: (context) => AddTeam()));
-                //     // Navigate to the Settings page or perform any other action
-                //   },
-                // ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Add Purpose of payment'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_purpose_of_payment()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  //   ListTile(
+                  //   leading: Icon(Icons.person),
+                  //   title: Text('Bulk Upload'),
+                  //   onTap: () {
+                  //     Navigator.push(context,
+                  //         MaterialPageRoute(builder: (context) => OrderBulkUpload()));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
 
-                // ListTile(
-                //   leading: Icon(Icons.person),
-                //   title: Text('Team wise Report'),
-                //   onTap: () {
-                //     Navigator.push(
-                //         context,
-                //         MaterialPageRoute(
-                //             builder: (context) => TeamWiseReport()));
-                //     // Navigate to the Settings page or perform any other action
-                //   },
-                // ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Departments'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_department()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Supervisors'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_supervisor()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Division'),
-                  onTap: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (context) => add_family()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Bank'),
-                  onTap: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (context) => add_bank()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  // ListTile(
+                  //   leading: Icon(Icons.person),
+                  //   title: Text('Add Team'),
+                  //   onTap: () {
+                  //     Navigator.push(context,
+                  //         MaterialPageRoute(builder: (context) => AddTeam()));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('States'),
-                  onTap: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (context) => add_state()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  // ListTile(
+                  //   leading: Icon(Icons.person),
+                  //   title: Text('Team wise Report'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //         context,
+                  //         MaterialPageRoute(
+                  //             builder: (context) => TeamWiseReport()));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Departments'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_department()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Supervisors'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_supervisor()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Division'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_family()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Bank'),
+                    onTap: () {
+                      Navigator.push(context,
+                          MaterialPageRoute(builder: (context) => add_bank()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Warehouse'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_warehouse()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Attributes'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_attribute()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('States'),
+                    onTap: () {
+                      Navigator.push(context,
+                          MaterialPageRoute(builder: (context) => add_state()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Services'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => CourierServices()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Warehouse'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_warehouse()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Attributes'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_attribute()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                //  ListTile(
-                //   leading: Icon(Icons.person),
-                //   title: Text('Delivery Notes'),
-                //   onTap: () {
-                //     Navigator.push(
-                //         context,
-                //         MaterialPageRoute(
-                //             builder: (context) => WarehouseOrderView(status: null,)));
-                //     // Navigate to the Settings page or perform any other action
-                //   },
-                // ),
-                Divider(),
-                ListTile(
-                  // leading: Icon(Icons.skateboarding),
-                  title: Text('Family Wise Excel Report'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) =>
-                                CyclingskatingCategoryDailyProductwiseReport()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Services'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => CourierServices()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                ListTile(
-                  title: Text('Daily Sales Report (DSR)'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) =>
-                                AllUsersDailySalesReportPage()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  //  ListTile(
+                  //   leading: Icon(Icons.person),
+                  //   title: Text('Delivery Notes'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //         context,
+                  //         MaterialPageRoute(
+                  //             builder: (context) => WarehouseOrderView(status: null,)));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
+                  Divider(),
+                  ListTile(
+                    // leading: Icon(Icons.skateboarding),
+                    title: Text('Family Wise Excel Report'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  CyclingskatingCategoryDailyProductwiseReport()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                //   ListTile(
-                //   leading: Icon(Icons.person),
-                //   title: Text('Categorywise sales report'),
-                //   onTap: () {
-                //     Navigator.push(
-                //         context,
-                //         MaterialPageRoute(
-                //             builder: (context) => CategorywiseSalesReport()));
-                //     // Navigate to the Settings page or perform any other action
-                //   },
-                // ),
+                  ListTile(
+                    title: Text('Daily Sales Report (DSR)'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  AllUsersDailySalesReportPage()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                ListTile(
-                  title: Text('Categorywise sales report'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) =>
-                                UserwiseCategorywiseSalesReport()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  //   ListTile(
+                  //   leading: Icon(Icons.person),
+                  //   title: Text('Categorywise sales report'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //         context,
+                  //         MaterialPageRoute(
+                  //             builder: (context) => CategorywiseSalesReport()));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
 
-                _buildDropdownTile(
-                    context, 'BDO Daily Sales Report', ['BDO Call List']),
+                  ListTile(
+                    title: Text('Categorywise sales report'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  UserwiseCategorywiseSalesReport()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                _buildDropdownTile(context, 'Reports', [
-                  'Sales Report',
-                  'Sales Report Excel',
-                  'GST Report',
-                  'Product Stock Report',
-                  'Order Items Excel Report',
-                  'Shipping Address Excel Report',
-                  'Daily Product Sold Report',
-                  // 'All Division Product Sale Report',
-                  // 'Cycling & Skating Monthly Excel',
-                  // 'Cycling & Skating Daily Excel',
-                  'Tracking Report',
-                  'Credit Sales Report',
-                  'COD Sales Report',
-                  'Statewise Sales Report',
-                  'Expence Report',
-                  'Delivery Report',
-                  'Product Sale Report',
-                  'Stock Report',
-                  'Damaged Stock',
-                  'Finance Report',
-                  'Actual Delivery Report',
-                ]),
+                  _buildDropdownTile(
+                      context, 'BDO Daily Sales Report', ['BDO Call List']),
 
-                _buildDropdownTile(context, 'Staff', [
-                  'Add Staff',
-                  'Staff',
-                  'Staff Exit Form',
-                  'Staff Exit List',
-                ]),
-                // _buildDropdownTile(context, 'Credit Note', [
-                //   'Add Credit Note',
-                //   'Credit Note List',
-                // ]),
+                  _buildDropdownTile(context, 'Reports', [
+                    'Sales Report',
+                    'Sales Report Excel',
+                    'GST Report',
+                    'Product Stock Report',
+                    'Order Items Excel Report',
+                    'Shipping Address Excel Report',
+                    'Daily Product Sold Report',
+                    // 'All Division Product Sale Report',
+                    // 'Cycling & Skating Monthly Excel',
+                    // 'Cycling & Skating Daily Excel',
+                    'Tracking Report',
+                    'Credit Sales Report',
+                    'COD Sales Report',
+                    'Statewise Sales Report',
+                    'Expence Report',
+                    'Delivery Report',
+                    'Product Sale Report',
+                    'Stock Report',
+                    'Damaged Stock',
+                    'Finance Report',
+                    'Actual Delivery Report',
+                  ]),
 
-                Divider(),
+                  _buildDropdownTile(context, 'Staff', [
+                    'Add Staff',
+                    'Staff',
+                    'Staff Exit Form',
+                    'Staff Exit List',
+                  ]),
+                  // _buildDropdownTile(context, 'Credit Note', [
+                  //   'Add Credit Note',
+                  //   'Credit Note List',
+                  // ]),
 
-                ListTile(
-                  leading: const Icon(Icons.logout),
-                  title: const Text('Logout'),
-                  onTap: () async {
-                    await logoutUser(context);
-                  },
-                ),
-                SizedBox(height: 50), // Add some space at the bottom
-              ],
+                  Divider(),
+
+                  ListTile(
+                    leading: const Icon(Icons.logout),
+                    title: const Text('Logout'),
+                    onTap: () async {
+                      await logoutUser(context);
+                    },
+                  ),
+                  SizedBox(height: 50), // Add some space at the bottom
+                ],
+              ),
             ),
           ),
           body: SingleChildScrollView(

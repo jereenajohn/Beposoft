@@ -731,7 +731,7 @@ class _daily_goods_movementtState extends State<daily_goods_movementt> {
                       children: [
                         _tableCell(row['service'].toString(), alignLeft: true),
                         _tableCell(row['boxes'].toString()),
-                        _tableCell(_formatNumber(row['post_office_weight'])),
+                        _tableCell(row['post_office_weight'].toString()),
                         _tableCell(_formatNumber(row['actual_weight'])),
                         _tableCell(_formatNumber(row['volume'])),
                         _tableCell(_formatCurrency(row['tracking_amount'])),
@@ -754,7 +754,7 @@ class _daily_goods_movementtState extends State<daily_goods_movementt> {
                         textColor: primaryBlue,
                       ),
                       _tableCell(
-                        _formatNumber(todayPostOfficeWeight),
+                        todayPostOfficeWeight.toString(),
                         isBold: true,
                         textColor: primaryBlue,
                       ),
@@ -888,7 +888,7 @@ class _daily_goods_movementtState extends State<daily_goods_movementt> {
                         ),
                         _monthTableCell(row['boxes'].toString()),
                         _monthTableCell(
-                          _formatNumber(row['post_office_weight']),
+                          row['post_office_weight'].toString(),
                         ),
                         _monthTableCell(_formatNumber(row['actual_weight'])),
                         _monthTableCell(_formatNumber(row['volume'])),
@@ -914,7 +914,7 @@ class _daily_goods_movementtState extends State<daily_goods_movementt> {
                         textColor: primaryBlue,
                       ),
                       _tableCell(
-                        _formatNumber(monthPostOfficeWeight),
+                        monthPostOfficeWeight.toString(),
                         isBold: true,
                         textColor: primaryBlue,
                       ),
