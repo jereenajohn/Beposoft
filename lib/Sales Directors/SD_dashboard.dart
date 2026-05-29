@@ -1801,22 +1801,32 @@ class _SdDashboardState extends State<SdDashboard> {
 
   drower d = drower();
 
-  Widget _buildDropdownTile(
-      BuildContext context, String title, List<String> options) {
-    return ExpansionTile(
-      title: Text(title),
-      children: options.map((option) {
-        return ListTile(
-          title: Text(option),
-          onTap: () {
-            Navigator.pop(context);
-            d.navigateToSelectedPage3(
-                context, option); // Navigate to selected page
-          },
-        );
-      }).toList(),
-    );
-  }
+Widget _buildDropdownTile(
+    BuildContext context, String title, List<String> options) {
+  return ExpansionTile(
+    backgroundColor: Colors.white,
+    collapsedBackgroundColor: Colors.white,
+    iconColor: Colors.black,
+    collapsedIconColor: Colors.black,
+    title: Text(
+      title,
+      style: const TextStyle(color: Colors.black),
+    ),
+    children: options.map((option) {
+      return ListTile(
+        tileColor: Colors.white,
+        title: Text(
+          option,
+          style: const TextStyle(color: Colors.black),
+        ),
+        onTap: () {
+          Navigator.pop(context);
+          d.navigateToSelectedPage3(context, option);
+        },
+      );
+    }).toList(),
+  );
+}
 
   Widget buildMyTeamSummarySection() {
     if (isTeamSummaryLoading) {
@@ -2260,25 +2270,31 @@ class _SdDashboardState extends State<SdDashboard> {
           ],
         ),
         drawer: Drawer(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: <Widget>[
-              DrawerHeader(
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
+            backgroundColor: Colors.white,
+            child: Container(
+              color: Colors.white,
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: <Widget>[
+               DrawerHeader(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: Image.asset(
+                            "lib/assets/appstore.png",
+                            width: 90,
+                            height: 90,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Image.asset(
-                        "lib/assets/logo.png",
-                        width: 150, // Change width to desired size
-                        height: 150, // Change height to desired size
-                        fit: BoxFit
-                            .contain, // Use BoxFit.contain to maintain aspect ratio
-                      ),
-                    ],
-                  )),
               ListTile(
                 leading: Icon(Icons.dashboard),
                 title: Text('Dashboard'),
@@ -2332,7 +2348,7 @@ class _SdDashboardState extends State<SdDashboard> {
               ),
             ],
           ),
-        ),
+        ),),
         body: SafeArea(
           child: SingleChildScrollView(
             child: Padding(

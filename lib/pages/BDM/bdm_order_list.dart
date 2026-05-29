@@ -49,6 +49,7 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
   List<Map<String, dynamic>> orders = [];
   List<Map<String, dynamic>> filteredOrders = [];
   List<String> staffList = [];
+  List<Map<String, dynamic>> sta = [];
   String searchQuery = '';
   String selectedStatus = '';
   String selectedStaff = '';
@@ -66,7 +67,7 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
   int invoiceCreatedCount = 0;
   int invoiceApprovedCount = 0;
 
-  bool isLoading = false;
+  bool isLoading = true;
   bool isLoadingMore = false;
 
   final ScrollController _scrollController = ScrollController();
@@ -118,6 +119,13 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
   }
 
   void initdata() async {
+    setState(() {
+      isLoading = true;
+    });
+
+    await getfamily();
+    await getprofiledata();
+    await getstaff();
     await fetchOrderData(reset: true);
   }
 
@@ -133,6 +141,62 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
 
   var family = '';
   String familyName = '';
+
+  Future<void> getstaff() async {
+    try {
+      final token = await getTokenFromPrefs();
+      if (token == null) return;
+
+      var response = await http.get(
+        Uri.parse('$api/api/staffs/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      List<Map<String, dynamic>> stafflist = [];
+      List<String> staffNames = [];
+
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+        var productsData = parsed['data'];
+
+        for (var productData in productsData) {
+          dynamic staffFamilyValue;
+
+          if (productData['family'] is Map) {
+            staffFamilyValue = productData['family']['id'];
+          } else {
+            staffFamilyValue = productData['family'] ??
+                productData['family_id'] ??
+                productData['familyID'];
+          }
+
+          if (staffFamilyValue != null &&
+              staffFamilyValue.toString() == family.toString()) {
+            final staffName = productData['name']?.toString() ?? '';
+
+            if (staffName.isNotEmpty) {
+              stafflist.add({
+                'id': productData['id'],
+                'name': staffName,
+              });
+
+              staffNames.add(staffName);
+            }
+          }
+        }
+
+        staffNames = staffNames.toSet().toList()..sort();
+
+        setState(() {
+          sta = stafflist;
+          staffList = staffNames;
+        });
+      }
+    } catch (error) {}
+  }
 
   Future<void> getprofiledata() async {
     try {
@@ -208,7 +272,14 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
   Future<void> fetchOrderData({bool reset = false}) async {
     try {
       final token = await getTokenFromPrefs();
-      if (token == null) return;
+
+      if (token == null) {
+        setState(() {
+          isLoading = false;
+          isLoadingMore = false;
+        });
+        return;
+      }
 
       if (reset) {
         setState(() {
@@ -218,9 +289,6 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
           filteredOrders = [];
           nextPageUrl = null;
           previousPageUrl = null;
-          if (selectedStaff.isEmpty) {
-            staffList = [];
-          }
         });
       } else {
         setState(() {
@@ -293,7 +361,6 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
             wrapper['results'] is List ? wrapper['results'] : [];
 
         List<Map<String, dynamic>> newOrders = [];
-        Set<String> foundStaff = {};
 
         for (var orderData in resultsList) {
           String rawOrderDate = orderData['order_date']?.toString() ?? "";
@@ -326,54 +393,49 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
           }
 
           if (orderData['status'] != "Order Request by Warehouse") {
-           final mappedOrder = {
-  'id': orderData['id'],
-  'family': orderData['family'] ?? '',
-  'invoice': orderData['invoice'] ?? '',
-  'manage_staff': orderData['manage_staff'] ?? '',
-  'staffID': orderData['staffID'] ?? '',
-  'customer': customerMap,
-  'customer_id': orderData['customerID'],
-  'billing_address': billingMap,
-  'warehouse': warehouseList,
-  'payment_images': orderData['payment_images'] is List
-      ? List<Map<String, dynamic>>.from(
-          (orderData['payment_images'] as List).map(
-            (e) => Map<String, dynamic>.from(e),
-          ),
-        )
-      : <Map<String, dynamic>>[],
-  'state': orderData['state'] ?? '',
-  'payment_status': orderData['payment_status'] ?? '',
-  'payment_method': orderData['payment_method'] ?? '',
-  'shipping_mode': orderData['shipping_mode'],
-  'shipping_charge': orderData['shipping_charge'] ?? 0,
-  'cod_amount': orderData['cod_amount'] ?? 0,
-  'status': orderData['status'] ?? '',
-  'total_amount': orderData['total_amount'] ?? 0,
-  'order_date': formattedOrderDate,
-  'note': orderData['note'] ?? '',
-  'accounts_note': orderData['accounts_note'] ?? '',
-  'updated_at': orderData['updated_at'] ?? '',
-  'family_id': orderData['family_id'],
-  'family_name': orderData['family_name'] ?? '',
-  'company': orderData['company'],
-  'bank': orderData['bank'],
-  'confirmed_by': orderData['confirmed_by'],
-  'locked_by': orderData['locked_by'],
-  'locked_at': orderData['locked_at'],
-  'box_count': orderData['box_count'],
-  'cod_status': orderData['cod_status'],
-  'adv_cod_amount': orderData['adv_cod_amount'],
-  'warehouses': orderData['warehouses'],
-};
+            final mappedOrder = {
+              'id': orderData['id'],
+              'family': orderData['family'] ?? '',
+              'invoice': orderData['invoice'] ?? '',
+              'manage_staff': orderData['manage_staff'] ?? '',
+              'staffID': orderData['staffID'] ?? '',
+              'customer': customerMap,
+              'customer_id': orderData['customerID'],
+              'billing_address': billingMap,
+              'warehouse': warehouseList,
+              'payment_images': orderData['payment_images'] is List
+                  ? List<Map<String, dynamic>>.from(
+                      (orderData['payment_images'] as List).map(
+                        (e) => Map<String, dynamic>.from(e),
+                      ),
+                    )
+                  : <Map<String, dynamic>>[],
+              'state': orderData['state'] ?? '',
+              'payment_status': orderData['payment_status'] ?? '',
+              'payment_method': orderData['payment_method'] ?? '',
+              'shipping_mode': orderData['shipping_mode'],
+              'shipping_charge': orderData['shipping_charge'] ?? 0,
+              'cod_amount': orderData['cod_amount'] ?? 0,
+              'status': orderData['status'] ?? '',
+              'total_amount': orderData['total_amount'] ?? 0,
+              'order_date': formattedOrderDate,
+              'note': orderData['note'] ?? '',
+              'accounts_note': orderData['accounts_note'] ?? '',
+              'updated_at': orderData['updated_at'] ?? '',
+              'family_id': orderData['family_id'],
+              'family_name': orderData['family_name'] ?? '',
+              'company': orderData['company'],
+              'bank': orderData['bank'],
+              'confirmed_by': orderData['confirmed_by'],
+              'locked_by': orderData['locked_by'],
+              'locked_at': orderData['locked_at'],
+              'box_count': orderData['box_count'],
+              'cod_status': orderData['cod_status'],
+              'adv_cod_amount': orderData['adv_cod_amount'],
+              'warehouses': orderData['warehouses'],
+            };
 
             newOrders.add(mappedOrder);
-          }
-
-          final staffName = orderData['manage_staff']?.toString() ?? '';
-          if (staffName.isNotEmpty) {
-            foundStaff.add(staffName);
           }
         }
 
@@ -391,9 +453,6 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
             orders.addAll(newOrders);
             filteredOrders = List<Map<String, dynamic>>.from(orders);
           }
-
-          final mergedStaff = {...staffList, ...foundStaff};
-          staffList = mergedStaff.toList()..sort();
 
           isLoading = false;
           isLoadingMore = false;
@@ -892,7 +951,6 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
               ),
             ],
           ),
-       
           const SizedBox(height: 8),
           Row(
             children: [
@@ -917,143 +975,40 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
     );
   }
 
-  void _showPaymentImagePopup(String imageUrl) {
-  showDialog(
-    context: context,
-    builder: (context) {
-      return Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(12),
-        child: Stack(
-          children: [
-            InteractiveViewer(
-              minScale: 0.8,
-              maxScale: 4.0,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  color: Colors.white,
-                  child: Image.network(
-                    imageUrl,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        height: 250,
-                        alignment: Alignment.center,
-                        padding: const EdgeInsets.all(16),
-                        color: Colors.white,
-                        child: const Text(
-                          'Unable to load image',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      );
-                    },
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        height: 250,
-                        color: Colors.white,
-                        alignment: Alignment.center,
-                        child: const CircularProgressIndicator(),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              right: 8,
-              top: 8,
-              child: CircleAvatar(
-                backgroundColor: Colors.black54,
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    },
-  );
-}
-
-Widget _infoRow({
-  required String title,
-  required String value,
-  Widget? trailing,
-  Color? valueColor,
-  FontWeight? valueWeight,
-}) {
-  return Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      SizedBox(
-        width: 105,
-        child: Text(
-          title,
-          style: TextStyle(
-            fontSize: 12.5,
-            color: Colors.grey.shade700,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-      const Text(
-        ':  ',
-        style: TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      Expanded(
-        child: Text(
-          value,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 13,
-            color: valueColor ?? Colors.black87,
-            fontWeight: valueWeight ?? FontWeight.w500,
-          ),
-        ),
-      ),
-      if (trailing != null) ...[
-        const SizedBox(width: 8),
-        trailing,
-      ],
-    ],
-  );
-}
-
- Widget buildOrderCard(Map<String, dynamic> order) {
-  final customer = order['customer'] is Map<String, dynamic>
-      ? order['customer'] as Map<String, dynamic>
-      : <String, dynamic>{};
-
-  final warehouse = order['warehouse'] is List
-      ? List<Map<String, dynamic>>.from(order['warehouse'])
-      : <Map<String, dynamic>>[];
-
-  final paymentImages = order['payment_images'] is List
-      ? List<Map<String, dynamic>>.from(order['payment_images'])
-      : <Map<String, dynamic>>[];
-
-  return Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
-    child: GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OrderReview(
-              id: order['id'],
-              customer: order['customer_id'],
-            ),
-          ),
+  Widget _shimmerBox({
+    required double height,
+    required double width,
+    double radius = 8,
+  }) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0.35, end: 1.0),
+      duration: const Duration(milliseconds: 800),
+      curve: Curves.easeInOut,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: child,
         );
       },
+      onEnd: () {
+        if (mounted && isLoading) {
+          setState(() {});
+        }
+      },
+      child: Container(
+        height: height,
+        width: width,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade300,
+          borderRadius: BorderRadius.circular(radius),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShimmerOrderCard() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
       child: Card(
         margin: EdgeInsets.zero,
         elevation: 3,
@@ -1072,9 +1027,9 @@ Widget _infoRow({
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: const BoxDecoration(
-                  color: Colors.blue,
-                  borderRadius: BorderRadius.only(
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(16),
                     topRight: Radius.circular(16),
                   ),
@@ -1082,37 +1037,17 @@ Widget _infoRow({
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        '#${order['invoice']}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      child: _shimmerBox(
+                        height: 18,
+                        width: double.infinity,
+                        radius: 20,
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.18),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        DateFormat('dd MMM yy').format(
-                          DateTime.parse(order['order_date']),
-                        ),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                    _shimmerBox(
+                      height: 24,
+                      width: 82,
+                      radius: 20,
                     ),
                   ],
                 ),
@@ -1122,264 +1057,99 @@ Widget _infoRow({
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _infoRow(
-                      title: 'Customer',
-                      value: '${customer['name'] ?? ''}',
-                      valueWeight: FontWeight.w600,
+                    _shimmerBox(
+                      height: 14,
+                      width: MediaQuery.of(context).size.width * 0.72,
+                      radius: 20,
+                    ),
+                    const SizedBox(height: 12),
+                    _shimmerBox(
+                      height: 14,
+                      width: MediaQuery.of(context).size.width * 0.55,
+                      radius: 20,
+                    ),
+                    const SizedBox(height: 12),
+                    _shimmerBox(
+                      height: 14,
+                      width: MediaQuery.of(context).size.width * 0.65,
+                      radius: 20,
+                    ),
+                    const SizedBox(height: 12),
+                    _shimmerBox(
+                      height: 14,
+                      width: MediaQuery.of(context).size.width * 0.48,
+                      radius: 20,
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        _shimmerBox(
+                          height: 16,
+                          width: 16,
+                          radius: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        _shimmerBox(
+                          height: 14,
+                          width: 120,
+                          radius: 20,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 10),
-                    _infoRow(
-                      title: 'Staff',
-                      value: '${order['manage_staff'] ?? ''}',
-                      trailing: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          '${order['family'] ?? ''}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.blue.shade900,
-                          ),
-                        ),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade200),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    _infoRow(
-                      title: 'Status',
-                      value: '${order['status'] ?? ''}',
-                      valueColor: Colors.blue.shade700,
-                    ),
-                    const SizedBox(height: 10),
-                    _infoRow(
-                      title: 'Billing Amount',
-                      value:
-                          '${(order['total_amount'] as num).toStringAsFixed(2)}',
-                      valueColor: Colors.green.shade700,
-                      valueWeight: FontWeight.w700,
-                    ),
-
-                    if (paymentImages.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      Text(
-                        'Payment Images',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.grey.shade800,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: paymentImages.map<Widget>((img) {
-                          final String imagePath =
-                              img['image']?.toString() ?? '';
-                          final String imageUrl = imagePath.startsWith('http')
-                              ? imagePath
-                              : '$api$imagePath';
-
-                          return GestureDetector(
-                            onTap: () {
-                              _showPaymentImagePopup(imageUrl);
-                            },
-                            child: Container(
-                              height: 58,
-                              width: 58,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: Colors.grey.shade300,
-                                ),
-                                color: Colors.grey.shade100,
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: Image.network(
-                                  imageUrl,
-                                  fit: BoxFit.cover,
-                                  errorBuilder:
-                                      (context, error, stackTrace) {
-                                    return Icon(
-                                      Icons.broken_image_outlined,
-                                      color: Colors.grey.shade500,
-                                      size: 22,
-                                    );
-                                  },
-                                  loadingBuilder:
-                                      (context, child, loadingProgress) {
-                                    if (loadingProgress == null) return child;
-                                    return const Center(
-                                      child: SizedBox(
-                                        height: 18,
-                                        width: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
-
-                    const SizedBox(height: 14),
-                    if (warehouse.isNotEmpty) ...[
-                      Row(
+                      child: Column(
                         children: [
-                          Icon(
-                            Icons.local_shipping_outlined,
-                            size: 16,
-                            color: Colors.blue.shade800,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _shimmerBox(
+                                  height: 14,
+                                  width: double.infinity,
+                                  radius: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: _shimmerBox(
+                                  height: 14,
+                                  width: double.infinity,
+                                  radius: 20,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Warehouse Info',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.blue.shade900,
-                            ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _shimmerBox(
+                                  height: 14,
+                                  width: double.infinity,
+                                  radius: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: _shimmerBox(
+                                  height: 14,
+                                  width: double.infinity,
+                                  radius: 20,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                minWidth:
-                                    MediaQuery.of(context).size.width - 70,
-                              ),
-                              child: Table(
-                                border: TableBorder(
-                                  horizontalInside: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                  verticalInside: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                columnWidths: const {
-                                  0: FlexColumnWidth(1.1),
-                                  1: FlexColumnWidth(2.6),
-                                },
-                                defaultVerticalAlignment:
-                                    TableCellVerticalAlignment.middle,
-                                children: [
-                                  TableRow(
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                    ),
-                                    children: [
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 10,
-                                          horizontal: 8,
-                                        ),
-                                        child: Text(
-                                          'Box',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 12,
-                                            color: Colors.blue.shade900,
-                                          ),
-                                        ),
-                                      ),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 10,
-                                          horizontal: 8,
-                                        ),
-                                        child: Text(
-                                          'Tracking ID',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 12,
-                                            color: Colors.blue.shade900,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  ...warehouse.map<TableRow>((wh) {
-                                    return TableRow(
-                                      children: [
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 10,
-                                            horizontal: 8,
-                                          ),
-                                          child: Text(
-                                            wh['box']?.toString() ?? 'N/A',
-                                            textAlign: TextAlign.center,
-                                            style:
-                                                const TextStyle(fontSize: 12),
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 10,
-                                            horizontal: 8,
-                                          ),
-                                          child: Text(
-                                            wh['tracking_id']?.toString() ??
-                                                'N/A',
-                                            textAlign: TextAlign.center,
-                                            style:
-                                                const TextStyle(fontSize: 12),
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  }).toList(),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ] else
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.red.shade100),
-                        ),
-                        child: Text(
-                          'No warehouse data available',
-                          style: TextStyle(
-                            color: Colors.red.shade700,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1387,17 +1157,504 @@ Widget _infoRow({
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
+
+  Widget _buildOrderListShimmer() {
+    return Expanded(
+      child: ListView.builder(
+        padding: const EdgeInsets.only(right: 10, left: 10),
+        itemCount: 5,
+        itemBuilder: (context, index) {
+          return _buildShimmerOrderCard();
+        },
+      ),
+    );
+  }
+
+  Widget _buildLoadMoreShimmer() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+      child: _buildShimmerOrderCard(),
+    );
+  }
+
+  void _showPaymentImagePopup(String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(12),
+          child: Stack(
+            children: [
+              InteractiveViewer(
+                minScale: 0.8,
+                maxScale: 4.0,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    color: Colors.white,
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          height: 250,
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.all(16),
+                          color: Colors.white,
+                          child: const Text(
+                            'Unable to load image',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        );
+                      },
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          height: 250,
+                          color: Colors.white,
+                          alignment: Alignment.center,
+                          child: _shimmerBox(
+                            height: 250,
+                            width: double.infinity,
+                            radius: 12,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 8,
+                top: 8,
+                child: CircleAvatar(
+                  backgroundColor: Colors.black54,
+                  child: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _infoRow({
+    required String title,
+    required String value,
+    Widget? trailing,
+    Color? valueColor,
+    FontWeight? valueWeight,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 105,
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 12.5,
+              color: Colors.grey.shade700,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const Text(
+          ':  ',
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              color: valueColor ?? Colors.black87,
+              fontWeight: valueWeight ?? FontWeight.w500,
+            ),
+          ),
+        ),
+        if (trailing != null) ...[
+          const SizedBox(width: 8),
+          trailing,
+        ],
+      ],
+    );
+  }
+
+  Widget buildOrderCard(Map<String, dynamic> order) {
+    final customer = order['customer'] is Map<String, dynamic>
+        ? order['customer'] as Map<String, dynamic>
+        : <String, dynamic>{};
+
+    final warehouse = order['warehouse'] is List
+        ? List<Map<String, dynamic>>.from(order['warehouse'])
+        : <Map<String, dynamic>>[];
+
+    final paymentImages = order['payment_images'] is List
+        ? List<Map<String, dynamic>>.from(order['payment_images'])
+        : <Map<String, dynamic>>[];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => OrderReview(
+                id: order['id'],
+                customer: order['customer_id'],
+              ),
+            ),
+          );
+        },
+        child: Card(
+          margin: EdgeInsets.zero,
+          elevation: 3,
+          shadowColor: Colors.black12,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: const BoxDecoration(
+                    color: Colors.blue,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '#${order['invoice']}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          DateFormat('dd MMM yy').format(
+                            DateTime.parse(order['order_date']),
+                          ),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _infoRow(
+                        title: 'Customer',
+                        value: '${customer['name'] ?? ''}',
+                        valueWeight: FontWeight.w600,
+                      ),
+                      const SizedBox(height: 10),
+                      _infoRow(
+                        title: 'Staff',
+                        value: '${order['manage_staff'] ?? ''}',
+                        trailing: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            '${order['family'] ?? ''}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blue.shade900,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _infoRow(
+                        title: 'Status',
+                        value: '${order['status'] ?? ''}',
+                        valueColor: Colors.blue.shade700,
+                      ),
+                      const SizedBox(height: 10),
+                      _infoRow(
+                        title: 'Billing Amount',
+                        value:
+                            '${(order['total_amount'] as num).toStringAsFixed(2)}',
+                        valueColor: Colors.green.shade700,
+                        valueWeight: FontWeight.w700,
+                      ),
+                      if (paymentImages.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        Text(
+                          'Payment Images',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: paymentImages.map<Widget>((img) {
+                            final String imagePath =
+                                img['image']?.toString() ?? '';
+                            final String imageUrl = imagePath.startsWith('http')
+                                ? imagePath
+                                : '$api$imagePath';
+
+                            return GestureDetector(
+                              onTap: () {
+                                _showPaymentImagePopup(imageUrl);
+                              },
+                              child: Container(
+                                height: 58,
+                                width: 58,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                  color: Colors.grey.shade100,
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Image.network(
+                                    imageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Icon(
+                                        Icons.broken_image_outlined,
+                                        color: Colors.grey.shade500,
+                                        size: 22,
+                                      );
+                                    },
+                                    loadingBuilder:
+                                        (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return Center(
+                                        child: _shimmerBox(
+                                          height: 58,
+                                          width: 58,
+                                          radius: 10,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      if (warehouse.isNotEmpty) ...[
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.local_shipping_outlined,
+                              size: 16,
+                              color: Colors.blue.shade800,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Warehouse Info',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.blue.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minWidth:
+                                      MediaQuery.of(context).size.width - 70,
+                                ),
+                                child: Table(
+                                  border: TableBorder(
+                                    horizontalInside: BorderSide(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                    verticalInside: BorderSide(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                  ),
+                                  columnWidths: const {
+                                    0: FlexColumnWidth(1.1),
+                                    1: FlexColumnWidth(2.6),
+                                  },
+                                  defaultVerticalAlignment:
+                                      TableCellVerticalAlignment.middle,
+                                  children: [
+                                    TableRow(
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.shade50,
+                                      ),
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 10,
+                                            horizontal: 8,
+                                          ),
+                                          child: Text(
+                                            'Box',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 12,
+                                              color: Colors.blue.shade900,
+                                            ),
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 10,
+                                            horizontal: 8,
+                                          ),
+                                          child: Text(
+                                            'Tracking ID',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 12,
+                                              color: Colors.blue.shade900,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    ...warehouse.map<TableRow>((wh) {
+                                      return TableRow(
+                                        children: [
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                              horizontal: 8,
+                                            ),
+                                            child: Text(
+                                              wh['box']?.toString() ?? 'N/A',
+                                              textAlign: TextAlign.center,
+                                              style:
+                                                  const TextStyle(fontSize: 12),
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                              horizontal: 8,
+                                            ),
+                                            child: Text(
+                                              wh['tracking_id']?.toString() ??
+                                                  'N/A',
+                                              textAlign: TextAlign.center,
+                                              style:
+                                                  const TextStyle(fontSize: 12),
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    }).toList(),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ] else
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.red.shade100),
+                          ),
+                          child: Text(
+                            'No warehouse data available',
+                            style: TextStyle(
+                              color: Colors.red.shade700,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget buildBody() {
     if (isLoading) {
-      return Expanded(
-        child: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      return _buildOrderListShimmer();
     }
 
     if (filteredOrders.isEmpty) {
@@ -1423,10 +1680,7 @@ Widget _infoRow({
         padding: const EdgeInsets.only(right: 10, left: 10),
         itemBuilder: (context, index) {
           if (index == filteredOrders.length) {
-            return const Padding(
-              padding: EdgeInsets.all(12.0),
-              child: Center(child: CircularProgressIndicator()),
-            );
+            return _buildLoadMoreShimmer();
           }
 
           final order = filteredOrders[index];

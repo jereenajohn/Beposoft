@@ -522,23 +522,32 @@ class _admin_dashboardState extends State<admin_dashboard> {
 
   drower d = drower();
 
-  Widget _buildDropdownTile(
-      BuildContext context, String title, List<String> options) {
-    return ExpansionTile(
-      title: Text(title),
-      children: options.map((option) {
-        return ListTile(
-          title: Text(option),
-          onTap: () {
-            Navigator.pop(context);
-            d.navigateToSelectedPage(
-                context, option); // Navigate to selected page
-          },
-        );
-      }).toList(),
-    );
-  }
-
+ Widget _buildDropdownTile(
+    BuildContext context, String title, List<String> options) {
+  return ExpansionTile(
+    backgroundColor: Colors.white,
+    collapsedBackgroundColor: Colors.white,
+    iconColor: Colors.black,
+    collapsedIconColor: Colors.black,
+    title: Text(
+      title,
+      style: const TextStyle(color: Colors.black),
+    ),
+    children: options.map((option) {
+      return ListTile(
+        tileColor: Colors.white,
+        title: Text(
+          option,
+          style: const TextStyle(color: Colors.black),
+        ),
+        onTap: () {
+          Navigator.pop(context);
+          d.navigateToSelectedPage(context, option);
+        },
+      );
+    }).toList(),
+  );
+}
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -561,25 +570,31 @@ class _admin_dashboardState extends State<admin_dashboard> {
           ],
         ),
         drawer: Drawer(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: <Widget>[
-              DrawerHeader(
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
+            backgroundColor: Colors.white,
+            child: Container(
+              color: Colors.white,
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: <Widget>[
+               DrawerHeader(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: Image.asset(
+                            "lib/assets/appstore.png",
+                            width: 90,
+                            height: 90,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Image.asset(
-                        "lib/assets/beposoftt.png",
-                        width: 150, // Change width to desired size
-                        height: 150, // Change height to desired size
-                        fit: BoxFit
-                            .contain, // Use BoxFit.contain to maintain aspect ratio
-                      ),
-                    ],
-                  )),
               // ListTile(
               //   leading: Icon(Icons.dashboard),
               //   title: Text('Dashboard'),
@@ -1072,6 +1087,7 @@ class _admin_dashboardState extends State<admin_dashboard> {
               _buildDropdownTile(context, 'Reports', [
                 'Sales Report',
                 'Sales Report Excel',
+                'GST Report',
                 // 'All Division Product Sale Report',
                 // 'Cycling & Skating Monthly Excel',
                 // 'Cycling & Skating Daily Excel',
@@ -1111,7 +1127,7 @@ class _admin_dashboardState extends State<admin_dashboard> {
               SizedBox(height: 50), // Add some space at the bottom
             ],
           ),
-        ),
+        ),),
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16.0),

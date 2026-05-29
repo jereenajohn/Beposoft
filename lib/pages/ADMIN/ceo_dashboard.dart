@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:beposoft/pages/ACCOUNTS/Create_Purchase_Product_List.dart';
 import 'package:beposoft/pages/ACCOUNTS/Today_shipped_orders.dart';
 import 'package:beposoft/pages/ACCOUNTS/activity_log.dart';
@@ -47,10 +48,12 @@ import 'package:beposoft/pages/ADMIN/ceo_monthly_family_summary.dart';
 import 'package:beposoft/pages/ADMIN/ceo_parcel_avarage_monthly.dart'
     show PostofficeReport_monthly;
 import 'package:beposoft/pages/ADMIN/ceo_todays_family_summary.dart';
+import 'package:beposoft/pages/ADMIN/dgm_page.dart';
 import 'package:beposoft/pages/ADMIN/family_detailed_summary_page.dart';
 
 import 'package:beposoft/pages/ADMIN/family_wise_analysis_details_page.dart';
 import 'package:beposoft/pages/ADMIN/sales_report_excel.dart';
+import 'package:beposoft/pages/ADMIN/warehouse_summary.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_order_view.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_product_approval.dart';
 import 'package:beposoft/pages/logout_hekper.dart';
@@ -104,6 +107,8 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   double dbrClosingBalanceTotal = 0;
   List<Map<String, dynamic>> filteredProducts = [];
   int staffCount = 0;
+  int activeStaffCount = 0;
+  int inactiveStaffCount = 0;
   List<Map<String, dynamic>> bdmOverallRawData = [];
   List<Map<String, dynamic>> ceoFamilyCards = [];
   bool bdmOverallLoading = false;
@@ -144,6 +149,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   String categoryStartDate = "";
   String categoryEndDate = "";
   bool showAllCategories = false;
+  double dashboardTotalLandingCostAmount = 0.0;
 
   List<Map<String, dynamic>> familyAnalysisCards = [];
   Map<String, dynamic> familyAnalysisOverall = {};
@@ -159,6 +165,14 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   Map<String, dynamic> dgmCurrentMonthSummary = {};
   List<Map<String, dynamic>> dgmTodayRows = [];
   bool dgmLoading = false;
+
+  Map<String, dynamic> beposoftSummary = {};
+  bool beposoftSummaryLoading = false;
+
+  int dashboardTotalStock = 0;
+  double dashboardTotalRetailAmount = 0.0;
+  bool dashboardInventoryLoading = false;
+  double dashboardTotalSellingAmount = 0.0;
 
   // int getFamilyPresentCount(String familyName) {
   //   return familyAttendanceData.where((item) {
@@ -185,6 +199,22 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     if (v is double) return v.toInt();
     if (v is String) return int.tryParse(v) ?? 0;
     return 0;
+  }
+
+  double _asDouble(dynamic v) {
+    if (v == null) return 0.0;
+    if (v is int) return v.toDouble();
+    if (v is double) return v;
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? 0.0;
+    return 0.0;
+  }
+
+  Map<String, dynamic> _asMap(dynamic v) {
+    if (v == null) return {};
+    if (v is Map<String, dynamic>) return v;
+    if (v is Map) return Map<String, dynamic>.from(v);
+    return {};
   }
 
   String? username = '';
@@ -215,12 +245,14 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     fetchBdmOverallFamilyReport();
     getstaff();
     fetchOrdersSummaryFamilyData();
+    fetchBeposoftSummary();
+    fetchDashboardInventorySummary();
 
     //   fetchInternalTransfersData(
     // getdgnvd);
     getdgm();
     fetchFamilySummaryTeamCards();
-    // fetchFamilyAnalysisCards();
+    fetchFamilyAnalysisCards();
     fetchInternalTransfersData();
     getFilteredCategoryWiseProducts();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -283,6 +315,8 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
       Future(() => fetchFamilyAnalysisCards()),
       Future(() => fetchInternalTransfersData()),
       Future(() => getFilteredCategoryWiseProducts()),
+      Future(() => fetchBeposoftSummary()),
+      Future(() => fetchDashboardInventorySummary()),
       Future(() => fetchBdoStatewiseReport(
             startDate: DateTime(now.year, now.month, now.day),
             endDate: DateTime(now.year, now.month, now.day),
@@ -319,6 +353,133 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     } catch (e) {
       // optional print
       // print("fetchOrdersSummaryFamilyData error: $e");
+    }
+  }
+
+  String _formatDashboardAmount(dynamic value) {
+    final double amount = _asDouble(value);
+    final double absAmount = amount.abs();
+    final String sign = amount < 0 ? "-" : "";
+
+    if (absAmount >= 10000000) {
+      return "$sign₹${(absAmount / 10000000).toStringAsFixed(2)} Cr";
+    }
+
+    if (absAmount >= 100000) {
+      return "$sign₹${(absAmount / 100000).toStringAsFixed(2)} L";
+    }
+
+    if (absAmount >= 1000) {
+      return "$sign₹${(absAmount / 1000).toStringAsFixed(2)}K";
+    }
+
+    return "$sign${_currency.format(absAmount)}";
+  }
+
+  Future<String?> getWarehouseFromPrefs() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    int? warehouseId = prefs.getInt('warehouse');
+    return warehouseId?.toString();
+  }
+
+  Future<void> fetchDashboardInventorySummary() async {
+    final String? token = await getTokenFromPrefs();
+    final String? warehouseId = await getWarehouseFromPrefs();
+
+    if (token == null || warehouseId == null || warehouseId.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      dashboardInventoryLoading = true;
+    });
+
+    try {
+      final response = await http.get(
+        Uri.parse("$api/api/warehouse/products/gets/$warehouseId/"),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+        final results = parsed['results'];
+
+        if (results is Map && results['summary'] is Map) {
+          final summary = Map<String, dynamic>.from(results['summary']);
+
+          if (!mounted) return;
+          setState(() {
+            dashboardTotalStock = _asInt(summary['total_stock']);
+            dashboardTotalRetailAmount =
+                _asDouble(summary['total_retail_amount']);
+            dashboardTotalLandingCostAmount =
+                _asDouble(summary['total_landing_cost_amount']);
+
+            dashboardTotalSellingAmount =
+                _asDouble(summary['total_selling_amount']);
+            dashboardInventoryLoading = false;
+          });
+        } else {
+          if (!mounted) return;
+          setState(() {
+            dashboardInventoryLoading = false;
+          });
+        }
+      } else {
+        if (!mounted) return;
+        setState(() {
+          dashboardInventoryLoading = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        dashboardInventoryLoading = false;
+      });
+      print("DASHBOARD INVENTORY SUMMARY ERROR: $e");
+    }
+  }
+
+  Future<void> fetchBeposoftSummary() async {
+    final token = await getTokenFromPrefs();
+    if (token == null) return;
+
+    setState(() {
+      beposoftSummaryLoading = true;
+    });
+
+    try {
+      final response = await http.get(
+        Uri.parse('$api/api/beposoft/summary/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+
+        if (!mounted) return;
+        setState(() {
+          beposoftSummary = Map<String, dynamic>.from(decoded);
+          beposoftSummaryLoading = false;
+        });
+      } else {
+        if (!mounted) return;
+        setState(() {
+          beposoftSummaryLoading = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        beposoftSummaryLoading = false;
+      });
+      print("BEPOSOFT SUMMARY ERROR: $e");
     }
   }
 
@@ -359,7 +520,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
         Uri.parse('$api/api/family/summary/team/').replace(
           queryParameters: queryParams,
         ),
-        headers: {  
+        headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
@@ -752,6 +913,35 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
       });
       print("FAMILY ANALYSIS CARD ERROR: $e");
     }
+  }
+
+  bool _isUpdateAvailable(String currentVersion, String storeVersion) {
+    List<int> currentParts =
+        currentVersion.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+
+    List<int> storeParts =
+        storeVersion.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+
+    int maxLength = currentParts.length > storeParts.length
+        ? currentParts.length
+        : storeParts.length;
+
+    while (currentParts.length < maxLength) {
+      currentParts.add(0);
+    }
+    while (storeParts.length < maxLength) {
+      storeParts.add(0);
+    }
+
+    for (int i = 0; i < maxLength; i++) {
+      if (storeParts[i] > currentParts[i]) {
+        return true;
+      } else if (storeParts[i] < currentParts[i]) {
+        return false;
+      }
+    }
+
+    return false;
   }
 
   Future<void> pickFamilyAnalysisDateRange() async {
@@ -1180,12 +1370,13 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
           'Content-Type': 'application/json',
         },
       );
-      ;
+
       List<Map<String, dynamic>> stafflist = [];
 
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
-        var productsData = parsed['data'];
+
+        final List productsData = parsed['data'] ?? [];
 
         for (var productData in productsData) {
           stafflist.add({
@@ -1194,16 +1385,38 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
             'email': productData['email'],
             'designation': productData['designation'],
             'image': productData['image'],
-            'approval_status': productData['approval_status']
+            'approval_status': productData['approval_status'],
           });
         }
+
+        int activeCount = 0;
+        int inactiveCount = 0;
+
+        for (var staff in stafflist) {
+          final status =
+              (staff['approval_status'] ?? '').toString().toLowerCase().trim();
+
+          if (status == 'approved') {
+            activeCount++;
+          } else if (status == 'disapproved') {
+            inactiveCount++;
+          }
+        }
+
         setState(() {
           sta = stafflist;
           filteredProducts = List.from(sta);
           staffCount = stafflist.length;
+          activeStaffCount = activeCount;
+          inactiveStaffCount = inactiveCount;
         });
+      } else {
+        print("GET STAFF STATUS ERROR: ${response.statusCode}");
+        print("GET STAFF BODY: ${response.body}");
       }
-    } catch (error) {}
+    } catch (error) {
+      print("GET STAFF ERROR: $error");
+    }
   }
 
   List<Map<String, dynamic>> categoryWiseProducts = [];
@@ -1292,83 +1505,118 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     final currentVersion = packageInfo.version;
 
     try {
-      final response = await http.get(Uri.parse(
-        'https://play.google.com/store/apps/details?id=com.bepositive.beposoft&hl=en',
-      ));
+      String? storeVersion;
+      Uri? storeUrl;
 
-      if (response.statusCode == 200) {
-        final content = response.body;
-        final versionRegex = RegExp(r'\[\[\["([0-9.]+)"\]\]');
-        final match = versionRegex.firstMatch(content);
+      if (Platform.isAndroid) {
+        final response = await http.get(Uri.parse(
+          'https://play.google.com/store/apps/details?id=com.bepositive.beposoft&hl=en',
+        ));
 
-        if (match != null) {
-          final storeVersion = match.group(1);
-          if (storeVersion != null && storeVersion != currentVersion) {
-            final result = await showDialog<bool>(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) => AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                titlePadding: const EdgeInsets.only(top: 20),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                title: Column(
-                  children: [
-                    Icon(Icons.system_update, size: 48, color: Colors.green),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Update Available',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                content: Text(
-                  'A new version ($storeVersion) is available.\n\nYou are using $currentVersion.\n\nPlease update the app to continue enjoying the latest features and improvements.',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                actionsAlignment: MainAxisAlignment.spaceEvenly,
-                actions: [
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.open_in_new, size: 18),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    label: const Text("Update Now"),
-                    onPressed: () async {
-                      final playStoreUrl = Uri.parse(
-                          'https://play.google.com/store/apps/details?id=com.bepositive.beposoft');
-                      if (await canLaunchUrl(playStoreUrl)) {
-                        await launchUrl(playStoreUrl,
-                            mode: LaunchMode.externalApplication);
-                      }
-                      Navigator.of(context)
-                          .pop(false); // Prevent app from loading
-                    },
-                  ),
-                  TextButton(
-                    child: const Text("Maybe Later"),
-                    onPressed: () =>
-                        Navigator.of(context).pop(true), // Continue with app
-                  ),
-                ],
-              ),
+        if (response.statusCode == 200) {
+          final content = response.body;
+          final versionRegex = RegExp(r'\[\[\["([0-9.]+)"\]\]');
+          final match = versionRegex.firstMatch(content);
+
+          if (match != null) {
+            storeVersion = match.group(1);
+            storeUrl = Uri.parse(
+              'https://play.google.com/store/apps/details?id=com.bepositive.beposoft',
             );
-            return result == true;
+          }
+        }
+      } else if (Platform.isIOS) {
+        final response = await http.get(
+          Uri.parse('https://itunes.apple.com/lookup?id=6748010646&country=in'),
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+
+          if (data['resultCount'] != null &&
+              data['resultCount'] > 0 &&
+              data['results'] != null &&
+              data['results'] is List &&
+              data['results'].isNotEmpty) {
+            final appData = data['results'][0];
+            storeVersion = appData['version']?.toString();
+            storeUrl = Uri.parse(
+              'https://apps.apple.com/in/app/beposoft/id6748010646',
+            );
           }
         }
       }
+
+      if (storeVersion != null &&
+          _isUpdateAvailable(currentVersion, storeVersion)) {
+        final result = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            titlePadding: const EdgeInsets.only(top: 20),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            title: Column(
+              children: [
+                Icon(
+                  Icons.system_update,
+                  size: 48,
+                  color: Colors.green,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Update Available',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              'A new version ($storeVersion) is available.\n\nYou are using $currentVersion.\n\nPlease update the app to continue enjoying the latest features and improvements.',
+              style: const TextStyle(fontSize: 16),
+            ),
+            actionsAlignment: MainAxisAlignment.spaceEvenly,
+            actions: [
+              ElevatedButton.icon(
+                icon: const Icon(Icons.open_in_new, size: 18),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                label: const Text("Update Now"),
+                onPressed: () async {
+                  if (storeUrl != null && await canLaunchUrl(storeUrl)) {
+                    await launchUrl(
+                      storeUrl,
+                      mode: LaunchMode.externalApplication,
+                    );
+                  }
+                  Navigator.of(context).pop(false);
+                },
+              ),
+              TextButton(
+                child: const Text("Maybe Later"),
+                onPressed: () => Navigator.of(context).pop(true),
+              ),
+            ],
+          ),
+        );
+
+        return result == true;
+      }
     } catch (e) {
-      // Optionally log error
+      // Optional: print(e);
     }
 
-    return true; // Proceed normally if no update
+    return true;
   }
 
   Widget buildExpenseTypeTotalsCard(Map<String, double> totals) {
@@ -1861,402 +2109,317 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     );
   }
 
+  Widget _employeeStatusMiniTile({
+    required String title,
+    required int count,
+    required IconData icon,
+  }) {
+    return Row(
+      children: [
+        // Icon(
+        //   icon,
+        //   color: Colors.white,
+        //   size: 14,
+        // ),
+        // const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Text(
+          "$count",
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmployeeColumnItem({
+    required String title,
+    required String value,
+    required IconData icon,
+  }) {
+    return Container(
+      width: double.infinity,
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.22),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: Colors.white,
+            size: 14,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.88),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDashboardLineItem({
+    required String title,
+    required String value,
+    IconData? icon,
+  }) {
+    return Container(
+      width: double.infinity,
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.22),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(
+              icon,
+              color: Colors.white,
+              size: 14,
+            ),
+            const SizedBox(width: 6),
+          ],
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.88),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (value.isNotEmpty)
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget dashboardCards() {
+    final bankSummary = _asMap(beposoftSummary['bank_summary']);
+    final todayData = _asMap(bankSummary['today_data']);
+    final staffSummary = _asMap(beposoftSummary['staff_summary']);
+
+    final totalStaffs = _asInt(staffSummary['total_staffs']);
+    final activeStaffs = _asInt(staffSummary['active_staffs']);
+    final deactiveStaffs = _asInt(staffSummary['deactive_staffs']);
+
+    final totalFamilyPresentCount = familySummaryTeamCards.fold<int>(
+      0,
+      (sum, item) => sum + _asInt(item['present_count']),
+    );
+
+    final withInternalTransfer = _asMap(todayData['with_internal_transfer']);
+    final financeOpeningBalance =
+        _asDouble(withInternalTransfer['open_balance']);
+
+    final financeCredit = _asDouble(withInternalTransfer['credit']);
+    final financeDebit = _asDouble(withInternalTransfer['debit']);
+    final financeClosingBalance =
+        _asDouble(withInternalTransfer['closing_balance']);
+
+    final purchaseSummary = _asMap(beposoftSummary['purchase_summary']);
+    final purchaseCount = _asInt(purchaseSummary['total_count']);
+    final purchaseAmount = _asDouble(purchaseSummary['total_amount']);
+
+    // final billAmountSummary = _asMap(beposoftSummary['bill_amount_summary']);
+    // final currentMonthBillData =
+    //     _asMap(billAmountSummary['current_month_data']);
+
+    // final currentMonthBillAmount =
+    //     _asDouble(currentMonthBillData['total_amount']);
+
+    final assetSummary = _asMap(beposoftSummary['asset_summary']);
+    final assetCount = _asInt(assetSummary['total_count']);
+    final assetAmount = _asDouble(assetSummary['total_amount']);
+
+    final billAmountSummary = _asMap(beposoftSummary['bill_amount_summary']);
+    final currentMonthBillData =
+        _asMap(billAmountSummary['current_month_data']);
+    final currentMonthBillAmount =
+        _asDouble(currentMonthBillData['total_amount']);
+
     return Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
       child: GridView.count(
         crossAxisCount: 2,
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        childAspectRatio: 1.05,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 0.80,
         children: [
-          // ✅ Sales
-          InkWell(
-            borderRadius: BorderRadius.circular(18),
+          _buildDashboardCard(
+            title: "Sales",
+            icon: Icons.bar_chart_rounded,
+            value: _formatDashboardAmount(
+              productsData?['month_total_amount'],
+            ),
+            lines: [
+              "Today's Invoices: ${_asInt(productsData?['today_count'])}",
+              "Volume: ${_formatDashboardAmount(productsData?['today_total_amount'])}",
+              "Total Invoices: ${_asInt(productsData?['month_count'])}",
+            ],
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => SalesReportExcel()),
               );
             },
-            child: Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF56AFFF), Color(0xFF2C74FF)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.blue.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(2, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Sales",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.bar_chart,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    _currency.format(
-                        (productsData?['month_total_amount'] ?? 0).toDouble()),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    "Orders: ${_asInt(productsData?['month_count'])}",
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
-
-          // ✅ Finance
-          InkWell(
-            borderRadius: BorderRadius.circular(18),
+          _buildDashboardCard(
+            title: "Finance",
+            icon: Icons.account_balance_wallet_rounded,
+            valueLabel: "CB",
+            value: _formatDashboardAmount(financeClosingBalance),
+            lines: [
+              "Credit: ${_formatDashboardAmount(financeCredit)}",
+              "Debit: ${_formatDashboardAmount(financeDebit)}",
+            ],
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => FinancialReport()),
               );
             },
-            child: Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF56AFFF), Color(0xFF2C74FF)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.blue.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(2, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Finance",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.account_balance_wallet,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ],
-                  ),
-                  // const Text(
-                  //   "Finance Module",
-                  //   style: TextStyle(
-                  //     color: Colors.white,
-                  //     fontSize: 10,
-                  //     fontWeight: FontWeight.bold,
-                  //   ),
-                  //   maxLines: 1,
-                  //   overflow: TextOverflow.ellipsis,
-                  // ),
-                  const Text(
-                    "Accounts & Reports",
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
           ),
-
-          // ✅ Logistic
-          InkWell(
-            borderRadius: BorderRadius.circular(18),
+          _buildDashboardCard(
+            title: "Logistics (DGM)",
+            icon: Icons.inventory_2_rounded,
+            value: _formatDashboardAmount(currentMonthBillAmount),
+            lines: [
+              dgmLoading
+                  ? "Amount: Loading..."
+                  : "PO Amount: ${_formatDashboardAmount(monthTotalParcelAmount)}",
+              dgmLoading
+                  ? "Weight: Loading."
+                  : "Weight: ${monthTotalWeight.toStringAsFixed(2)} kg",
+              // "Total Amount: ${_formatDashboardAmount(currentMonthBillAmount)}",
+              // dgmLoading
+              //     ? "Total Amount: Loading."
+              //     : "Total Amount: ${_formatDashboardAmount(currentMonthBillAmount)}",
+              dgmLoading
+                  ? "Avg: Loading."
+                  : "Avg: ₹${monthAverage.toStringAsFixed(2)}/kg",
+            ],
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => daily_goods_movement()),
+                MaterialPageRoute(
+                    builder: (context) => daily_goods_movementt()),
               );
             },
-            child: Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF56AFFF), Color(0xFF2C74FF)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.blue.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(2, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Logistics",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.inventory_2,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ],
-                  ),
-                  // const Text(
-                  //   "Logistics Module",
-                  //   style: TextStyle(
-                  //     color: Colors.white,
-                  //     fontSize: 12,
-                  //     fontWeight: FontWeight.bold,
-                  //   ),
-                  //   maxLines: 1,
-                  //   overflow: TextOverflow.ellipsis,
-                  // ),
-                  const Text(
-                    "Daily Goods Movement",
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
-
-          // ✅ Admin
-          InkWell(
-            borderRadius: BorderRadius.circular(18),
+          _buildDashboardCard(
+            title: "Employees",
+            icon: Icons.groups_rounded,
+            value: "Total $totalStaffs",
+            lines: const [],
+            bottom: Column(
+              children: [
+                _buildEmployeeColumnItem(
+                  title: "Hired",
+                  value: "$activeStaffs",
+                  icon: Icons.check_circle_rounded,
+                ),
+                const SizedBox(height: 6),
+                _buildEmployeeColumnItem(
+                  title: "Resigned",
+                  value: "$deactiveStaffs",
+                  icon: Icons.cancel_rounded,
+                ),
+                const SizedBox(height: 6),
+                _buildEmployeeColumnItem(
+                  title: "Present",
+                  value: "$totalFamilyPresentCount",
+                  icon: Icons.person_pin_circle_rounded,
+                ),
+              ],
+            ),
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => staff_list()),
               );
             },
-            child: Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF56AFFF), Color(0xFF2C74FF)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.blue.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(2, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Employees",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.admin_panel_settings,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    "${staffCount.toStringAsFixed(0)}",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Text(
-                    "Users & Permissions",
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
-
-          // ✅ Transport
-          InkWell(
-            borderRadius: BorderRadius.circular(18),
+          _buildDashboardCard(
+            title: "Assets",
+            icon: Icons.local_shipping_rounded,
+            value: _formatDashboardAmount(assetAmount),
+            lines: [
+              "Count: $assetCount",
+              "Asset management",
+            ],
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => trackingReport()),
+                MaterialPageRoute(builder: (context) => AssetManegment()),
               );
             },
-            child: Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF56AFFF), Color(0xFF2C74FF)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.blue.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(2, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Transport",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.local_shipping,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ],
-                  ),
-                  // const Text(
-                  //   "Transport Module",
-                  //   style: TextStyle(
-                  //     color: Colors.white,
-                  //     fontSize: 14,
-                  //     fontWeight: FontWeight.bold,
-                  //   ),
-                  // ),
-                  const Text(
-                    "Courier Tracking",
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
-
-          // ✅ Purchase
-          InkWell(
-            borderRadius: BorderRadius.circular(18),
+          _buildDashboardCard(
+            title: "Purchase",
+            icon: Icons.shopping_bag_rounded,
+            value: _formatDashboardAmount(purchaseAmount),
+            lines: [
+              "Invoices: $purchaseCount",
+              "Suppliers & Invoices",
+            ],
             onTap: () {
               Navigator.push(
                 context,
@@ -2264,214 +2427,236 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                     builder: (context) => SellerInvoiceListPage()),
               );
             },
-            child: Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF56AFFF), Color(0xFF2C74FF)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.blue.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(2, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Purchase",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.shopping_bag,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ],
-                  ),
-                  // const Text(
-                  //   "Purchase Module",
-                  //   style: TextStyle(
-                  //     color: Colors.white,
-                  //     fontSize: 12,
-                  //     fontWeight: FontWeight.bold,
-                  //   ),
-                  // ),
-                  const Text(
-                    "Suppliers & Bills",
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
-
-          // ✅ Inventory
-          InkWell(
-            borderRadius: BorderRadius.circular(18),
+          _buildDashboardCard(
+            title: "Inventory",
+            icon: Icons.warehouse_rounded,
+            valueLabel: "WH",
+            value: dashboardInventoryLoading
+                ? "Loading..."
+                : _formatDashboardAmount(dashboardTotalSellingAmount),
+            lines: [
+              dashboardInventoryLoading
+                  ? "Retail: Loading..."
+                  : "Retail: ${_formatDashboardAmount(dashboardTotalRetailAmount)}",
+              dashboardInventoryLoading
+                  ? "Landing: Loading..."
+                  : "Landing: ${_formatDashboardAmount(dashboardTotalLandingCostAmount)}",
+              // dashboardInventoryLoading
+              //     ? "Stock: Loading..."
+              //     : "Stock: $dashboardTotalStock",
+            ],
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => Product_List()),
+                MaterialPageRoute(
+                  builder: (context) => WarehouseSummaryScreen(),
+                ),
               );
             },
-            child: Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF56AFFF), Color(0xFF2C74FF)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.blue.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(2, 4),
-                  ),
-                ],
+          ),
+          _buildDashboardCard(
+            title: "Marketing",
+            icon: Icons.campaign_rounded,
+            value: "Campaigns",
+            lines: [
+              "Ads & promotions",
+              "Marketing overview",
+            ],
+            onTap: () {},
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDashboardCard({
+    required String title,
+    required IconData icon,
+    required String value,
+    required List<dynamic> lines,
+    required VoidCallback onTap,
+    String valueLabel = "",
+    Widget? bottom,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              colors: [
+                Color(0xFF56AFFF),
+                Color(0xFF2C74FF),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF2C74FF).withOpacity(0.28),
+                blurRadius: 12,
+                spreadRadius: 1,
+                offset: const Offset(0, 6),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Inventory",
-                        style: TextStyle(
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(11),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Container(
+                      height: 31,
+                      width: 31,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.20),
+                        borderRadius: BorderRadius.circular(11),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.22),
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.warehouse,
-                          color: Colors.white,
-                          size: 20,
+                      child: Icon(
+                        icon,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (value.isNotEmpty)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          valueLabel.isNotEmpty
+                              ? "$valueLabel - $value"
+                              : value,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
-                  // const Text(
-                  //   "Inventory Module",
-                  //   style: TextStyle(
-                  //     color: Colors.white,
-                  //     fontSize: 12,
-                  //     fontWeight: FontWeight.bold,
-                  //   ),
-                  // ),
-                  const Text(
-                    "Stock & Products",
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
+                if (value.isNotEmpty) const SizedBox(height: 7),
+                // ...lines.take(3).map((line) {
+                ...lines.map((line) {
+                  if (line is Widget) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 5),
+                      child: Container(
+                        width: double.infinity,
+                        height: 28,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.14),
+                          borderRadius: BorderRadius.circular(11),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.22),
+                          ),
+                        ),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: line,
+                        ),
+                      ),
+                    );
+                  }
+
+                  final text = line?.toString() ?? '';
+                  final parts = text.split(':');
+
+                  final String titleText =
+                      parts.length > 1 ? parts.first.trim() : text.trim();
+
+                  final String valueText =
+                      parts.length > 1 ? parts.sublist(1).join(':').trim() : "";
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 5),
+                    child: _buildDashboardLineItem(
+                      title: titleText,
+                      value: valueText,
                     ),
-                  ),
-                ],
-              ),
+                  );
+                }).toList(),
+                if (bottom != null) ...[
+                  const SizedBox(height: 8),
+                  bottom,
+                ] else
+                  const Spacer(),
+              ],
             ),
           ),
+        ),
+      ),
+    );
+  }
 
-          // ✅ Marketing
-          InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: () {},
-            child: Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF56AFFF), Color(0xFF2C74FF)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.blue.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(2, 4),
-                  ),
-                ],
+  Widget _buildDashboardMiniChip({
+    required String title,
+    required String value,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.20),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: Colors.white,
+            size: 13,
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.86),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Marketing",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.campaign,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ],
-                  ),
-                  // const Text(
-                  //   "Marketing Module",
-                  //   style: TextStyle(
-                  //     color: Colors.white,
-                  //     fontSize: 12,
-                  //     fontWeight: FontWeight.bold,
-                  //   ),
-                  // ),
-                  const Text(
-                    "Ads & Promotions",
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
@@ -4201,14 +4386,24 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   Widget _buildDropdownTile(
       BuildContext context, String title, List<String> options) {
     return ExpansionTile(
-      title: Text(title),
+      backgroundColor: Colors.white,
+      collapsedBackgroundColor: Colors.white,
+      iconColor: Colors.black,
+      collapsedIconColor: Colors.black,
+      title: Text(
+        title,
+        style: const TextStyle(color: Colors.black),
+      ),
       children: options.map((option) {
         return ListTile(
-          title: Text(option),
+          tileColor: Colors.white,
+          title: Text(
+            option,
+            style: const TextStyle(color: Colors.black),
+          ),
           onTap: () {
             Navigator.pop(context);
-            d.navigateToSelectedPage(
-                context, option); // Navigate to selected page
+            d.navigateToSelectedPage(context, option);
           },
         );
       }).toList(),
@@ -4564,15 +4759,14 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
         ((dgmCurrentMonthSummary['average'] ?? 0) as num?)?.toDouble() ?? 0.0;
 
     return InkWell(
-       onTap: () {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => daily_goods_movement(),
-        ),
-      );
-    },
-
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => daily_goods_movement(),
+          ),
+        );
+      },
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
@@ -4644,8 +4838,8 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                         children: [
                           _tableCell(row['service'].toString()),
                           _tableCell("${row['boxes']}"),
-                          _tableCell(
-                              _formatDouble(row['total_post_office_weight_kg'])),
+                          _tableCell(_formatDouble(
+                              row['total_post_office_weight_kg'])),
                           _tableCell(
                               _formatDouble(row['total_actual_weight_kg'])),
                           _tableCell(_formatDouble(row['volume_kg'])),
@@ -4676,11 +4870,12 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                     TableRow(
                       decoration: BoxDecoration(
                         color: Colors.green,
-                    
                       ),
                       children: [
                         _tableCell("CURRENT MONTH (MGM)",
-                            isBold: true, align: TextAlign.left, fontSize: 12.5),
+                            isBold: true,
+                            align: TextAlign.left,
+                            fontSize: 12.5),
                         _tableCell("$currentMonthBoxes",
                             isBold: true, fontSize: 12.5),
                         _tableCell(_formatDouble(currentMonthPostOfficeWeight),
@@ -5323,7 +5518,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
       home: RefreshIndicator(
         onRefresh: _refreshDashboard,
         child: Scaffold(
-          backgroundColor: const Color.fromARGB(255, 252, 247, 247),
+          backgroundColor: Colors.white,
           appBar: AppBar(
             elevation: 0,
             backgroundColor: Colors.white,
@@ -5340,558 +5535,594 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
             ],
           ),
           drawer: Drawer(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: <Widget>[
-                DrawerHeader(
+            backgroundColor: Colors.white,
+            child: Container(
+              color: Colors.white,
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: <Widget>[
+                  DrawerHeader(
                     decoration: BoxDecoration(
-                      color: Colors.grey[200],
+                      color: Colors.white,
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Image.asset(
-                          "lib/assets/beposoftt.png",
-                          width: 150, // Change width to desired size
-                          height: 150, // Change height to desired size
-                          fit: BoxFit
-                              .contain, // Use BoxFit.contain to maintain aspect ratio
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: Image.asset(
+                            "lib/assets/appstore.png",
+                            width: 90,
+                            height: 90,
+                            fit: BoxFit.cover,
+                          ),
                         ),
                       ],
-                    )),
-                // ListTile(
-                //   leading: Icon(Icons.dashboard),
-                //   title: Text('Dashboard'),
-                //   onTap: () {
-                //     Navigator.push(context,
-                //         MaterialPageRoute(builder: (context) => Graph()));
-                //   },
-                // ),
+                    ),
+                  ),
+                  // ListTile(
+                  //   leading: Icon(Icons.dashboard),
+                  //   title: Text('Dashboard'),
+                  //   onTap: () {
+                  //     Navigator.push(context,
+                  //         MaterialPageRoute(builder: (context) => Graph()));
+                  //   },
+                  // ),
 
-                _buildDropdownTile(context, 'Customers', [
-                  'Add Customer',
-                  'Customers',
-                  'customer Transfer',
-                  'customer Transfer list',
-                  'Customer Type',
-                ]),
-                _buildDropdownTile(context, 'Recipt', [
-                  'Add Recipt',
-                  'Recipt List',
-                  'Bank Recipt',
-                  'Advance Recipt',
-                  'Order Recipt',
-                  'COD Transfer',
-                  'COD Transfer List',
-                ]),
+                  _buildDropdownTile(context, 'Customers', [
+                    'Add Customer',
+                    'Customers',
+                    'customer Transfer',
+                    'customer Transfer list',
+                    'Customer Type',
+                  ]),
+                  _buildDropdownTile(context, 'Recipt', [
+                    'Add Recipt',
+                    'Recipt List',
+                    'Bank Recipt',
+                    'Advance Recipt',
+                    'Order Recipt',
+                    'COD Transfer',
+                    'COD Transfer List',
+                  ]),
 
-                // ListTile(
-                //   leading: Icon(Icons.dashboard),
-                //   title: Text('Call Report'),
-                //   onTap: () {
-                //     Navigator.push(context,
-                //         MaterialPageRoute(builder: (context) => CallLog()));
-                //   },
-                // ),
-                _buildDropdownTile(context, 'Proforma Invoice', [
-                  'New Proforma Invoice',
-                  'Proforma Invoice List',
-                ]),
-                _buildDropdownTile(context, 'Delivery Note', [
-                  'Delivery Note List(To Print)',
-                  'Delivery Note List(Packing under Progress)',
-                  'Delivery Note List(Packed)',
-                  'Delivery Note List(Ready to ship)',
-                  'Delivery Note List(Shipped)',
-                  'Daily Goods Movement'
-                ]),
-                _buildDropdownTile(context, 'Orders', [
-                  'New Orders',
-                  'Orders List',
-                  'Invoice Created',
-                  'Invoice Approved',
-                  'Waiting For Confirmation',
-                  'To Print',
-                  'Packing Under Progress',
-                  'Packed',
-                  'Ready to ship',
-                  'Shipped',
-                  'Invoice Rejected'
-                ]),
-                Divider(),
-                Text("Others"),
-                Divider(),
-                _buildDropdownTile(context, 'Purchase', [
-                  'Product List',
-                  'Purchase request',
-                  'Purchase request List',
-                  'Product Add',
-                ]),
-                _buildDropdownTile(context, 'Expence', [
-                  'Add Expence',
-                  'Expence List',
-                ]),
-                _buildDropdownTile(
-                    context, 'GRV', ['Create New GRV', 'GRVs List']),
-                _buildDropdownTile(context, 'Internal Transfer',
-                    ['Add Transfer', 'Transfer List']),
+                  // ListTile(
+                  //   leading: Icon(Icons.dashboard),
+                  //   title: Text('Call Report'),
+                  //   onTap: () {
+                  //     Navigator.push(context,
+                  //         MaterialPageRoute(builder: (context) => CallLog()));
+                  //   },
+                  // ),
+                  _buildDropdownTile(context, 'Proforma Invoice', [
+                    'New Proforma Invoice',
+                    'Proforma Invoice List',
+                  ]),
+                  _buildDropdownTile(context, 'Delivery Note', [
+                    'Delivery Note List(To Print)',
+                    'Delivery Note List(Packing under Progress)',
+                    'Delivery Note List(Packed)',
+                    'Delivery Note List(Ready to ship)',
+                    'Delivery Note List(Shipped)',
+                    'Daily Goods Movement'
+                  ]),
+                  _buildDropdownTile(context, 'Orders', [
+                    'New Orders',
+                    'Orders List',
+                    'Invoice Created',
+                    'Invoice Approved',
+                    'Waiting For Confirmation',
+                    'To Print',
+                    'Packing Under Progress',
+                    'Packed',
+                    'Ready to ship',
+                    'Shipped',
+                    'Invoice Rejected'
+                  ]),
+                  Divider(),
+                  Text("Others"),
+                  Divider(),
+                  _buildDropdownTile(context, 'Purchase', [
+                    'Product List',
+                    'Purchase request',
+                    'Purchase request List',
+                    'Product Add',
+                  ]),
+                  _buildDropdownTile(context, 'Expence', [
+                    'Add Expence',
+                    'Expence List',
+                  ]),
+                  _buildDropdownTile(
+                      context, 'GRV', ['Create New GRV', 'GRVs List']),
+                  _buildDropdownTile(context, 'Internal Transfer',
+                      ['Add Transfer', 'Transfer List']),
 
-                _buildDropdownTile(context, 'Daily Sales Reports',
-                    ['Add Team', 'Team wise Report']),
+                  _buildDropdownTile(context, 'Daily Sales Reports',
+                      ['Add Team', 'Team wise Report']),
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Purchase Invoice'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => CreatePurchaseProductList()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Purchase Invoice List'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => SellerInvoiceListPage()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Activit Log'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => Activity_log()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Bank Type'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_bank_type()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                // ListTile(
-                //   leading: Icon(Icons.person),
-                //   title: Text('call Log'),
-                //   onTap: () {
-                //     Navigator.push(context,
-                //         MaterialPageRoute(builder: (context) => CallLog()));
-                //     // Navigate to the Settings page or perform any other action
-                //   },
-                // ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Purchase Invoice'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  CreatePurchaseProductList()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Purchase Invoice List'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => SellerInvoiceListPage()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Activit Log'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => Activity_log()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Bank Type'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_bank_type()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  // ListTile(
+                  //   leading: Icon(Icons.person),
+                  //   title: Text('call Log'),
+                  //   onTap: () {
+                  //     Navigator.push(context,
+                  //         MaterialPageRoute(builder: (context) => CallLog()));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Add Supplier'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_supplier()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Add Supplier'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_supplier()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                //                       ListTile(
-                //               leading: Icon(Icons.person),
-                //               title: Text('Add Daily sales report'),
-                //               onTap: () {
-                //                 Navigator.push(context,
-                //                     MaterialPageRoute(builder: (context) => AddDailySalesReport()));
-                //                 // Navigate to the Settings page or perform any other action
-                //               },
-                //             ),
+                  //                       ListTile(
+                  //               leading: Icon(Icons.person),
+                  //               title: Text('Add Daily sales report'),
+                  //               onTap: () {
+                  //                 Navigator.push(context,
+                  //                     MaterialPageRoute(builder: (context) => AddDailySalesReport()));
+                  //                 // Navigate to the Settings page or perform any other action
+                  //               },
+                  //             ),
 
-                //               ListTile(
-                //               leading: Icon(Icons.person),
-                //               title: Text('Daily BDO sales report'),
-                //               onTap: () {
-                //                 Navigator.push(context,
-                //                     MaterialPageRoute(builder: (context) => DailySalesReportViewPage()));
-                //                 // Navigate to the Settings page or perform any other action
-                //               },
-                //             ),
+                  //               ListTile(
+                  //               leading: Icon(Icons.person),
+                  //               title: Text('Daily BDO sales report'),
+                  //               onTap: () {
+                  //                 Navigator.push(context,
+                  //                     MaterialPageRoute(builder: (context) => DailySalesReportViewPage()));
+                  //                 // Navigate to the Settings page or perform any other action
+                  //               },
+                  //             ),
 
-                //               ListTile(
-                //               leading: Icon(Icons.person),
-                //               title: Text('All Users sales report'),
-                //               onTap: () {
-                //                 Navigator.push(
-                //                     context,
-                //                     MaterialPageRoute(
-                //                         builder: (context) =>
-                //                             AllUsersDailySalesReportPage()));
-                //                 // Navigate to the Settings page or perform any other action
-                //               },
-                //             ),
+                  //               ListTile(
+                  //               leading: Icon(Icons.person),
+                  //               title: Text('All Users sales report'),
+                  //               onTap: () {
+                  //                 Navigator.push(
+                  //                     context,
+                  //                     MaterialPageRoute(
+                  //                         builder: (context) =>
+                  //                             AllUsersDailySalesReportPage()));
+                  //                 // Navigate to the Settings page or perform any other action
+                  //               },
+                  //             ),
 
-                //              ListTile(
-                //               leading: Icon(Icons.person),
-                //               title: Text('Categorywise sales report'),
-                //               onTap: () {
-                //                 Navigator.push(
-                //                     context,
-                //                     MaterialPageRoute(
-                //                         builder: (context) =>
-                //                             CategorywiseSalesReport()));
-                //                 // Navigate to the Settings page or perform any other action
-                //               },
-                //             ),
-                //  ListTile(
-                //               leading: Icon(Icons.person),
-                //               title: Text('All users Categorywise sales report'),
-                //               onTap: () {
-                //                 Navigator.push(
-                //                     context,
-                //                     MaterialPageRoute(
-                //                         builder: (context) =>
-                //                             UserwiseCategorywiseSalesReport()));
-                //                 // Navigate to the Settings page or perform any other action
-                //               },
-                //             ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Company'),
-                  onTap: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (context) => add_company()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Country'),
-                  onTap: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (context) => add_country()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Currency'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_currency()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Approve Products'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => Approve_products()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Add EMI'),
-                  onTap: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (context) => add_Emi()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Asset Management'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => AssetManegment()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  //              ListTile(
+                  //               leading: Icon(Icons.person),
+                  //               title: Text('Categorywise sales report'),
+                  //               onTap: () {
+                  //                 Navigator.push(
+                  //                     context,
+                  //                     MaterialPageRoute(
+                  //                         builder: (context) =>
+                  //                             CategorywiseSalesReport()));
+                  //                 // Navigate to the Settings page or perform any other action
+                  //               },
+                  //             ),
+                  //  ListTile(
+                  //               leading: Icon(Icons.person),
+                  //               title: Text('All users Categorywise sales report'),
+                  //               onTap: () {
+                  //                 Navigator.push(
+                  //                     context,
+                  //                     MaterialPageRoute(
+                  //                         builder: (context) =>
+                  //                             UserwiseCategorywiseSalesReport()));
+                  //                 // Navigate to the Settings page or perform any other action
+                  //               },
+                  //             ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Company'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_company()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Country'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_country()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Currency'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_currency()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Approve Products'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => Approve_products()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Add EMI'),
+                    onTap: () {
+                      Navigator.push(context,
+                          MaterialPageRoute(builder: (context) => add_Emi()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Asset Management'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => AssetManegment()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Category'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_categories()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Bulk Upload Orders'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => UploadBulkProducts()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  // ListTile(
+                  //   leading: Icon(Icons.person),
+                  //   title: Text('Product Stock Report Page'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //       context,
+                  //       MaterialPageRoute(
+                  //         builder: (context) => ProductStockReportPage(
+                  //           warehouseId: selectedWarehouseId,
+                  //           fromDate: fromDate,
+                  //           toDate: toDate,
+                  //         ),
+                  //       ),
+                  //     );
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Bulk Upload Customers'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => UploadBulkcustomer()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  //   },
+                  // ),
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Add Purpose of payment'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_purpose_of_payment()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                //   ListTile(
-                //   leading: Icon(Icons.person),
-                //   title: Text('Bulk Upload'),
-                //   onTap: () {
-                //     Navigator.push(context,
-                //         MaterialPageRoute(builder: (context) => OrderBulkUpload()));
-                //     // Navigate to the Settings page or perform any other action
-                //   },
-                // ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Category'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_categories()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Bulk Upload Orders'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => UploadBulkProducts()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                // ListTile(
-                //   leading: Icon(Icons.person),
-                //   title: Text('Add Team'),
-                //   onTap: () {
-                //     Navigator.push(context,
-                //         MaterialPageRoute(builder: (context) => AddTeam()));
-                //     // Navigate to the Settings page or perform any other action
-                //   },
-                // ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Bulk Upload Customers'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => UploadBulkcustomer()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                // ListTile(
-                //   leading: Icon(Icons.person),
-                //   title: Text('Team wise Report'),
-                //   onTap: () {
-                //     Navigator.push(
-                //         context,
-                //         MaterialPageRoute(
-                //             builder: (context) => TeamWiseReport()));
-                //     // Navigate to the Settings page or perform any other action
-                //   },
-                // ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Departments'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_department()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Supervisors'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_supervisor()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Division'),
-                  onTap: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (context) => add_family()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Bank'),
-                  onTap: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (context) => add_bank()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Add Purpose of payment'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_purpose_of_payment()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  //   ListTile(
+                  //   leading: Icon(Icons.person),
+                  //   title: Text('Bulk Upload'),
+                  //   onTap: () {
+                  //     Navigator.push(context,
+                  //         MaterialPageRoute(builder: (context) => OrderBulkUpload()));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('States'),
-                  onTap: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (context) => add_state()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  // ListTile(
+                  //   leading: Icon(Icons.person),
+                  //   title: Text('Add Team'),
+                  //   onTap: () {
+                  //     Navigator.push(context,
+                  //         MaterialPageRoute(builder: (context) => AddTeam()));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Warehouse'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_warehouse()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Attributes'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => add_attribute()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  // ListTile(
+                  //   leading: Icon(Icons.person),
+                  //   title: Text('Team wise Report'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //         context,
+                  //         MaterialPageRoute(
+                  //             builder: (context) => TeamWiseReport()));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Departments'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_department()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Supervisors'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_supervisor()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Division'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_family()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Bank'),
+                    onTap: () {
+                      Navigator.push(context,
+                          MaterialPageRoute(builder: (context) => add_bank()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Services'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => CourierServices()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('States'),
+                    onTap: () {
+                      Navigator.push(context,
+                          MaterialPageRoute(builder: (context) => add_state()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                //  ListTile(
-                //   leading: Icon(Icons.person),
-                //   title: Text('Delivery Notes'),
-                //   onTap: () {
-                //     Navigator.push(
-                //         context,
-                //         MaterialPageRoute(
-                //             builder: (context) => WarehouseOrderView(status: null,)));
-                //     // Navigate to the Settings page or perform any other action
-                //   },
-                // ),
-                Divider(),
-                ListTile(
-                  // leading: Icon(Icons.skateboarding),
-                  title: Text('Family Wise Excel Report'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) =>
-                                CyclingskatingCategoryDailyProductwiseReport()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Warehouse'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_warehouse()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Attributes'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => add_attribute()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                ListTile(
-                  title: Text('Daily Sales Report (DSR)'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) =>
-                                AllUsersDailySalesReportPage()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Services'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => CourierServices()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                //   ListTile(
-                //   leading: Icon(Icons.person),
-                //   title: Text('Categorywise sales report'),
-                //   onTap: () {
-                //     Navigator.push(
-                //         context,
-                //         MaterialPageRoute(
-                //             builder: (context) => CategorywiseSalesReport()));
-                //     // Navigate to the Settings page or perform any other action
-                //   },
-                // ),
+                  //  ListTile(
+                  //   leading: Icon(Icons.person),
+                  //   title: Text('Delivery Notes'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //         context,
+                  //         MaterialPageRoute(
+                  //             builder: (context) => WarehouseOrderView(status: null,)));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
+                  Divider(),
+                  ListTile(
+                    // leading: Icon(Icons.skateboarding),
+                    title: Text('Family Wise Excel Report'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  CyclingskatingCategoryDailyProductwiseReport()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                ListTile(
-                  title: Text('Categorywise sales report'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) =>
-                                UserwiseCategorywiseSalesReport()));
-                    // Navigate to the Settings page or perform any other action
-                  },
-                ),
+                  ListTile(
+                    title: Text('Daily Sales Report (DSR)'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  AllUsersDailySalesReportPage()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                _buildDropdownTile(
-                    context, 'BDO Daily Sales Report', ['BDO Call List']),
+                  //   ListTile(
+                  //   leading: Icon(Icons.person),
+                  //   title: Text('Categorywise sales report'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //         context,
+                  //         MaterialPageRoute(
+                  //             builder: (context) => CategorywiseSalesReport()));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
 
-                _buildDropdownTile(context, 'Reports', [
-                  'Sales Report',
-                  'Sales Report Excel',
-                  'Daily Product Sold Report',
-                  // 'All Division Product Sale Report',
-                  // 'Cycling & Skating Monthly Excel',
-                  // 'Cycling & Skating Daily Excel',
-                  'Tracking Report',
-                  'Credit Sales Report',
-                  'COD Sales Report',
-                  'Statewise Sales Report',
-                  'Expence Report',
-                  'Delivery Report',
-                  'Product Sale Report',
-                  'Stock Report',
-                  'Damaged Stock',
-                  'Finance Report',
-                  'Actual Delivery Report',
-                ]),
+                  ListTile(
+                    title: Text('Categorywise sales report'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  UserwiseCategorywiseSalesReport()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
 
-                _buildDropdownTile(context, 'Staff', [
-                  'Add Staff',
-                  'Staff',
-                  'Staff Exit Form',
-                  'Staff Exit List',
-                ]),
-                // _buildDropdownTile(context, 'Credit Note', [
-                //   'Add Credit Note',
-                //   'Credit Note List',
-                // ]),
+                  _buildDropdownTile(
+                      context, 'BDO Daily Sales Report', ['BDO Call List']),
 
-                Divider(),
+                  _buildDropdownTile(context, 'Reports', [
+                    'Sales Report',
+                    'Sales Report Excel',
+                    'GST Report',
+                    'Product Stock Report',
+                    'Order Items Excel Report',
+                    'Shipping Address Excel Report',
+                    'Daily Product Sold Report',
+                    // 'All Division Product Sale Report',
+                    // 'Cycling & Skating Monthly Excel',
+                    // 'Cycling & Skating Daily Excel',
+                    'Tracking Report',
+                    'Credit Sales Report',
+                    'COD Sales Report',
+                    'Statewise Sales Report',
+                    'Expence Report',
+                    'Delivery Report',
+                    'Product Sale Report',
+                    'Stock Report',
+                    'Damaged Stock',
+                    'Finance Report',
+                    'Actual Delivery Report',
+                  ]),
 
-                ListTile(
-                  leading: const Icon(Icons.logout),
-                  title: const Text('Logout'),
-                  onTap: () async {
-                    await logoutUser(context);
-                  },
-                ),
-                SizedBox(height: 50), // Add some space at the bottom
-              ],
+                  _buildDropdownTile(context, 'Staff', [
+                    'Add Staff',
+                    'Staff',
+                    'Staff Exit Form',
+                    'Staff Exit List',
+                  ]),
+                  // _buildDropdownTile(context, 'Credit Note', [
+                  //   'Add Credit Note',
+                  //   'Credit Note List',
+                  // ]),
+
+                  Divider(),
+
+                  ListTile(
+                    leading: const Icon(Icons.logout),
+                    title: const Text('Logout'),
+                    onTap: () async {
+                      await logoutUser(context);
+                    },
+                  ),
+                  SizedBox(height: 50), // Add some space at the bottom
+                ],
+              ),
             ),
           ),
           body: SingleChildScrollView(
