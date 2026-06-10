@@ -14,6 +14,27 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+class _TaxColumnConfig {
+  final double originalTaxPercentage;
+  final double displayTaxPercentage;
+  final bool isKeralaSplit;
+  final int splitIndex;
+
+  const _TaxColumnConfig({
+    required this.originalTaxPercentage,
+    required this.displayTaxPercentage,
+    required this.isKeralaSplit,
+    required this.splitIndex,
+  });
+
+  String get key {
+    if (isKeralaSplit) {
+      return 'split_${originalTaxPercentage}_$splitIndex';
+    }
+    return 'full_$originalTaxPercentage';
+  }
+}
+
 class OrderItemsExcelReport extends StatefulWidget {
   final int warehouseId;
 
@@ -116,36 +137,97 @@ class _OrderItemsExcelReportState extends State<OrderItemsExcelReport> {
 
   String _formatAmount(dynamic value) {
     final double amount = double.tryParse(value.toString()) ?? 0.0;
-    return amount.toStringAsFixed(2);
+    return amount.round().toString();
   }
 
   String _formatQuantity(dynamic value) {
     final double qty = double.tryParse(value.toString()) ?? 0.0;
-    if (qty == qty.roundToDouble()) {
-      return qty.toInt().toString();
-    }
-    return qty.toStringAsFixed(2);
+    return qty.round().toString();
   }
 
-  List<double> _getAvailableTaxPercentages() {
-    final Set<double> taxPercentages = {};
+  // String _formatAmount(dynamic value) {
+  //   final double amount = double.tryParse(value.toString()) ?? 0.0;
+  //   return amount.toStringAsFixed(2);
+  // }
+
+  // String _formatQuantity(dynamic value) {
+  //   final double qty = double.tryParse(value.toString()) ?? 0.0;
+  //   if (qty == qty.roundToDouble()) {
+  //     return qty.toInt().toString();
+  //   }
+  //   return qty.toStringAsFixed(2);
+  // }
+
+  bool _isKeralaState(Map<String, dynamic> item) {
+    final String state = item['state']?.toString().trim().toLowerCase() ?? '';
+    return state == 'kerala';
+  }
+
+  List<_TaxColumnConfig> _getAvailableTaxColumns() {
+    final Map<String, _TaxColumnConfig> taxColumnMap = {};
 
     for (final Map<String, dynamic> item in _orderItems) {
       final double taxPercentage =
           double.tryParse(item['tax_percentage']?.toString() ?? '0') ?? 0.0;
 
-      if (taxPercentage > 0) {
-        taxPercentages.add(taxPercentage);
+      if (taxPercentage <= 0) {
+        continue;
+      }
+
+      if (_isKeralaState(item)) {
+        final double halfTaxPercentage = taxPercentage / 2;
+
+        final _TaxColumnConfig firstHalfColumn = _TaxColumnConfig(
+          originalTaxPercentage: taxPercentage,
+          displayTaxPercentage: halfTaxPercentage,
+          isKeralaSplit: true,
+          splitIndex: 1,
+        );
+
+        final _TaxColumnConfig secondHalfColumn = _TaxColumnConfig(
+          originalTaxPercentage: taxPercentage,
+          displayTaxPercentage: halfTaxPercentage,
+          isKeralaSplit: true,
+          splitIndex: 2,
+        );
+
+        taxColumnMap[firstHalfColumn.key] = firstHalfColumn;
+        taxColumnMap[secondHalfColumn.key] = secondHalfColumn;
+      } else {
+        final _TaxColumnConfig fullTaxColumn = _TaxColumnConfig(
+          originalTaxPercentage: taxPercentage,
+          displayTaxPercentage: taxPercentage,
+          isKeralaSplit: false,
+          splitIndex: 0,
+        );
+
+        taxColumnMap[fullTaxColumn.key] = fullTaxColumn;
       }
     }
 
-    final List<double> sortedTaxPercentages = taxPercentages.toList();
-    sortedTaxPercentages.sort();
+    final List<_TaxColumnConfig> taxColumns = taxColumnMap.values.toList();
 
-    return sortedTaxPercentages;
+    taxColumns.sort((a, b) {
+      final int originalCompare =
+          a.originalTaxPercentage.compareTo(b.originalTaxPercentage);
+
+      if (originalCompare != 0) {
+        return originalCompare;
+      }
+
+      if (a.isKeralaSplit != b.isKeralaSplit) {
+        return a.isKeralaSplit ? -1 : 1;
+      }
+
+      return a.splitIndex.compareTo(b.splitIndex);
+    });
+
+    return taxColumns;
   }
 
-  String _formatTaxColumnTitle(double taxPercentage) {
+  String _formatTaxColumnTitle(_TaxColumnConfig taxColumn) {
+    final double taxPercentage = taxColumn.displayTaxPercentage;
+
     if (taxPercentage == taxPercentage.roundToDouble()) {
       return 'Tax ${taxPercentage.toInt()}%';
     }
@@ -153,18 +235,33 @@ class _OrderItemsExcelReportState extends State<OrderItemsExcelReport> {
     return 'Tax ${taxPercentage.toStringAsFixed(2)}%';
   }
 
-  String _getTaxValueForPercentage(
+  String _getTaxValueForColumn(
     Map<String, dynamic> item,
-    double columnTaxPercentage,
+    _TaxColumnConfig taxColumn,
   ) {
     final double itemTaxPercentage =
         double.tryParse(item['tax_percentage']?.toString() ?? '0') ?? 0.0;
 
-    if (itemTaxPercentage == columnTaxPercentage) {
-      return _formatAmount(item['tax']);
+    final double itemTaxAmount =
+        double.tryParse(item['tax']?.toString() ?? '0') ?? 0.0;
+
+    if (itemTaxPercentage != taxColumn.originalTaxPercentage) {
+      return '';
     }
 
-    return '';
+    if (_isKeralaState(item)) {
+      if (!taxColumn.isKeralaSplit) {
+        return '';
+      }
+
+      return _formatAmount(itemTaxAmount / 2);
+    }
+
+    if (taxColumn.isKeralaSplit) {
+      return '';
+    }
+
+    return _formatAmount(itemTaxAmount);
   }
 
   Future<void> fetchCompanies() async {
@@ -342,7 +439,7 @@ class _OrderItemsExcelReportState extends State<OrderItemsExcelReport> {
 
       ex.Sheet sheet = excel["Order Items Report"];
 
-      final List<double> taxPercentages = _getAvailableTaxPercentages();
+      final List<_TaxColumnConfig> taxColumns = _getAvailableTaxColumns();
 
       sheet.setColWidth(0, 14); // DATE
       sheet.setColWidth(1, 18); // STATE
@@ -354,11 +451,11 @@ class _OrderItemsExcelReportState extends State<OrderItemsExcelReport> {
       sheet.setColWidth(7, 12); // per
       sheet.setColWidth(8, 18); // item basic amt
 
-      for (int i = 0; i < taxPercentages.length; i++) {
+      for (int i = 0; i < taxColumns.length; i++) {
         sheet.setColWidth(9 + i, 14);
       }
 
-      sheet.setColWidth(9 + taxPercentages.length, 16);
+      sheet.setColWidth(9 + taxColumns.length, 16);
 
       final List<String> headers = [
         'DATE',
@@ -370,7 +467,7 @@ class _OrderItemsExcelReportState extends State<OrderItemsExcelReport> {
         'item rate',
         'per',
         'item basic amt',
-        ...taxPercentages.map((tax) => _formatTaxColumnTitle(tax)),
+        ...taxColumns.map((taxColumn) => _formatTaxColumnTitle(taxColumn)),
         'total amount',
       ];
 
@@ -397,8 +494,8 @@ class _OrderItemsExcelReportState extends State<OrderItemsExcelReport> {
           _formatAmount(item['item_rate']),
           item['unit']?.toString() ?? '',
           _formatAmount(item['item_basic_amount']),
-          ...taxPercentages.map(
-            (taxPercentage) => _getTaxValueForPercentage(item, taxPercentage),
+          ...taxColumns.map(
+            (taxColumn) => _getTaxValueForColumn(item, taxColumn),
           ),
           _formatAmount(item['total_amount']),
         ];
@@ -881,7 +978,7 @@ class _OrderItemsExcelReportState extends State<OrderItemsExcelReport> {
         ),
       );
     }
-    final List<double> taxPercentages = _getAvailableTaxPercentages();
+    final List<_TaxColumnConfig> taxColumns = _getAvailableTaxColumns();
     return Container(
       margin: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -898,10 +995,10 @@ class _OrderItemsExcelReportState extends State<OrderItemsExcelReport> {
           child: SingleChildScrollView(
             controller: _horizontalTableController,
             scrollDirection: Axis.horizontal,
-            physics: const ClampingScrollPhysics(),
+            physics: const BouncingScrollPhysics(),
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                minWidth: 1240 + (taxPercentages.length * 110),
+                minWidth: 1240 + (taxColumns.length * 110),
               ),
               child: DataTable(
                 headingRowColor: WidgetStateProperty.all(
@@ -932,9 +1029,9 @@ class _OrderItemsExcelReportState extends State<OrderItemsExcelReport> {
                   const DataColumn(label: Text('Rate')),
                   const DataColumn(label: Text('Unit')),
                   const DataColumn(label: Text('Basic Amount')),
-                  ...taxPercentages.map(
-                    (taxPercentage) => DataColumn(
-                      label: Text(_formatTaxColumnTitle(taxPercentage)),
+                  ...taxColumns.map(
+                    (taxColumn) => DataColumn(
+                      label: Text(_formatTaxColumnTitle(taxColumn)),
                     ),
                   ),
                   const DataColumn(label: Text('Total')),
@@ -988,9 +1085,9 @@ class _OrderItemsExcelReportState extends State<OrderItemsExcelReport> {
                       DataCell(Text(_formatAmount(item['item_rate']))),
                       DataCell(Text(item['unit']?.toString() ?? '')),
                       DataCell(Text(_formatAmount(item['item_basic_amount']))),
-                      ...taxPercentages.map(
-                        (taxPercentage) => DataCell(
-                          Text(_getTaxValueForPercentage(item, taxPercentage)),
+                      ...taxColumns.map(
+                        (taxColumn) => DataCell(
+                          Text(_getTaxValueForColumn(item, taxColumn)),
                         ),
                       ),
                       DataCell(
@@ -1176,7 +1273,9 @@ class _OrderItemsExcelReportState extends State<OrderItemsExcelReport> {
         child: RefreshIndicator(
           onRefresh: _handleRefresh,
           child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
             child: Column(
               children: [
                 _buildSummaryCard(),

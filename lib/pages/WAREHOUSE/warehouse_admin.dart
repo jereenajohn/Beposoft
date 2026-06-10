@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/order_list.dart';
+import 'package:beposoft/pages/ADMIN/add_attendance.dart';
+import 'package:beposoft/pages/ADMIN/add_team_staff.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_order_request_list.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_order_view.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_product_approval.dart';
@@ -38,11 +40,13 @@ class _WarehouseAdminState extends State<WarehouseAdmin> {
   List<Map<String, dynamic>> shippedOrders = [];
 
   String? username = '';
+  bool isManager = false;
   @override
   void initState() {
     super.initState();
     _getUsername(); // Get the username when the page loads
     getGrvList();
+      getProfile();
     fetchproformaData();
     getSalesReport();
     fetchOrderData();
@@ -50,6 +54,32 @@ class _WarehouseAdminState extends State<WarehouseAdmin> {
     checkAppUpdate(context);
   });
   }
+
+  Future<void> getProfile() async {
+  try {
+    final token = await getTokenFromPrefs();
+
+    final response = await http.get(
+      Uri.parse('$api/api/profile/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final parsed = jsonDecode(response.body);
+
+      setState(() {
+        isManager = parsed['data']['is_manager'] ?? false;
+      });
+
+      debugPrint("IS MANAGER : $isManager");
+    }
+  } catch (e) {
+    debugPrint("PROFILE ERROR : $e");
+  }
+}
 
 int toprint=0;
 int packed=0;
@@ -507,8 +537,8 @@ Future<bool> checkAppUpdate(BuildContext context) async {
              
               
               _buildDropdownTile(context, 'Delivery Note',
-                  ['Delivery Note List', 'Daily Goods Movement']),
-             
+                  ['Delivery Note List(All)','Delivery Note List(To Print)','Delivery Note List(Packing under Progress)','Delivery Note List(Packed)','Delivery Note List(Ready to ship)','Delivery Note List(Shipped)', 'Daily Goods Movement']),
+           
              
               _buildDropdownTile(
                   context, 'GRV', ['Create New GRV', 'GRVs List']),
@@ -516,6 +546,20 @@ Future<bool> checkAppUpdate(BuildContext context) async {
                 title: Text('Order Requests'),
                 onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (context) => Warehouse_Order_Request(status: null,)));
+                },
+              ),
+              if (isManager)
+              ListTile(
+                title: Text('Add Team Staff'),
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => StaffAttendanceTeamMemberScreen()));
+                },
+              ),
+              if (isManager)
+              ListTile(
+                title: Text('Add Attendance'),
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => StaffMarkAttendanceScreen()));
                 },
               ),
               Divider(),

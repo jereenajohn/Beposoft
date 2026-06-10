@@ -5,7 +5,10 @@ import 'package:beposoft/pages/ACCOUNTS/dorwer.dart';
 import 'package:beposoft/pages/ACCOUNTS/profilepage.dart';
 import 'package:beposoft/pages/ACCOUNTS/staff_exit_form_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/view_staff.dart';
+import 'package:beposoft/pages/HR/EmployeeLeaveListPage.dart';
+import 'package:beposoft/pages/HR/add_teamlead.dart';
 import 'package:beposoft/pages/HR/attendance.dart';
+import 'package:beposoft/pages/HR/staff_attendance.dart';
 import 'package:beposoft/pages/logout_hekper.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -249,6 +252,29 @@ Widget _buildDropdownTile(
               onTap: () {
                 Navigator.push(context,
                     MaterialPageRoute(builder: (context) => EmployeeExitListPage()));
+              },
+            ),
+
+             ListTile(
+              title: Text('Employee Leave List'),
+              onTap: () {
+                Navigator.push(context,
+                    MaterialPageRoute(builder: (context) => EmployeeLeaveListPage()));
+              },
+              
+            ),
+            ListTile(
+              title: Text('Add Manager'),
+              onTap: () {
+                Navigator.push(context,
+                    MaterialPageRoute(builder: (context) => StaffAttendanceTeamScreen()));
+              },
+            ),
+            ListTile(
+              title: Text('Staff Attendance'),
+              onTap: () {
+                Navigator.push(context,
+                    MaterialPageRoute(builder: (context) => HrTeamAttendanceScreen()));
               },
             ),
 

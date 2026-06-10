@@ -37,15 +37,15 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:excel/excel.dart';
 import 'package:open_filex/open_filex.dart';
 
-class OrderList extends StatefulWidget {
+class bepocartOrderList extends StatefulWidget {
   var status;
-  OrderList({super.key, required this.status}); 
+  bepocartOrderList({super.key, required this.status});
 
   @override
-  State<OrderList> createState() => _OrderListState();
+  State<bepocartOrderList> createState() => _bepocartOrderListState();
 }
 
-class _OrderListState extends State<OrderList> {
+class _bepocartOrderListState extends State<bepocartOrderList> {
   List<Map<String, dynamic>> orders = [];
   List<Map<String, dynamic>> filteredOrders = [];
   String searchQuery = '';
@@ -53,11 +53,12 @@ class _OrderListState extends State<OrderList> {
   bool isLoadingMore = false;
   bool hasNextPage = true;
   int totalPages = 1;
-  int pageSize = 20; // DRF default page size
+  int pageSize = 20;
 
-  DateTime? selectedDate; // For single date filter
-  DateTime? startDate; // For date range filter
-  DateTime? endDate; // For date range filter
+  DateTime? selectedDate;
+  DateTime? startDate;
+  DateTime? endDate;
+
   List<String> orderStatuses = [
     'All',
     'Invoice Created',
@@ -69,10 +70,10 @@ class _OrderListState extends State<OrderList> {
     'To Print',
     'Shipped',
     'Invoice Rejected',
-    // Add other statuses as needed
   ];
 
-  String selectedStatus = 'All'; // Default value
+  String selectedStatus = 'All';
+
   void _filterOrdersByStatus(String status) {
     if (status == 'All') {
       setState(() {
@@ -88,6 +89,7 @@ class _OrderListState extends State<OrderList> {
   }
 
   drower d = drower();
+
   Widget _buildDropdownTile(
       BuildContext context, String title, List<String> options) {
     return ExpansionTile(
@@ -97,8 +99,7 @@ class _OrderListState extends State<OrderList> {
           title: Text(option),
           onTap: () {
             Navigator.pop(context);
-            d.navigateToSelectedPage(
-                context, option); // Navigate to selected page
+            d.navigateToSelectedPage(context, option);
           },
         );
       }).toList(),
@@ -119,6 +120,18 @@ class _OrderListState extends State<OrderList> {
   Future<String?> getdepFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('department');
+  }
+
+  bool _isBepocartFamilyOrder(Map<String, dynamic> orderData) {
+    final rawFamilyName = (orderData['family_name'] ??
+            orderData['familyName'] ??
+            orderData['family'] ??
+            '')
+        .toString()
+        .toLowerCase()
+        .trim();
+
+    return rawFamilyName == 'bepocart';
   }
 
   Future<void> fetchOrderData() async {
@@ -159,7 +172,14 @@ class _OrderListState extends State<OrderList> {
         List<Map<String, dynamic>> newOrders = [];
 
         for (var orderData in ordersData) {
-          if (widget.status == null || widget.status == orderData['status']) {
+          final bool isBepocartOrder = _isBepocartFamilyOrder(
+            Map<String, dynamic>.from(orderData),
+          );
+
+          final bool statusMatched =
+              widget.status == null || widget.status == orderData['status'];
+
+          if (isBepocartOrder && statusMatched) {
             newOrders.add({
               'id': orderData['id'],
               'invoice': orderData['invoice'],
@@ -172,6 +192,8 @@ class _OrderListState extends State<OrderList> {
               'items': orderData['items'] ?? [],
               'billing_address': orderData['billing_address'] ?? {},
               'bank': orderData['bank'] ?? {},
+              'family': orderData['family'],
+              'family_name': orderData['family_name'],
             });
           }
         }
@@ -210,7 +232,6 @@ class _OrderListState extends State<OrderList> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // PREVIOUS BUTTON
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor:
@@ -228,8 +249,6 @@ class _OrderListState extends State<OrderList> {
                   },
             child: const Text("Prev"),
           ),
-
-          // PAGE TEXT
           Text(
             "Page $currentPage / $totalPages",
             style: const TextStyle(
@@ -237,8 +256,6 @@ class _OrderListState extends State<OrderList> {
               fontWeight: FontWeight.w600,
             ),
           ),
-
-          // NEXT BUTTON
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: currentPage == totalPages
@@ -270,7 +287,6 @@ class _OrderListState extends State<OrderList> {
     fetchOrderData();
   }
 
-  // Method to filter orders by single date
   void _filterOrdersBySingleDate() {
     if (selectedDate != null) {
       setState(() {
@@ -282,8 +298,6 @@ class _OrderListState extends State<OrderList> {
     }
   }
 
-  // Method to filter orders between two dates
-  // Method to filter orders between two dates, inclusive of start and end dates
   void _filterOrdersByDateRange() {
     if (startDate != null && endDate != null) {
       setState(() {
@@ -331,7 +345,6 @@ class _OrderListState extends State<OrderList> {
     await prefs.remove('userId');
     await prefs.remove('token');
 
-    // Use a post-frame callback to show the SnackBar after the current frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (ScaffoldMessenger.of(context).mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -343,10 +356,8 @@ class _OrderListState extends State<OrderList> {
       }
     });
 
-    // Wait for the SnackBar to disappear before navigating
     await Future.delayed(Duration(seconds: 2));
 
-    // Navigate to the HomePage after the snackbar is shown
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => login()),
@@ -357,7 +368,6 @@ class _OrderListState extends State<OrderList> {
     var excel = Excel.createExcel();
     Sheet sheetObject = excel['Order List'];
 
-    // Add header row
     sheetObject.appendRow([
       'Invoice',
       'Manager',
@@ -384,11 +394,11 @@ class _OrderListState extends State<OrderList> {
       'Order Status',
       'Total Amount',
       'Order Date',
+      'Family',
+      'Family Name',
     ]);
 
-    // Populate rows with data
     for (var order in filteredOrders) {
-      // Iterate through items to create separate rows for each item
       for (var item in order['items']) {
         sheetObject.appendRow([
           order['invoice'] ?? '',
@@ -416,24 +426,23 @@ class _OrderListState extends State<OrderList> {
           order['status'] ?? '',
           order['total_amount'] ?? '',
           order['order_date'] ?? '',
+          order['family'] ?? '',
+          order['family_name'] ?? '',
         ]);
       }
     }
 
-    // Save the Excel file
     final tempDir = await getTemporaryDirectory();
     final tempPath = "${tempDir.path}/order_list.xlsx";
     final tempFile = File(tempPath);
     await tempFile.writeAsBytes(await excel.encode()!);
 
-    // Open the file
     await OpenFilex.open(tempPath);
   }
 
   Future<pw.Document> createPdf() async {
     final pdf = pw.Document();
 
-    // Iterate through each order and add a new page for it
     for (var order in filteredOrders) {
       pdf.addPage(
         pw.Page(
@@ -444,7 +453,6 @@ class _OrderListState extends State<OrderList> {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  // Title Section
                   pw.Center(
                     child: pw.Text(
                       'Order Details',
@@ -455,16 +463,13 @@ class _OrderListState extends State<OrderList> {
                     ),
                   ),
                   pw.SizedBox(height: 20),
-
-                  // Invoice and Manager
                   pw.Text(
                     'Invoice: ${order['invoice']}',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                   ),
                   pw.Text('Manager: ${order['manage_staff'] ?? ''}'),
+                  pw.Text('Family: ${order['family_name'] ?? order['family'] ?? ''}'),
                   pw.SizedBox(height: 10),
-
-                  // Customer Details
                   pw.Text(
                     'Customer Details',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
@@ -474,8 +479,6 @@ class _OrderListState extends State<OrderList> {
                   pw.Text('Email: ${order['customer']['email'] ?? ''}'),
                   pw.Text('Address: ${order['customer']['address'] ?? ''}'),
                   pw.SizedBox(height: 10),
-
-                  // Billing Address
                   pw.Text(
                     'Billing Address',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
@@ -490,8 +493,6 @@ class _OrderListState extends State<OrderList> {
                   pw.Text(
                       'Zipcode: ${order['billing_address']['zipcode'] ?? ''}'),
                   pw.SizedBox(height: 10),
-
-                  // Bank Details
                   pw.Text(
                     'Bank Details',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
@@ -502,8 +503,6 @@ class _OrderListState extends State<OrderList> {
                   pw.Text('IFSC Code: ${order['bank']['ifsc_code'] ?? ''}'),
                   pw.Text('Branch: ${order['bank']['branch'] ?? ''}'),
                   pw.SizedBox(height: 10),
-
-                  // Items Table
                   pw.Text(
                     'Items',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
@@ -538,8 +537,6 @@ class _OrderListState extends State<OrderList> {
                     ),
                   ),
                   pw.SizedBox(height: 10),
-
-                  // Order Summary
                   pw.Text(
                     'Order Summary',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
@@ -572,58 +569,42 @@ class _OrderListState extends State<OrderList> {
     if (dep == "BDO") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                bdo_dashbord()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => bdo_dashbord()),
       );
     } else if (dep == "BDM") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                bdm_dashbord()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => bdm_dashbord()),
       );
     } else if (dep == "warehouse") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                WarehouseDashboard()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => WarehouseDashboard()),
       );
     } else if (dep == "CEO") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                ceo_dashboard()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
       );
     } else if (dep == "COO") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                ceo_dashboard()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
       );
     } else if (dep == "CSO") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                cso_dashboard()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => cso_dashboard()),
       );
     } else if (dep == "Marketing") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                marketing_dashboard()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => marketing_dashboard()),
       );
     } else if (dep == "Warehouse Admin") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                WarehouseAdmin()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => WarehouseAdmin()),
       );
     } else {
       Navigator.pushReplacement(
@@ -633,106 +614,299 @@ class _OrderListState extends State<OrderList> {
     }
   }
 
+  Widget _buildOrderCard(Map<String, dynamic> order) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3.0),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => OrderReview(
+                id: order['id'],
+                customer: order['customer']['id'],
+              ),
+            ),
+          );
+        },
+        child: Card(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15.0),
+          ),
+          color: Colors.white,
+          elevation: 4,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.blue,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(15.0),
+                    topRight: Radius.circular(15.0),
+                  ),
+                ),
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '#${order['invoice']}',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      DateFormat('dd MMM yy').format(
+                        DateTime.parse(order['order_date']),
+                      ),
+                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Customer: ${order['customer']['name']}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 4.0),
+                    Text(
+                      'Staff: ${order['manage_staff']}',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    SizedBox(height: 4.0),
+                    Text(
+                      'Family: ${order['family_name'] ?? order['family'] ?? ''}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.deepPurple,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 4.0),
+                    Row(
+                      children: [
+                        Text(
+                          'Status: ',
+                          style: TextStyle(fontSize: 13),
+                        ),
+                        Text(
+                          '${order['status']}',
+                          style: TextStyle(fontSize: 13, color: Colors.blue),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 4.0),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Billing Amount:',
+                          style: TextStyle(fontSize: 13),
+                        ),
+                        Text(
+                          '${(order['total_amount'] as num).toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (order['warehouse'] != null &&
+                        (order['warehouse'] as List).isNotEmpty) ...[
+                      SizedBox(height: 5.0),
+                      Text(
+                        'Warehouse Info:',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                          color: Colors.blue.shade900,
+                        ),
+                      ),
+                      SizedBox(height: 4.0),
+                      Table(
+                        border: TableBorder.symmetric(
+                          inside: BorderSide(color: Colors.grey.shade300),
+                          outside: BorderSide(
+                            color: Colors.grey.shade400,
+                            width: 1,
+                          ),
+                        ),
+                        columnWidths: {
+                          0: FlexColumnWidth(1),
+                          1: FlexColumnWidth(2),
+                          2: FlexColumnWidth(3),
+                        },
+                        defaultVerticalAlignment:
+                            TableCellVerticalAlignment.middle,
+                        children: [
+                          TableRow(
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                            ),
+                            children: [
+                              Padding(
+                                padding: EdgeInsets.symmetric(
+                                  vertical: 8.0,
+                                  horizontal: 6.0,
+                                ),
+                                child: Text(
+                                  'Box',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue.shade900,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: EdgeInsets.symmetric(
+                                  vertical: 8.0,
+                                  horizontal: 6.0,
+                                ),
+                                child: Text(
+                                  'Tracking ID',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue.shade900,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          ...(order['warehouse'] as List).map<TableRow>((wh) {
+                            return TableRow(
+                              decoration: BoxDecoration(color: Colors.white),
+                              children: [
+                                Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Text(
+                                    wh['box'] ?? 'N/A',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: SelectableText(
+                                    wh['tracking_id'] ?? 'N/A',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList(),
+                        ],
+                      ),
+                    ] else
+                      Text(
+                        'No warehouse data available',
+                        style: TextStyle(color: Colors.red, fontSize: 12),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBackButtonByDepartment() {
+    return IconButton(
+      icon: const Icon(Icons.arrow_back),
+      onPressed: () async {
+        final dep = await getdepFromPrefs();
+
+        if (dep == "BDO") {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => bdo_dashbord()),
+          );
+        } else if (dep == "BDM") {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => bdm_dashbord()),
+          );
+        } else if (dep == "warehouse") {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => WarehouseDashboard()),
+          );
+        } else if (dep == "CEO") {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => ceo_dashboard()),
+          );
+        } else if (dep == "COO") {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => ceo_dashboard()),
+          );
+        } else if (dep == "CSO") {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => cso_dashboard()),
+          );
+        } else if (dep == "Marketing") {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => marketing_dashboard()),
+          );
+        } else if (dep == "Warehouse Admin") {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => WarehouseAdmin()),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => dashboard()),
+          );
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        // Trigger the navigation logic when the back swipe occurs
         _navigateBack();
-        return false; // Prevent the default back navigation behavior
+        return false;
       },
       child: Scaffold(
         appBar: AppBar(
           title: Text(
-            "Order List",
+            "Bepocart Order List",
             style: TextStyle(fontSize: 14, color: Colors.grey),
           ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back), // Custom back arrow
-            onPressed: () async {
-              final dep = await getdepFromPrefs();
-              if (dep == "BDO") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          bdo_dashbord()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "BDM") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          bdm_dashbord()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "warehouse") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          WarehouseDashboard()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "CEO") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          ceo_dashboard()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "COO") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          ceo_dashboard()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "CSO") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          cso_dashboard()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "Marketing") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          marketing_dashboard()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "Warehouse Admin") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          WarehouseAdmin()), // Replace AnotherPage with your target page
-                );
-              } else {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          dashboard()), // Replace AnotherPage with your target page
-                );
-              }
-            },
-          ),
+          leading: _buildBackButtonByDepartment(),
           actions: [
             IconButton(
-              icon: Icon(Icons.calendar_today), // Calendar icon
-              onPressed: () => _selectSingleDate(
-                  context), // Call the method to select start date
+              icon: Icon(Icons.calendar_today),
+              onPressed: () => _selectSingleDate(context),
             ),
-            // Icon button to open date range picker
             IconButton(
-              icon: Icon(Icons.date_range), // Date range icon
-              onPressed: () => _selectDateRange(
-                  context), // Call the method to select date range
+              icon: Icon(Icons.date_range),
+              onPressed: () => _selectDateRange(context),
             ),
             PopupMenuButton<String>(
-              icon: Icon(Icons.more_vert), // 3-dot icon
+              icon: Icon(Icons.more_vert),
               onSelected: (value) {
-                // Handle menu item selection
                 switch (value) {
                   case 'Option 1':
                     exportToExcel();
@@ -740,9 +914,7 @@ class _OrderListState extends State<OrderList> {
                   case 'Option 2':
                     downloadPdf();
                     break;
-
                   default:
-                    // Handle default case
                     break;
                 }
               },
@@ -770,7 +942,8 @@ class _OrderListState extends State<OrderList> {
                 decoration: InputDecoration(
                   labelText: "Filter by Status",
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(30)),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
                   contentPadding:
                       EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
@@ -789,7 +962,6 @@ class _OrderListState extends State<OrderList> {
                 }).toList(),
               ),
             ),
-            // Search Bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
@@ -807,7 +979,6 @@ class _OrderListState extends State<OrderList> {
                 onChanged: _filterOrders,
               ),
             ),
-
             SizedBox(height: 10),
             buildPagination(),
             SizedBox(height: 10),
@@ -817,11 +988,12 @@ class _OrderListState extends State<OrderList> {
                       child: Text(
                         selectedDate != null ||
                                 (startDate != null && endDate != null)
-                            ? 'No orders available in this date range'
-                            : 'No orders available',
+                            ? 'No bepocart orders available in this date range'
+                            : 'No bepocart orders available',
                         style: TextStyle(
-                            fontSize: 16,
-                            color: const Color.fromARGB(255, 2, 65, 96)),
+                          fontSize: 16,
+                          color: const Color.fromARGB(255, 2, 65, 96),
+                        ),
                       ),
                     )
                   : RefreshIndicator(
@@ -830,248 +1002,8 @@ class _OrderListState extends State<OrderList> {
                         itemCount: filteredOrders.length,
                         padding: const EdgeInsets.only(right: 10, left: 10),
                         itemBuilder: (context, index) {
-                          // if (index == filteredOrders.length) {
-                          //   fetchOrderData(loadMore: true);
-                          //   return const Center(
-                          //     child: Padding(
-                          //       padding: EdgeInsets.all(10),
-                          //       child: CircularProgressIndicator(),
-                          //     ),
-                          //   );
-                          // }
-
                           final order = filteredOrders[index];
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 3.0),
-                            child: GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (context) => OrderReview(
-                                            id: order['id'],
-                                            customer: order['customer']
-                                                ['id'])));
-                              },
-                              child: Card(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(15.0),
-                                ),
-                                color: Colors.white,
-                                elevation: 4,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    // Header section with Invoice and Order Date
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue,
-                                        borderRadius: BorderRadius.only(
-                                          topLeft: Radius.circular(15.0),
-                                          topRight: Radius.circular(15.0),
-                                        ),
-                                      ),
-                                      padding: const EdgeInsets.all(8.0),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            '#${order['invoice']}',
-                                            style: TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold),
-                                          ),
-                                          Text(
-                                            DateFormat('dd MMM yy').format(
-                                                DateTime.parse(
-                                                    order['order_date'])),
-                                            style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 14),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    // Order details section
-                                    Padding(
-                                      padding: const EdgeInsets.all(8.0),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Customer: ${order['customer']['name']}',
-                                            style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w600),
-                                          ),
-                                          SizedBox(height: 4.0),
-                                          Text(
-                                            'Staff: ${order['manage_staff']}',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                          SizedBox(height: 4.0),
-                                          Row(
-                                            children: [
-                                              Text(
-                                                'Status: ',
-                                                style: TextStyle(
-                                                  fontSize: 13,
-                                                ),
-                                              ),
-                                              Text(
-                                                '${order['status']}',
-                                                style: TextStyle(
-                                                    fontSize: 13,
-                                                    color: Colors.blue),
-                                              ),
-                                            ],
-                                          ),
-                                          SizedBox(height: 4.0),
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text(
-                                                'Billing Amount:',
-                                                style: TextStyle(
-                                                  fontSize: 13,
-                                                ),
-                                              ),
-                                              Text(
-                                                '${(order['total_amount'] as num).toStringAsFixed(2)}',
-                                                style: TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.green,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          if (order['warehouse'] != null &&
-                                              (order['warehouse'] as List)
-                                                  .isNotEmpty) ...[
-                                            SizedBox(height: 5.0),
-                                            Text(
-                                              'Warehouse Info:',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w600,
-                                                decoration:
-                                                    TextDecoration.underline,
-                                                color: Colors.blue.shade900,
-                                              ),
-                                            ),
-                                            SizedBox(height: 4.0),
-                                            Table(
-                                              border: TableBorder.symmetric(
-                                                inside: BorderSide(
-                                                    color:
-                                                        Colors.grey.shade300),
-                                                outside: BorderSide(
-                                                    color: Colors.grey.shade400,
-                                                    width: 1),
-                                              ),
-                                              columnWidths: {
-                                                0: FlexColumnWidth(1),
-                                                1: FlexColumnWidth(2),
-                                                2: FlexColumnWidth(3),
-                                              },
-                                              defaultVerticalAlignment:
-                                                  TableCellVerticalAlignment
-                                                      .middle,
-                                              children: [
-                                                // Header Row
-                                                TableRow(
-                                                  decoration: BoxDecoration(
-                                                      color:
-                                                          Colors.blue.shade50),
-                                                  children: [
-                                                    Padding(
-                                                      padding:
-                                                          EdgeInsets.symmetric(
-                                                              vertical: 8.0,
-                                                              horizontal: 6.0),
-                                                      child: Text(
-                                                        'Box',
-                                                        style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          color: Colors
-                                                              .blue.shade900,
-                                                          fontSize: 13,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    Padding(
-                                                      padding:
-                                                          EdgeInsets.symmetric(
-                                                              vertical: 8.0,
-                                                              horizontal: 6.0),
-                                                      child: Text(
-                                                        'Tracking ID',
-                                                        style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          color: Colors
-                                                              .blue.shade900,
-                                                          fontSize: 13,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                // Data Rows
-                                                ...(order['warehouse'] as List)
-                                                    .map<TableRow>((wh) {
-                                                  return TableRow(
-                                                    decoration: BoxDecoration(
-                                                        color: Colors.white),
-                                                    children: [
-                                                      Padding(
-                                                        padding:
-                                                            EdgeInsets.all(8.0),
-                                                        child: Text(
-                                                          wh['box'] ?? 'N/A',
-                                                          style: TextStyle(
-                                                              fontSize: 12),
-                                                        ),
-                                                      ),
-                                                      Padding(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .all(8.0),
-                                                        child: SelectableText(
-                                                          wh['tracking_id'] ??
-                                                              'N/A',
-                                                          style:
-                                                              const TextStyle(
-                                                                  fontSize: 12),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  );
-                                                }).toList(),
-                                              ],
-                                            ),
-                                          ] else
-                                            Text(
-                                              'No warehouse data available',
-                                              style: TextStyle(
-                                                  color: Colors.red,
-                                                  fontSize: 12),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
+                          return _buildOrderCard(order);
                         },
                       ),
                     ),

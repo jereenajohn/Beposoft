@@ -44,6 +44,7 @@ class _BdoDsrAddingState extends State<BdoDsrAdding> {
   final TextEditingController billedCustomerctrl = TextEditingController();
   final TextEditingController newCustomerctrl = TextEditingController();
   final TextEditingController newConvertionctrl = TextEditingController();
+  final TextEditingController newLeadsCtrl = TextEditingController();
 
   Duration selectedDuration = Duration.zero;
 
@@ -213,6 +214,7 @@ class _BdoDsrAddingState extends State<BdoDsrAdding> {
     billedCustomerctrl.dispose();
     newCustomerctrl.dispose();
     newConvertionctrl.dispose();
+    newLeadsCtrl.dispose();
     super.dispose();
   }
 
@@ -388,6 +390,7 @@ class _BdoDsrAddingState extends State<BdoDsrAdding> {
         "billed": billedCustomerctrl.text.trim(),
         "new_customers": newCustomerctrl.text.trim(),
         "new_conversions": newConvertionctrl.text.trim(),
+        "new_leads": newLeadsCtrl.text.trim(),
       };
 
       final response = await http.post(
@@ -418,6 +421,7 @@ class _BdoDsrAddingState extends State<BdoDsrAdding> {
           billedCustomerctrl.clear();
           newCustomerctrl.clear();
           newConvertionctrl.clear();
+          newLeadsCtrl.clear();
         });
       } else {
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
@@ -469,19 +473,28 @@ class _BdoDsrAddingState extends State<BdoDsrAdding> {
         final data = parsed["data"];
 
         if (data != null && data is List && data.isNotEmpty) {
-          final firstTeam = data[0];
+          data.sort((a, b) {
+            final dateA = DateTime.tryParse(a["joined_at"]?.toString() ?? "") ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+            final dateB = DateTime.tryParse(b["joined_at"]?.toString() ?? "") ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+
+            return dateB.compareTo(dateA); // latest first
+          });
+
+          final latestTeam = data[0];
 
           if (!mounted) return;
           setState(() {
             teamData = {
-              "id": firstTeam["team_id"],
-              "name": firstTeam["team_name"]?.toString() ?? "",
-              "joined_at": firstTeam["joined_at"]?.toString() ?? "",
+              "id": latestTeam["team_id"],
+              "name": latestTeam["team_name"]?.toString() ?? "",
+              "joined_at": latestTeam["joined_at"]?.toString() ?? "",
             };
-            selectedTeamId = firstTeam["team_id"];
+            selectedTeamId = latestTeam["team_id"];
           });
 
-          teamController.text = firstTeam["team_name"]?.toString() ?? "";
+          teamController.text = latestTeam["team_name"]?.toString() ?? "";
           teamLeaderController.text = "N/A";
         } else {
           if (!mounted) return;
@@ -736,6 +749,29 @@ class _BdoDsrAddingState extends State<BdoDsrAdding> {
                           },
                           decoration: InputDecoration(
                             hintText: "Enter Billed customer",
+                            hintStyle: const TextStyle(color: Colors.grey),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          "New Leads",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        TextFormField(
+                          controller: newLeadsCtrl,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          decoration: InputDecoration(
+                            hintText: "Enter new leads",
                             hintStyle: const TextStyle(color: Colors.grey),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),

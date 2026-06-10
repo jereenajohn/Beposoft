@@ -20,6 +20,7 @@ class _OrderBulkUploadState extends State<OrderBulkUpload> {
   List<String> successorders = [];
   List<String> successCustomers = [];
   List<String> failedStockProducts = [];
+  List<String> missingSkuProducts = [];
 
   bool isLoading = false;
   String loadingText = "Processing orders...";
@@ -35,9 +36,9 @@ class _OrderBulkUploadState extends State<OrderBulkUpload> {
   bool allAdded = true;
 
   // ===================== SHOPIFY CONFIG =====================
-final String shopifyEndpoint =
-    'https://ekve0y-1k.myshopify.com/admin/api/2025-01/graphql.json';
-final String accessToken = SecretConfig.shopifyAccessToken;
+  final String shopifyEndpoint =
+      'https://ekve0y-1k.myshopify.com/admin/api/2025-01/graphql.json';
+  final String accessToken = SecretConfig.shopifyAccessToken;
   @override
   void initState() {
     super.initState();
@@ -52,14 +53,14 @@ final String accessToken = SecretConfig.shopifyAccessToken;
   Future<String?> gettokenFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     final t = prefs.getString('token');
-    // print("🔹 gettokenFromPrefs() → token present: ${t != null}");
+    print("🔹 gettokenFromPrefs() → token present: ${t != null}");
     return t;
   }
 
   Future<String?> getdepFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     final d = prefs.getString('department');
-    // print("🔹 getdepFromPrefs() → department: $d");
+    print("🔹 getdepFromPrefs() → department: $d");
     return d;
   }
 
@@ -76,7 +77,7 @@ final String accessToken = SecretConfig.shopifyAccessToken;
     if (phone.length > 10) {
       phone = phone.substring(phone.length - 10);
     }
-    // print("📞 cleanPhone(): '$original' → '$phone'");
+    print("📞 cleanPhone(): '$original' → '$phone'");
     return phone;
   }
 
@@ -86,13 +87,13 @@ final String accessToken = SecretConfig.shopifyAccessToken;
     addressId = null;
     shippingstateId = null;
     allAdded = true;
-    // print(
-    //     "🔄 resetOrderContext() → customerId=null, addressId=null, shippingstateId=null, allAdded=true");
+    print(
+        "🔄 resetOrderContext() → customerId=null, addressId=null, shippingstateId=null, allAdded=true");
   }
 
   // ===================== FETCH STATES =====================
   Future<void> getstate() async {
-    // print("\n🌍 getstate() → Fetching /api/states/");
+    print("\n🌍 getstate() → Fetching /api/states/");
     try {
       final token = await gettokenFromPrefs();
 
@@ -104,9 +105,9 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         },
       );
 
-      // print("🌍 /api/states/ → status: ${response.statusCode}");
+      print("🌍 /api/states/ → status: ${response.statusCode}");
       if (response.statusCode != 200) {
-        // print("🌍 /api/states/ body: ${response.body}");
+        print("🌍 /api/states/ body: ${response.body}");
       }
 
       if (response.statusCode == 200) {
@@ -123,69 +124,59 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         setState(() {
           stat = statelist;
         });
-        // print("🌍 States loaded: ${stat.length}");
+        print("🌍 States loaded: ${stat.length}");
       }
     } catch (error) {
-      // print("❌ getstate() error: $error");
+      print("❌ getstate() error: $error");
     }
   }
 
   // ===================== FETCH CUSTOMERS (LOCAL) =====================
   Future<void> getcustomer() async {
-    // print("\n👥 getcustomer() → Fetching /api/customers/");
+    await fetchLatest300Orders();
+  }
+
+  Future<Map<String, dynamic>?> getCustomerByPhone(String phone) async {
     try {
-      final dep = await getdepFromPrefs();
       final token = await gettokenFromPrefs();
+      final cleanedPhone = cleanPhone(phone);
 
-      if (token == null) {
-        // print("❌ getcustomer(): token is null");
-        return;
-      }
+      final uri = Uri.parse('$api/api/customers/').replace(
+        queryParameters: {
+          'search': cleanedPhone,
+          'page': '1',
+        },
+      );
 
-      final jwt = JWT.decode(token);
-      var name = jwt.payload['name'];
-      // print("👥 Decoded JWT name: $name, department: $dep");
-
-      var response = await http.get(
-        Uri.parse('$api/api/customers/'),
+      final response = await http.get(
+        uri,
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
 
-      // print("👥 /api/customers/ → status: ${response.statusCode}");
-      if (response.statusCode != 200) {
-        // print("👥 /api/customers/ body: ${response.body}");
-      }
+      if (response.statusCode != 200) return null;
 
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-        var productsData = parsed['data'];
-        List<Map<String, dynamic>> managerlist = [];
+      final parsed = jsonDecode(response.body);
 
-        for (var productData in productsData) {
-          managerlist.add({
-            'id': productData['id'],
-            'name': productData['name'],
-            'created_at': productData['created_at'],
-            'phone': productData['phone'],
-            'email': productData['email'],
-          });
+      final List<dynamic> results =
+          parsed is Map<String, dynamic> && parsed['results'] is List
+              ? parsed['results']
+              : [];
+
+      for (var item in results) {
+        final apiPhone = cleanPhone(item['phone']?.toString() ?? '');
+
+        if (apiPhone == cleanedPhone) {
+          return Map<String, dynamic>.from(item);
         }
-
-        if (!mounted) return;
-        setState(() {
-          customer = managerlist;
-        });
-
-        // print("👥 Local customers loaded: ${customer.length}");
-        // After loading customers, fetch Shopify orders and process
-        await fetchLatest300Orders();
       }
-    } catch (error) {
-      // print("❌ getcustomer() error: $error");
-      if (!mounted) return;
+
+      return null;
+    } catch (e) {
+      print("❌ getCustomerByPhone() error: $e");
+      return null;
     }
   }
 
@@ -193,30 +184,77 @@ final String accessToken = SecretConfig.shopifyAccessToken;
     try {
       final token = await gettokenFromPrefs();
 
+      if (token == null) {
+        print("❌ orderAlreadyExists(): token is null");
+        return null;
+      }
+
+      final shopifyId = shopOrder["id"]?.toString();
+
+      if (shopifyId == null || shopifyId.isEmpty) {
+        print("❌ orderAlreadyExists(): Shopify order id missing");
+        return null;
+      }
+
+      final orderName = shopOrder["name"]?.toString() ?? '';
+      final customerName =
+          "${shopOrder['customer']?['firstName'] ?? ''} ${shopOrder['customer']?['lastName'] ?? ''}"
+              .trim();
+
+      final searchValue = customerName.isNotEmpty
+          ? customerName
+          : orderName.replaceAll('#', '');
+
+      final uri = Uri.parse('$api/api/orders/all/').replace(
+        queryParameters: searchValue.isNotEmpty
+            ? {
+                'search': searchValue,
+              }
+            : null,
+      );
+
       final response = await http.get(
-        Uri.parse('$api/api/orders/'),
+        uri,
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer $token"
+          "Authorization": "Bearer $token",
         },
       );
+
+      print("🔎 /api/orders/all/ status: ${response.statusCode}");
+      print("🔎 /api/orders/all/ body: ${response.body}");
 
       if (response.statusCode != 200) return null;
 
       final data = jsonDecode(response.body);
-      final List orders = data["data"];
 
-      final shopifyId = shopOrder["id"];
+      final List<dynamic> orders = data is List
+          ? data
+          : data is Map<String, dynamic> && data["data"] is List
+              ? data["data"]
+              : data is Map<String, dynamic> && data["results"] is List
+                  ? data["results"]
+                  : data is Map<String, dynamic> &&
+                          data["results"] is Map &&
+                          data["results"]["results"] is List
+                      ? data["results"]["results"]
+                      : [];
 
       for (var ord in orders) {
-        if (ord["shopify_order_id"] != null &&
-            ord["shopify_order_id"].toString() == shopifyId.toString()) {
-          return ord["id"]; // 🔥 return LOCAL ORDER ID
+        final existingShopifyId = ord["shopify_order_id"]?.toString();
+
+        if (existingShopifyId != null &&
+            existingShopifyId.isNotEmpty &&
+            existingShopifyId == shopifyId) {
+          return ord["id"] is int
+              ? ord["id"]
+              : int.tryParse(ord["id"].toString());
         }
       }
 
       return null;
     } catch (e) {
+      print("❌ orderAlreadyExists() error: $e");
       return null;
     }
   }
@@ -361,14 +399,14 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         body: jsonEncode({
           'query': ordersQuery,
           'variables': {
-            'first': 10,
+            'first': 20,
           },
         }),
       );
 
-      // print("🛒 Shopify orders status: ${response.statusCode}");
+      print("🛒 Shopify orders status: ${response.statusCode}");
       if (response.statusCode != 200) {
-        // print("🛒 Shopify error body: ${response.body}");
+        print("🛒 Shopify error body: ${response.body}");
       }
 
       if (response.statusCode == 200) {
@@ -377,13 +415,13 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         if (data == null ||
             data['data'] == null ||
             data['data']['orders'] == null) {
-          // print("❌ Shopify invalid response: $data");
+          print("❌ Shopify invalid response: $data");
           throw Exception("Invalid response format from Shopify API");
         }
 
         final orders = data['data']['orders'];
         final edgesList = orders['edges'] as List<dynamic>;
-        // print("🛒 Shopify orders fetched: ${edgesList.length}");
+        print("🛒 Shopify orders fetched: ${edgesList.length}");
 
         final allOrders = edgesList.map<Map<String, dynamic>>((e) {
           final node = Map<String, dynamic>.from(e['node']);
@@ -410,7 +448,7 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         throw Exception("Failed to fetch orders");
       }
     } catch (e) {
-      // print("❌ fetchLatest300Orders() error: $e");
+      print("❌ fetchLatest300Orders() error: $e");
       throw Exception("Failed to fetch latest 300 orders: $e");
     }
   }
@@ -568,26 +606,17 @@ final String accessToken = SecretConfig.shopifyAccessToken;
 //     if (mounted) setState(() {});
 //   }
 
-  Future<void> compareCustomers(List<Map<String, dynamic>> customers,
-      List<Map<String, dynamic>> allOrders) async {
-    // Build phone → customerId map
-    final Map<String, int> customerPhoneToId = {};
-    for (var c in customers) {
-      final phoneRaw = c['phone'];
-      if (phoneRaw != null) {
-        final normalized = cleanPhone(phoneRaw.toString());
-        if (normalized.isNotEmpty) {
-          customerPhoneToId[normalized] = c['id'] as int;
-        }
-      }
-    }
-
+  Future<void> compareCustomers(
+    List<Map<String, dynamic>> customers,
+    List<Map<String, dynamic>> allOrders,
+  ) async {
     for (var order in allOrders) {
       resetOrderContext();
 
-      // 0️⃣ Skip VOIDED orders
+      final orderName = order['name']?.toString() ?? 'Unknown Order';
+
       if (order['displayFinancialStatus'] == "VOIDED") {
-        failedOrders.add("${order['name']} → VOIDED");
+        failedOrders.add("$orderName → VOIDED");
         continue;
       }
 
@@ -595,63 +624,58 @@ final String accessToken = SecretConfig.shopifyAccessToken;
 
       if (existingOrderId != null) {
         failedOrders.add(
-            "${order['name']} → Already Created (Order ID: $existingOrderId)");
+          "$orderName → Already Created (Order ID: $existingOrderId)",
+        );
         continue;
       }
 
-      // 2️⃣ Normalize phone from shipping or billing
       String? orderPhone = order['shippingAddress']?['phone']?.toString() ??
           order['billingAddress']?['phone']?.toString();
 
       if (orderPhone == null || orderPhone.trim().isEmpty) {
-        failedOrders.add("${order['name']} → No Phone");
+        failedOrders.add("$orderName → No Phone");
         continue;
       }
 
       final normalizedOrderPhone = cleanPhone(orderPhone);
 
-      // 3️⃣ Address fallback
       Map<String, dynamic>? shippingAddress = order['shippingAddress'];
       Map<String, dynamic>? billingAddress = order['billingAddress'];
       final usedAddress = shippingAddress ?? billingAddress;
 
       if (usedAddress == null) {
-        failedOrders.add("${order['name']} → No Address");
+        failedOrders.add("$orderName → No Address");
         continue;
       }
 
-      // 4️⃣ Check if customer already exists (but DO NOT skip)
-      final existingCustomerId = customerPhoneToId[normalizedOrderPhone];
+      final existingCustomer = await getCustomerByPhone(normalizedOrderPhone);
+      final existingCustomerId = existingCustomer?['id'];
 
       try {
-        // ===============================================
-        // 🚀 EXISTING CUSTOMER — create only order
-        // ===============================================
-      if (existingCustomerId != null) {
-  customerId = existingCustomerId;
+        if (existingCustomerId != null) {
+          customerId = existingCustomerId is int
+              ? existingCustomerId
+              : int.tryParse(existingCustomerId.toString());
 
-  // Create address for this order
-  await addaddress(
-    stat: stat,
-    order: order,
-    name: "${order['customer']?['firstName'] ?? ''} ${order['customer']?['lastName'] ?? ''}".trim(),
-    phone: usedAddress['phone']?.toString() ?? normalizedOrderPhone,
-    email: order['customer']?['email']?.toString() ?? '',
-    address: "${usedAddress['address1'] ?? ''}, ${usedAddress['address2'] ?? ''}",
-    city: usedAddress['city']?.toString() ?? '',
-    state: usedAddress['province']?.toString() ?? '',
-    zipcode: usedAddress['zip']?.toString() ?? '',
-    country: usedAddress['country']?.toString() ?? '',
-  );
+          await addaddress(
+            stat: stat,
+            order: order,
+            name:
+                "${order['customer']?['firstName'] ?? ''} ${order['customer']?['lastName'] ?? ''}"
+                    .trim(),
+            phone: usedAddress['phone']?.toString() ?? normalizedOrderPhone,
+            email: order['customer']?['email']?.toString() ?? '',
+            address:
+                "${usedAddress['address1'] ?? ''}, ${usedAddress['address2'] ?? ''}",
+            city: usedAddress['city']?.toString() ?? '',
+            state: usedAddress['province']?.toString() ?? '',
+            zipcode: usedAddress['zip']?.toString() ?? '',
+            country: usedAddress['country']?.toString() ?? '',
+          );
 
-  // 🚀 PROCEED FOR ORDER CREATION
-  continue;   // NO — REMOVE THIS
-}
+          continue;
+        }
 
-
-        // ===============================================
-        // 🆕 NEW CUSTOMER — create customer then order
-        // ===============================================
         await addCustomer(
           stat: stat,
           order: order,
@@ -659,17 +683,17 @@ final String accessToken = SecretConfig.shopifyAccessToken;
           name:
               "${order['customer']?['firstName'] ?? ''} ${order['customer']?['lastName'] ?? ''}"
                   .trim(),
-          phone: billingAddress?['phone']?.toString() ?? normalizedOrderPhone,
+          phone: normalizedOrderPhone,
           email: order['customer']?['email']?.toString() ?? '',
           address:
-              "${billingAddress?['address1'] ?? ''}, ${billingAddress?['address2'] ?? ''}",
-          city: billingAddress?['city']?.toString() ?? '',
-          state: billingAddress?['province']?.toString() ?? '',
-          zipcode: billingAddress?['zip']?.toString() ?? '',
-          country: billingAddress?['country']?.toString() ?? '',
+              "${usedAddress['address1'] ?? ''}, ${usedAddress['address2'] ?? ''}",
+          city: usedAddress['city']?.toString() ?? '',
+          state: usedAddress['province']?.toString() ?? '',
+          zipcode: usedAddress['zip']?.toString() ?? '',
+          country: usedAddress['country']?.toString() ?? '',
         );
       } catch (e) {
-        failedOrders.add("${order['name']} → Failed due to exception");
+        failedOrders.add("$orderName → Failed due to exception");
         await deletecartitem();
       }
     }
@@ -691,11 +715,11 @@ final String accessToken = SecretConfig.shopifyAccessToken;
     required String country,
     required List<Map<String, dynamic>> stat, // Pass state list
   }) async {
-    // print("\n🟦 addCustomer() for order: ${order['name']}");
-    // print("Name: $name");
-    // print("Phone(raw): $phone");
-    // print("Email: $email");
-    // print("Address: $address, $city, $state, $zipcode, $country");
+    print("\n🟦 addCustomer() for order: ${order['name']}");
+    print("Name: $name");
+    print("Phone(raw): $phone");
+    print("Email: $email");
+    print("Address: $address, $city, $state, $zipcode, $country");
 
     final token = await gettokenFromPrefs();
 
@@ -711,11 +735,11 @@ final String accessToken = SecretConfig.shopifyAccessToken;
     try {
       int? stateId = getStateId(state, stat);
       stateId ??= 14; // default to Kerala
-      // print("State '$state' mapped to ID: $stateId");
+      print("State '$state' mapped to ID: $stateId");
 
       final body = {
         "name": name.isNotEmpty ? name : "Unknown Customer",
-        "manager": 17,
+        "manager": 103,
         "state": stateId,
         "phone": cleanPhone(phone),
         "alt_phone": "",
@@ -726,8 +750,8 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         "comment": "Auto-created from order",
       };
 
-      // print("🔼 POST → /api/add/customer/");
-      // print("Body: ${jsonEncode(body)}");
+      print("🔼 POST → /api/add/customer/");
+      print("Body: ${jsonEncode(body)}");
 
       final response = await http.post(
         Uri.parse('$api/api/add/customer/'),
@@ -738,24 +762,22 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         body: jsonEncode(body),
       );
 
-      // print("Customer API status: ${response.statusCode}");
-      // print("Customer API body: ${response.body}");
+      print("Customer API status: ${response.statusCode}");
+      print("Customer API body: ${response.body}");
 
       if (response.statusCode == 201) {
         final responseData = jsonDecode(response.body);
         customerId = responseData['data']['id'];
 
-        // print("✅ CUSTOMER CREATED → customerId=$customerId");
-
         if (shipping != null) {
           if (mounted) {
             setState(() {
               successCustomers.add(
-                  "${name.isNotEmpty ? name : 'Unknown Customer'} - ${cleanPhone(phone)}");
+                "${name.isNotEmpty ? name : 'Unknown Customer'} - ${cleanPhone(phone)}",
+              );
             });
           }
 
-          // print("➡ Now calling addaddress() for shipping address");
           await addaddress(
             stat: stat,
             order: order,
@@ -772,17 +794,46 @@ final String accessToken = SecretConfig.shopifyAccessToken;
             zipcode: shipping['zip']?.toString() ?? '',
             country: shipping['country']?.toString() ?? '',
           );
-        } else {
-          // print(
-          //     "ℹ SHIPPING is null, skipping addaddress(), directly using billing");
         }
+
+        return;
       } else {
-        // print("❌ Customer creation FAILED for order: ${order['name']}");
-        failedOrders.add(order['name'] ?? 'Unknown Order');
+        failedOrders.add(
+          "${order['name'] ?? 'Unknown Order'} → Customer Create Failed: ${extractApiError(response)}",
+        );
       }
+      failedOrders.add(
+        "${order['name'] ?? 'Unknown Order'} → Customer Create Failed: ${extractApiError(response)}",
+      );
     } catch (e) {
-      // print("❌ addCustomer() exception: $e");
-      failedOrders.add(order['name'] ?? 'Unknown Order');
+      print("❌ addCustomer() exception: $e");
+      failedOrders.add(
+        "${order['name'] ?? 'Unknown Order'} → Exception: $e",
+      );
+    }
+  }
+
+  String extractApiError(http.Response response) {
+    try {
+      final data = jsonDecode(response.body);
+
+      if (data is Map<String, dynamic>) {
+        List<String> errors = [];
+
+        data.forEach((key, value) {
+          if (value is List) {
+            errors.add("$key: ${value.join(', ')}");
+          } else {
+            errors.add("$key: $value");
+          }
+        });
+
+        return errors.join(" | ");
+      }
+
+      return response.body;
+    } catch (e) {
+      return response.body;
     }
   }
 
@@ -799,10 +850,10 @@ final String accessToken = SecretConfig.shopifyAccessToken;
     required String country,
     required List<Map<String, dynamic>> stat,
   }) async {
-    // print("\n🟧 addaddress() for order: ${order['name']}");
-    // print("CustomerId: $customerId");
-    // print("Address: $address, $city, $state, $zipcode, $country");
-    // print("Phone(raw): $phone");
+    print("\n🟧 addaddress() for order: ${order['name']}");
+    print("CustomerId: $customerId");
+    print("Address: $address, $city, $state, $zipcode, $country");
+    print("Phone(raw): $phone");
 
     try {
       final token = await gettokenFromPrefs();
@@ -818,7 +869,7 @@ final String accessToken = SecretConfig.shopifyAccessToken;
 
       shippingstateId = getStateId(state, stat);
       shippingstateId ??= 14;
-      // print("Shipping state '$state' mapped to ID: $shippingstateId");
+      print("Shipping state '$state' mapped to ID: $shippingstateId");
 
       final body = {
         "customer": customerId,
@@ -833,8 +884,8 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         "email": email,
       };
 
-      // print("🔼 POST → /api/add/customer/address/$customerId/");
-      // print("Body: ${jsonEncode(body)}");
+      print("🔼 POST → /api/add/customer/address/$customerId/");
+      print("Body: ${jsonEncode(body)}");
 
       final response = await http.post(
         Uri.parse('$api/api/add/customer/address/$customerId/'),
@@ -845,51 +896,53 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         body: jsonEncode(body),
       );
 
-      // print("Address API status: ${response.statusCode}");
-      // print("Address API body: ${response.body}");
+      print("Address API status: ${response.statusCode}");
+      print("Address API body: ${response.body}");
 
       if (response.statusCode == 200) {
         var responseData = jsonDecode(response.body);
         addressId = responseData["data"]["id"];
-        // print("✅ ADDRESS CREATED → addressId=$addressId");
-        // print("➡ Now calling addtocart() for order: ${order['name']}");
+        print("✅ ADDRESS CREATED → addressId=$addressId");
+        print("➡ Now calling addtocart() for order: ${order['name']}");
         await addtocart(order);
       } else {
-        // print("❌ Address creation FAILED for order: ${order['name']}");
-        failedOrders.add(order['name'] ?? 'Unknown Order');
+        print("❌ Address creation FAILED for order: ${order['name']}");
+        failedOrders.add(
+          "${order['name'] ?? 'Unknown Order'} → Address Create Failed: ${extractApiError(response)}",
+        );
       }
     } catch (e) {
-      // print("❌ addaddress() exception: $e");
+      print("❌ addaddress() exception: $e");
       failedOrders.add(order['name'] ?? 'Unknown Order');
     }
   }
 
   // ===================== ADD TO CART =====================
   Future<void> addtocart(Map<String, dynamic> order) async {
-    // print("\n🟨 addtocart() for order: ${order['name']}");
+    print("\n🟨 addtocart() for order: ${order['name']}");
     final token = await gettokenFromPrefs();
     allAdded = true; // reset per order
-    // print("allAdded reset to true");
+    print("allAdded reset to true");
 
     try {
       if (order.isEmpty) {
-        // print("⚠ order is empty in addtocart()");
+        print("⚠ order is empty in addtocart()");
         return;
       }
 
       var lineItems = order['lineItems'];
       if (lineItems == null || lineItems['edges'] == null) {
-        // print("⚠ No lineItems/edges found for this order");
+        print("⚠ No lineItems/edges found for this order");
         return;
       }
 
       var itemsList = lineItems['edges'];
       if (itemsList is! List) {
-        // print("⚠ itemsList is not a List");
+        print("⚠ itemsList is not a List");
         return;
       }
 
-      // print("🛒 Items to add to cart: ${itemsList.length}");
+      print("🛒 Items to add to cart: ${itemsList.length}");
 
       for (var item in itemsList) {
         if (item['node'] == null || item['node']['variant'] == null) {
@@ -901,20 +954,43 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         final quantity = item['node']['quantity'];
         final productTitle = item['node']['title']?.toString() ?? '';
 
-        // print("➡ Item: SKU=$productSku, QTY=$quantity, TITLE=$productTitle");
+        print("➡ Item: SKU=$productSku, QTY=$quantity, TITLE=$productTitle");
 
-        if (productSku == null || quantity == null) {
-          // print("⚠ Missing productSku or quantity in item: $item");
-          continue;
+        if (productSku == null ||
+            productSku.toString().trim().isEmpty ||
+            quantity == null) {
+          final message =
+              "${order['name']} → SKU missing | QTY: ${quantity ?? '-'} | TITLE: $productTitle";
+
+          print("⚠ $message");
+
+          setState(() {
+            missingSkuProducts.add(message);
+            failedOrders.add(message);
+          });
+
+          allAdded = false;
+          break;
         }
+
+        final shopifyPrice =
+            item['node']['variant']?['price']?.toString() ?? "0";
+
+        final discountedTotal = item['node']['discountedTotalSet']?['shopMoney']
+                ?['amount']
+            ?.toString();
 
         final body = {
           'product': productSku,
           'quantity': quantity,
+          'rate': shopifyPrice,
+          'price': shopifyPrice,
+          'shopify_price': shopifyPrice,
+          'shopify_discounted_total': discountedTotal,
         };
 
-        // print("🔼 POST → /api/cart/product/");
-        // print("Body: ${jsonEncode(body)}");
+        print("🔼 POST → /api/cart/product/");
+        print("Body: ${jsonEncode(body)}");
 
         final response = await http.post(
           Uri.parse('$api/api/cart/product/'),
@@ -925,32 +1001,43 @@ final String accessToken = SecretConfig.shopifyAccessToken;
           body: jsonEncode(body),
         );
 
-        // print("Cart API status: ${response.statusCode}");
-        // print("Cart API body: ${response.body}");
+        print("Cart API status: ${response.statusCode}");
+        print("Cart API body: ${response.body}");
+
+        print("");
+        print("========== CART API ==========");
+        print("ORDER : ${order['name']}");
+        print("SKU   : $productSku");
+        print("TITLE : $productTitle");
+        print("QTY   : $quantity");
+        print("STATUS: ${response.statusCode}");
+        print("BODY  : ${response.body}");
+        print("==============================");
+        print("");
 
         if (response.statusCode != 201) {
-          // print(
-          //     "❌ CART ADD FAILED for SKU=$productSku in order: ${order['name']}, clearing cart");
+          print(
+              "❌ CART ADD FAILED for SKU=$productSku in order: ${order['name']}, clearing cart");
           await deletecartitem();
           allAdded = false;
 
           // Add a detailed failed message for this product
           final msg =
-              "${order['name']} → Failed to add SKU $productSku ($productTitle) to cart";
+              "${order['name']} → Cart Add Failed for SKU $productSku ($productTitle): ${extractApiError(response)}";
           failedOrders.add(msg);
           break;
         }
       }
 
-      // print("✅ addtocart() finished, allAdded=$allAdded");
+      print("✅ addtocart() finished, allAdded=$allAdded");
       if (allAdded) {
-        // print("➡ Proceed to ordercreate() for order: ${order['name']}");
+        print("➡ Proceed to ordercreate() for order: ${order['name']}");
         await ordercreate(order);
       } else {
-        // print("⏭ Skipping ordercreate() because allAdded=false");
+        print("⏭ Skipping ordercreate() because allAdded=false");
       }
     } catch (e) {
-      // print("❌ addtocart() exception: $e");
+      print("❌ addtocart() exception: $e");
       await deletecartitem();
       failedOrders.add(order['name'] ?? 'Unknown Order');
     }
@@ -975,7 +1062,7 @@ final String accessToken = SecretConfig.shopifyAccessToken;
 
   // ===================== CREATE ORDER =====================
   Future<void> ordercreate(var order) async {
-    // print("🟥 ordercreate() for order: ${order['name']}");
+    print("🟥 ordercreate() for order: ${order['name']}");
 
     try {
       final token = await gettokenFromPrefs();
@@ -994,8 +1081,8 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         totalAmount = totalAmount + shippingCharge;
       }
 
-      // print(
-      //     "💰 Final Amount: $totalAmount (Shipping Charge = $shippingCharge)");
+      print(
+          "💰 Final Amount: $totalAmount (Shipping Charge = $shippingCharge)");
 
       // ======================================================
       // 🔥 CREATE ORDER API CALL
@@ -1039,7 +1126,7 @@ final String accessToken = SecretConfig.shopifyAccessToken;
       // ✅ SUCCESS BLOCK
       // ======================================================
       if (response.statusCode == 201) {
-        // print("✅ ORDER CREATED successfully");
+        print("✅ ORDER CREATED successfully");
 
         final responseData = jsonDecode(response.body);
         final orderId = responseData['data']['id'];
@@ -1058,17 +1145,17 @@ final String accessToken = SecretConfig.shopifyAccessToken;
       // ======================================================
       // ❌ FAILURE BLOCK
       // ======================================================
-      // print("❌ ordercreate() FAILED for order: ${order['name']}");
+      print("❌ ordercreate() FAILED for order: ${order['name']}");
 
       if (response.body.contains("Not enough available stock")) {
-        // print("🟥 STOCK FAILURE DETECTED");
+        print("🟥 STOCK FAILURE DETECTED");
 
         for (var item in order['lineItems']['edges']) {
           final sku = item['node']['variant']['sku'];
           final title = item['node']['title'];
           final qty = item['node']['quantity'];
 
-          // print("🟥 Failed Product → SKU: $sku | Title: $title | Qty: $qty");
+          print("🟥 Failed Product → SKU: $sku | Title: $title | Qty: $qty");
 
           failedStockProducts.add(
               "[${order['name']}] SKU $sku – $title (Qty $qty) → STOCK NOT AVAILABLE");
@@ -1076,12 +1163,14 @@ final String accessToken = SecretConfig.shopifyAccessToken;
       }
 
       setState(() {
-        failedOrders.add(order['name']);
+        failedOrders.add(
+          "${order['name']} → Order Create Failed: ${extractApiError(response)}",
+        );
       });
 
       await deletecartitem();
     } catch (e) {
-      // print("❌ Exception in ordercreate(): $e");
+      print("❌ Exception in ordercreate(): $e");
       failedOrders.add(order['name']);
       await deletecartitem();
     }
@@ -1089,7 +1178,7 @@ final String accessToken = SecretConfig.shopifyAccessToken;
 
   // ===================== UPDATE AMOUNT & CLEAN CART =====================
   Future<void> updatingamount(Map<String, dynamic> order, int id) async {
-    // print("\n🟪 updatingamount() for order: ${order['name']}, orderId=$id");
+    print("\n🟪 updatingamount() for order: ${order['name']}, orderId=$id");
     try {
       final token = await gettokenFromPrefs();
 
@@ -1100,8 +1189,8 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         'total_amount': totalAmount,
       };
 
-      // print("🔼 PUT → /api/shipping/$id/order/");
-      // print("Body: ${jsonEncode(body)}");
+      print("🔼 PUT → /api/shipping/$id/order/");
+      print("Body: ${jsonEncode(body)}");
 
       var response = await http.put(
         Uri.parse('$api/api/shipping/$id/order/'),
@@ -1112,8 +1201,8 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         body: jsonEncode(body),
       );
 
-      // print("Update Amount API status: ${response.statusCode}");
-      // print("Update Amount API body: ${response.body}");
+      print("Update Amount API status: ${response.statusCode}");
+      print("Update Amount API body: ${response.body}");
 
       if (!mounted) return;
 
@@ -1135,7 +1224,7 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         );
       }
     } catch (error) {
-      // print("❌ updatingamount() exception: $error");
+      print("❌ updatingamount() exception: $error");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1144,18 +1233,18 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         ),
       );
     } finally {
-      // print("🧹 updatingamount() finally → calling deletecartitem()");
+      print("🧹 updatingamount() finally → calling deletecartitem()");
       await deletecartitem();
     }
   }
 
   // ===================== DELETE CART =====================
   Future<void> deletecartitem() async {
-    // print("\n🗑 deletecartitem() called");
+    print("\n🗑 deletecartitem() called");
     final token = await gettokenFromPrefs();
 
     try {
-      // print("🔽 DELETE → /api/cart/delete/all/");
+      print("🔽 DELETE → /api/cart/delete/all/");
       final response = await http.delete(
         Uri.parse('$api/api/cart/delete/all/'),
         headers: {
@@ -1163,14 +1252,14 @@ final String accessToken = SecretConfig.shopifyAccessToken;
         },
       );
 
-      // print("Delete Cart API status: ${response.statusCode}");
-      // print("Delete Cart API body: ${response.body}");
+      print("Delete Cart API status: ${response.statusCode}");
+      print("Delete Cart API body: ${response.body}");
 
       if (!mounted) return;
 
       // ACCEPT 200 OR 204 AS SUCCESS
       if (response.statusCode == 200 || response.statusCode == 204) {
-        // print("🟩 CART CLEARED SUCCESSFULLY");
+        print("🟩 CART CLEARED SUCCESSFULLY");
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Cart cleared successfully'),
@@ -1181,10 +1270,10 @@ final String accessToken = SecretConfig.shopifyAccessToken;
       }
 
       // ANY OTHER STATUS → FAIL
-      // print("❌ Failed to delete cart items, status: ${response.statusCode}");
+      print("❌ Failed to delete cart items, status: ${response.statusCode}");
       throw Exception('Failed to delete cart');
     } catch (error) {
-      // print("❌ deletecartitem() exception: $error");
+      print("❌ deletecartitem() exception: $error");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1196,240 +1285,491 @@ final String accessToken = SecretConfig.shopifyAccessToken;
   }
 
   // ===================== UI =====================
+// ===================== UI =====================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF4F7F6),
       appBar: AppBar(
         title: const Text(
           'Order Bulk Upload',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            color: Colors.black87,
+          ),
         ),
         centerTitle: true,
-        backgroundColor: const Color.fromARGB(255, 255, 255, 255),
-        elevation: 4,
+        backgroundColor: Colors.white,
+        elevation: 0.8,
+        iconTheme: const IconThemeData(color: Colors.black87),
       ),
       body: Stack(
         children: [
           SingleChildScrollView(
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.cloud_upload_outlined,
-                    size: 80,
-                    color: Color.fromARGB(255, 15, 175, 0),
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFF02347C),
+                        Color(0xFF00B94D),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withOpacity(0.22),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Fetch the Latest 100 Orders',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Color.fromARGB(221, 0, 0, 0),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 40),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.download, color: Colors.white),
-                    label: const Text(
-                      'Fetch Orders',
-                      style: TextStyle(fontSize: 16, color: Colors.white),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color.fromARGB(255, 1, 185, 13),
-                      foregroundColor: Colors.white,
-                      elevation: 6,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.16),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: const Icon(
+                          Icons.cloud_upload_rounded,
+                          size: 52,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    onPressed: () async {
-                      // print("\n============================");
-                      // print("🟢 FETCH ORDERS BUTTON PRESSED");
-                      // print("============================\n");
-
-                      setState(() {
-                        isLoading = true;
-                        loadingText = "Fetching & processing latest orders...";
-                        failedOrders.clear();
-                        successorders.clear();
-                        successCustomers.clear();
-                        failedcustomer.clear();
-                      });
-                      await getcustomer();
-                      if (mounted) {
-                        setState(() {
-                          isLoading = false;
-                        });
-                      }
-
-                      // print("\n🏁 BULK PROCESS FINISHED");
-                      // print("✔ successorders: $successorders");
-                      // print("❌ failedOrders: $failedOrders");
-                    },
-                  ),
-                  const SizedBox(height: 30),
-
-                  // Success Orders
-                  if (successorders.isNotEmpty) ...[
-                    const Text(
-                      "Success Orders:",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color.fromARGB(255, 0, 150, 0),
+                      const SizedBox(height: 18),
+                      const Text(
+                        'Shopify Order Import',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color.fromARGB(255, 73, 244, 54)
-                            .withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Fetch latest orders, create customers, add address, cart items and backend orders automatically.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          height: 1.4,
+                          color: Colors.white.withOpacity(0.88),
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: successorders
-                            .map((orderName) => Text("- $orderName"))
-                            .toList(),
-                      ),
-                    ),
-                  ],
-
-                  // Customers Created
-                  if (successCustomers.isNotEmpty) ...[
-                    const SizedBox(height: 30),
-                    const Text(
-                      "Customers Created:",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: successCustomers
-                            .map((customerInfo) => Text("- $customerInfo"))
-                            .toList(),
-                      ),
-                    ),
-                  ],
-
-                  // Failed Orders (includes stock error details for each order)
-                  if (failedOrders.isNotEmpty) ...[
-                    const SizedBox(height: 30),
-                    const Text(
-                      "Failed Orders (including stock issues):",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.red,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: failedOrders.map((msg) {
-                          Color textColor = Colors.red;
-
-                          if (msg.contains("Already Created")) {
-                            textColor =
-                                Colors.orange; // Highlight Already Created
-                          } else if (msg.contains("VOIDED")) {
-                            textColor = Colors.grey; // Show Voided in grey
-                          }
-
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Text(
-                              "- $msg",
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: textColor,
-                                fontWeight: msg.contains("Already Created")
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                              ),
+                      const SizedBox(height: 22),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.download_rounded),
+                          label: const Text(
+                            'Fetch Orders',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
                             ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ],
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: const Color(0xFF057A33),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          onPressed: isLoading
+                              ? null
+                              : () async {
+                                  print("\n============================");
+                                  print("🟢 FETCH ORDERS BUTTON PRESSED");
+                                  print("============================\n");
 
-                  if (failedStockProducts.isNotEmpty) ...[
-                    const SizedBox(height: 30),
-                    const Text(
-                      "Products with Stock Issues:",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.red,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: failedStockProducts
-                            .map((info) => Text("- $info"))
-                            .toList(),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
+                                  setState(() {
+                                    isLoading = true;
+                                    loadingText =
+                                        "Fetching & processing latest orders...";
+                                    failedOrders.clear();
+                                    successorders.clear();
+                                    successCustomers.clear();
+                                    failedcustomer.clear();
+                                    failedStockProducts.clear();
+                                    missingSkuProducts.clear();
+                                  });
 
-          // Loading overlay
-          if (isLoading)
-            Container(
-              color: Colors.black.withOpacity(0.5),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                                  await getcustomer();
+
+                                  if (mounted) {
+                                    setState(() {
+                                      isLoading = false;
+                                    });
+                                  }
+
+                                  print("\n🏁 BULK PROCESS FINISHED");
+                                  print("✔ successorders: $successorders");
+                                  print("❌ failedOrders: $failedOrders");
+                                },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
                   children: [
-                    const CircularProgressIndicator(color: Colors.green),
-                    const SizedBox(height: 16),
-                    Text(
-                      loadingText,
-                      style: const TextStyle(color: Colors.white),
+                    Expanded(
+                      child: _buildCountCard(
+                        title: "Success",
+                        count: successorders.length,
+                        icon: Icons.check_circle_rounded,
+                        color: const Color(0xFF00A651),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildCountCard(
+                        title: "Customers",
+                        count: successCustomers.length,
+                        icon: Icons.person_add_alt_1_rounded,
+                        color: const Color(0xFF1565C0),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildCountCard(
+                        title: "Failed",
+                        count: failedOrders.length,
+                        icon: Icons.error_rounded,
+                        color: const Color(0xFFE53935),
+                      ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 18),
+                if (successorders.isEmpty &&
+                    successCustomers.isEmpty &&
+                    failedOrders.isEmpty &&
+                    failedStockProducts.isEmpty &&
+                    missingSkuProducts.isEmpty)
+                  _buildEmptyState(),
+                if (successorders.isNotEmpty)
+                  _buildResultCard(
+                    title: "Success Orders",
+                    icon: Icons.check_circle_rounded,
+                    color: const Color(0xFF00A651),
+                    items: successorders,
+                  ),
+                if (successCustomers.isNotEmpty)
+                  _buildResultCard(
+                    title: "Customers Created",
+                    icon: Icons.person_add_alt_1_rounded,
+                    color: const Color(0xFF1565C0),
+                    items: successCustomers,
+                  ),
+                if (failedOrders.isNotEmpty)
+                  _buildResultCard(
+                    title: "Failed Orders",
+                    icon: Icons.warning_amber_rounded,
+                    color: const Color(0xFFE53935),
+                    items: failedOrders,
+                    isFailed: true,
+                  ),
+                if (failedStockProducts.isNotEmpty)
+                  _buildResultCard(
+                    title: "Products with Stock Issues",
+                    icon: Icons.inventory_2_rounded,
+                    color: const Color(0xFFD32F2F),
+                    items: failedStockProducts,
+                    isFailed: true,
+                  ),
+                if (missingSkuProducts.isNotEmpty)
+                  _buildResultCard(
+                    title: "Products with Missing SKU",
+                    icon: Icons.qr_code_2_rounded,
+                    color: const Color(0xFF8E24AA),
+                    items: missingSkuProducts,
+                    isFailed: true,
+                  ),
+              ],
+            ),
+          ),
+          if (isLoading) _buildLoadingOverlay(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCountCard({
+    required String title,
+    required int count,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            "$count",
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.black54,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.black.withOpacity(0.05)),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.receipt_long_rounded,
+            size: 46,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            "No orders processed yet",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "Tap Fetch Orders to start importing latest Shopify orders.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResultCard({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required List<String> items,
+    bool isFailed = false,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.10),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
               ),
             ),
+            child: Row(
+              children: [
+                Icon(icon, color: color, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: color,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    "${items.length}",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              children: items.map((msg) {
+                Color itemColor = isFailed ? color : Colors.black87;
+
+                if (msg.contains("Already Created")) {
+                  itemColor = Colors.orange.shade800;
+                } else if (msg.contains("VOIDED")) {
+                  itemColor = Colors.grey.shade700;
+                }
+
+                return Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                  decoration: BoxDecoration(
+                    color: itemColor.withOpacity(0.07),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: itemColor.withOpacity(0.13),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        isFailed
+                            ? Icons.info_outline_rounded
+                            : Icons.done_rounded,
+                        size: 18,
+                        color: itemColor,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          msg,
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.35,
+                            color: itemColor,
+                            fontWeight: msg.contains("Already Created")
+                                ? FontWeight.w800
+                                : FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.58),
+      child: Center(
+        child: Container(
+          width: 280,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.18),
+                blurRadius: 22,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                height: 48,
+                width: 48,
+                child: CircularProgressIndicator(
+                  strokeWidth: 5,
+                  color: Color(0xFF00A651),
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                "Please wait",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                loadingText,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -1,11 +1,16 @@
 import 'package:beposoft/Sales%20Directors/DSR_BDO_List.dart';
 import 'package:beposoft/Sales%20Directors/sd_confirm_call_duration.dart';
 import 'package:beposoft/pages/ACCOUNTS/BDO_call_List.dart';
+import 'package:beposoft/pages/ACCOUNTS/Staff_exit_form_page.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_Expenses.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_Recipt.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_bank.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_credit_note.dart';
+import 'package:beposoft/pages/ACCOUNTS/staff_exit_form_list.dart';
+import 'package:beposoft/pages/ACCOUNTS/statewise_order_list.dart';
+import 'package:beposoft/pages/ADMIN/salesteam_cd_reportpage.dart';
 import 'package:beposoft/pages/BDM/add_team_member.dart';
+import 'package:beposoft/pages/MARKETING/bepocart_order_list.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -173,6 +178,18 @@ class drower {
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => staff_list()),
+        );
+        break;
+        case 'Staff Exit Form':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => EmployeeExitFormPage()),
+        );
+        break;
+        case 'Staff Exit List':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => EmployeeExitListPage()),
         );
         break;
       case 'Add Credit Note':
@@ -437,7 +454,7 @@ class drower {
         Navigator.push(
           context,
           MaterialPageRoute(
-              builder: (context) => bdm_OrderList(
+              builder: (context) => bepocartOrderList(
                     status: null,
                   )),
         );
@@ -540,6 +557,11 @@ class drower {
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => OrderItemsExcelReport()),
+        );
+        case 'Sales Team CD Summary Report':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => SalesTeamCdReportPage()),
         );
 
       case 'Shipping Address Excel Report':

@@ -479,51 +479,71 @@ class _BdoCallDurationState extends State<BdoCallDuration> {
     } catch (e) {}
   }
 
- Future<void> getMySalesTeam() async {
-  try {
-    if (mounted) {
-      setState(() {
-        isLoadingTeams = true;
-      });
-    }
-
-    teamController.text = "Loading...";
-    teamLeaderController.text = "Loading...";
-
-    final token = await gettokenFromPrefs();
-    if (token == null) {
-      throw Exception("Token not found");
-    }
-
-    final response = await http.get(
-      Uri.parse('$api/api/my/sales/team/memberships/'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-
-    debugPrint("MY SALES TEAM RESPONSE: ${response.body}");
-
-    if (response.statusCode == 200) {
-      final parsed = jsonDecode(response.body);
-      final data = parsed["data"];
-
-      if (data != null && data is List && data.isNotEmpty) {
-        final firstTeam = data[0];
-
-        if (!mounted) return;
+  Future<void> getMySalesTeam() async {
+    try {
+      if (mounted) {
         setState(() {
-          teamData = {
-            "id": firstTeam["team_id"],
-            "name": firstTeam["team_name"]?.toString() ?? "",
-            "joined_at": firstTeam["joined_at"]?.toString() ?? "",
-          };
-          selectedTeamId = firstTeam["team_id"];
+          isLoadingTeams = true;
         });
+      }
 
-        teamController.text = firstTeam["team_name"]?.toString() ?? "";
-        teamLeaderController.text = "N/A";
+      teamController.text = "Loading...";
+      teamLeaderController.text = "Loading...";
+
+      final token = await gettokenFromPrefs();
+      if (token == null) {
+        throw Exception("Token not found");
+      }
+
+      final response = await http.get(
+        Uri.parse('$api/api/my/sales/team/memberships/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      debugPrint("MY SALES TEAM RESPONSE: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+        final data = parsed["data"];
+
+        if (data != null && data is List && data.isNotEmpty) {
+          data.sort((a, b) {
+            final dateA = DateTime.tryParse(a["joined_at"]?.toString() ?? "") ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+
+            final dateB = DateTime.tryParse(b["joined_at"]?.toString() ?? "") ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+
+            return dateB.compareTo(dateA); // Latest first
+          });
+
+          final latestTeam = data.first;
+
+          if (!mounted) return;
+
+          setState(() {
+            teamData = {
+              "id": latestTeam["team_id"],
+              "name": latestTeam["team_name"]?.toString() ?? "",
+              "joined_at": latestTeam["joined_at"]?.toString() ?? "",
+            };
+            selectedTeamId = latestTeam["team_id"];
+          });
+
+          teamController.text = latestTeam["team_name"]?.toString() ?? "";
+          teamLeaderController.text = "N/A";
+        } else {
+          if (!mounted) return;
+          setState(() {
+            teamData = null;
+            selectedTeamId = null;
+          });
+          teamController.text = "No team assigned";
+          teamLeaderController.text = "No team leader";
+        }
       } else {
         if (!mounted) return;
         setState(() {
@@ -533,7 +553,8 @@ class _BdoCallDurationState extends State<BdoCallDuration> {
         teamController.text = "No team assigned";
         teamLeaderController.text = "No team leader";
       }
-    } else {
+    } catch (e) {
+      debugPrint("Get my sales team error: $e");
       if (!mounted) return;
       setState(() {
         teamData = null;
@@ -541,24 +562,14 @@ class _BdoCallDurationState extends State<BdoCallDuration> {
       });
       teamController.text = "No team assigned";
       teamLeaderController.text = "No team leader";
-    }
-  } catch (e) {
-    debugPrint("Get my sales team error: $e");
-    if (!mounted) return;
-    setState(() {
-      teamData = null;
-      selectedTeamId = null;
-    });
-    teamController.text = "No team assigned";
-    teamLeaderController.text = "No team leader";
-  } finally {
-    if (mounted) {
-      setState(() {
-        isLoadingTeams = false;
-      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoadingTeams = false;
+        });
+      }
     }
   }
-}
 
   Future<void> getDistricts() async {
     try {

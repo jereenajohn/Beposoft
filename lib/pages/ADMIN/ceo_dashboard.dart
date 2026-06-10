@@ -40,6 +40,8 @@ import 'package:beposoft/pages/ACCOUNTS/uploadbulkorders.dart';
 import 'package:beposoft/pages/ACCOUNTS/view_staff.dart';
 import 'package:beposoft/pages/ADMIN/Categorywise_dispatched_details.dart';
 import 'package:beposoft/pages/ADMIN/OD_bank_monthly_details.dart';
+import 'package:beposoft/pages/ADMIN/add_attendance.dart';
+import 'package:beposoft/pages/ADMIN/add_team_staff.dart';
 import 'package:beposoft/pages/ADMIN/bdm_family_detailpage.dart';
 import 'package:beposoft/pages/ADMIN/bdo_statewise+details_page.dart';
 import 'package:beposoft/pages/ADMIN/categoryproductDetailspage.dart';
@@ -53,7 +55,9 @@ import 'package:beposoft/pages/ADMIN/family_detailed_summary_page.dart';
 
 import 'package:beposoft/pages/ADMIN/family_wise_analysis_details_page.dart';
 import 'package:beposoft/pages/ADMIN/sales_report_excel.dart';
+import 'package:beposoft/pages/ADMIN/salesteam_cd_reportpage.dart';
 import 'package:beposoft/pages/ADMIN/warehouse_summary.dart';
+import 'package:beposoft/pages/HR/staff_attendance.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_order_view.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_product_approval.dart';
 import 'package:beposoft/pages/logout_hekper.dart';
@@ -174,6 +178,15 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   bool dashboardInventoryLoading = false;
   double dashboardTotalSellingAmount = 0.0;
 
+  double monthTotalOrderAmount = 0.0;
+  int monthTotalOrders = 0;
+
+  double todayTotalOrderAmount = 0.0;
+  int todayTotalOrders = 0;
+
+  bool isManager = false;
+  int teamWiseTotalPresent = 0;
+
   // int getFamilyPresentCount(String familyName) {
   //   return familyAttendanceData.where((item) {
   //     final family =
@@ -224,6 +237,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     _getUsername(); // Get the username when the page loads
 
     final now = DateTime.now();
+    fetchTeamWiseAttendanceCount();
 
     selectedRange = DateTimeRange(
       start: DateTime(now.year, now.month, now.day, 0, 0, 0),
@@ -231,7 +245,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     );
 
     initdata();
-
+getProfile();
     getGrvList();
     fetchproformaData();
     getSalesReport();
@@ -279,6 +293,66 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     // fetchorders();
     await fetchReport();
   }
+
+  Future<void> fetchTeamWiseAttendanceCount() async {
+  try {
+    final token = await getTokenFromPrefs();
+
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    final response = await http.get(
+      Uri.parse('$api/api/staff/attendance/team/wise/count/').replace(
+        queryParameters: {
+          'start_date': today,
+          'end_date': today,
+        },
+      ),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final parsed = jsonDecode(response.body);
+      final summary = parsed['summary'] ?? {};
+
+      setState(() {
+        teamWiseTotalPresent = _asInt(summary['total_present']);
+      });
+
+      debugPrint("TODAY TOTAL PRESENT: $teamWiseTotalPresent");
+    }
+  } catch (e) {
+    debugPrint("TEAM WISE ATTENDANCE COUNT ERROR: $e");
+  }
+}
+
+  Future<void> getProfile() async {
+  try {
+    final token = await getTokenFromPrefs();
+
+    final response = await http.get(
+      Uri.parse('$api/api/profile/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final parsed = jsonDecode(response.body);
+
+      setState(() {
+        isManager = parsed['data']['is_manager'] ?? false;
+      });
+
+      debugPrint("IS MANAGER : $isManager");
+    }
+  } catch (e) {
+    debugPrint("PROFILE ERROR : $e");
+  }
+}
 
   Future<String?> getdepFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -2202,7 +2276,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   }) {
     return Container(
       width: double.infinity,
-      height: 30,
+      height: 26,
       padding: const EdgeInsets.symmetric(horizontal: 9),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.14),
@@ -2263,14 +2337,27 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
       (sum, item) => sum + _asInt(item['present_count']),
     );
 
-    final withInternalTransfer = _asMap(todayData['with_internal_transfer']);
-    final financeOpeningBalance =
-        _asDouble(withInternalTransfer['open_balance']);
+    // final withInternalTransfer = _asMap(todayData['with_internal_transfer']);
+    // final financeOpeningBalance =
+    //     _asDouble(withInternalTransfer['open_balance']);
 
-    final financeCredit = _asDouble(withInternalTransfer['credit']);
-    final financeDebit = _asDouble(withInternalTransfer['debit']);
-    final financeClosingBalance =
-        _asDouble(withInternalTransfer['closing_balance']);
+    // final financeCredit = _asDouble(withInternalTransfer['credit']);
+    // final financeDebit = _asDouble(withInternalTransfer['debit']);
+    // final financeClosingBalance =
+    //     _asDouble(withInternalTransfer['closing_balance']);
+
+    final currentMonthData = _asMap(bankSummary['current_month_data']);
+
+    final todayBank = _asMap(todayData['with_internal_transfer']);
+    final currentMonthBank = _asMap(currentMonthData['with_internal_transfer']);
+
+    final todayCredit = _asDouble(todayBank['credit']);
+    final todayDebit = _asDouble(todayBank['debit']);
+    final todayClosingBalance = _asDouble(todayBank['closing_balance']);
+
+    final monthCredit = _asDouble(currentMonthBank['credit']);
+    final monthDebit = _asDouble(currentMonthBank['debit']);
+    final monthClosingBalance = _asDouble(currentMonthBank['closing_balance']);
 
     final purchaseSummary = _asMap(beposoftSummary['purchase_summary']);
     final purchaseCount = _asInt(purchaseSummary['total_count']);
@@ -2293,6 +2380,9 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     final currentMonthBillAmount =
         _asDouble(currentMonthBillData['total_amount']);
 
+    final dgmWeightFieldKg =
+        _asDouble(dgmCurrentMonthSummary['total_weight_field_kg']);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
       child: GridView.count(
@@ -2301,11 +2391,10 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
         physics: const NeverScrollableScrollPhysics(),
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: 0.80,
+        childAspectRatio: 0.70,
         children: [
           _buildDashboardCard(
             title: "Sales",
-            icon: Icons.bar_chart_rounded,
             value: _formatDashboardAmount(
               productsData?['month_total_amount'],
             ),
@@ -2323,12 +2412,14 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
           ),
           _buildDashboardCard(
             title: "Finance",
-            icon: Icons.account_balance_wallet_rounded,
-            valueLabel: "CB",
-            value: _formatDashboardAmount(financeClosingBalance),
+            valueLabel: "TCB",
+            value: _formatDashboardAmount(todayClosingBalance),
             lines: [
-              "Credit: ${_formatDashboardAmount(financeCredit)}",
-              "Debit: ${_formatDashboardAmount(financeDebit)}",
+              "TCT: ${_formatDashboardAmount(todayCredit)}",
+              "TDT: ${_formatDashboardAmount(todayDebit)}",
+              // "MCB: ${_formatDashboardAmount(monthClosingBalance)}",
+              "MCT: ${_formatDashboardAmount(monthCredit)}",
+              "MDT: ${_formatDashboardAmount(monthDebit)}",
             ],
             onTap: () {
               Navigator.push(
@@ -2339,55 +2430,65 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
           ),
           _buildDashboardCard(
             title: "Logistics (DGM)",
-            icon: Icons.inventory_2_rounded,
-            value: _formatDashboardAmount(currentMonthBillAmount),
+            value: dgmLoading
+                ? "Loading..."
+                : _formatDashboardAmount(monthTotalOrderAmount),
             lines: [
+              // dgmLoading
+              //     ? "Today Orders: Loading..."
+              //     : "Today Orders: $todayTotalOrders",
+              // dgmLoading
+              //     ? "Today Amount: Loading..."
+              //     : "Today Amount: ${_formatDashboardAmount(todayTotalOrderAmount)}",
               dgmLoading
-                  ? "Amount: Loading..."
+                  ? "Total Invoices: Loading..."
+                  : "Total Invoices: $monthTotalOrders",
+              // dgmLoading
+              //     ? "Month Amount: Loading..."
+              //     : "Month Amount: ${_formatDashboardAmount(monthTotalOrderAmount)}",
+
+              dgmLoading
+                  ? "PO Amount: Loading..."
                   : "PO Amount: ${_formatDashboardAmount(monthTotalParcelAmount)}",
               dgmLoading
-                  ? "Weight: Loading."
-                  : "Weight: ${monthTotalWeight.toStringAsFixed(2)} kg",
-              // "Total Amount: ${_formatDashboardAmount(currentMonthBillAmount)}",
-              // dgmLoading
-              //     ? "Total Amount: Loading."
-              //     : "Total Amount: ${_formatDashboardAmount(currentMonthBillAmount)}",
+                  ? "Weight: Loading..."
+                  : "Weight: ${dgmWeightFieldKg.toStringAsFixed(3)} kg",
               dgmLoading
-                  ? "Avg: Loading."
+                  ? "Avg: Loading..."
                   : "Avg: ₹${monthAverage.toStringAsFixed(2)}/kg",
             ],
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (context) => daily_goods_movementt()),
+                  builder: (context) => daily_goods_movementt(),
+                ),
               );
             },
           ),
           _buildDashboardCard(
             title: "Employees",
-            icon: Icons.groups_rounded,
-            value: "Total $totalStaffs",
+            value: "Total $activeStaffs",
             lines: const [],
             bottom: Column(
               children: [
                 _buildEmployeeColumnItem(
-                  title: "Hired",
+                  title: "Active",
                   value: "$activeStaffs",
                   icon: Icons.check_circle_rounded,
                 ),
+                // const SizedBox(height: 6),
+                // _buildEmployeeColumnItem(
+                //   title: "Resigned",
+                //   value: "$deactiveStaffs",
+                //   icon: Icons.cancel_rounded,
+                // ),
                 const SizedBox(height: 6),
-                _buildEmployeeColumnItem(
-                  title: "Resigned",
-                  value: "$deactiveStaffs",
-                  icon: Icons.cancel_rounded,
-                ),
-                const SizedBox(height: 6),
-                _buildEmployeeColumnItem(
-                  title: "Present",
-                  value: "$totalFamilyPresentCount",
-                  icon: Icons.person_pin_circle_rounded,
-                ),
+                 _buildEmployeeColumnItem(
+  title: "Present",
+  value: "$teamWiseTotalPresent",
+  icon: Icons.person_pin_circle_rounded,
+),
               ],
             ),
             onTap: () {
@@ -2399,7 +2500,6 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
           ),
           _buildDashboardCard(
             title: "Assets",
-            icon: Icons.local_shipping_rounded,
             value: _formatDashboardAmount(assetAmount),
             lines: [
               "Count: $assetCount",
@@ -2414,7 +2514,6 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
           ),
           _buildDashboardCard(
             title: "Purchase",
-            icon: Icons.shopping_bag_rounded,
             value: _formatDashboardAmount(purchaseAmount),
             lines: [
               "Invoices: $purchaseCount",
@@ -2430,7 +2529,6 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
           ),
           _buildDashboardCard(
             title: "Inventory",
-            icon: Icons.warehouse_rounded,
             valueLabel: "WH",
             value: dashboardInventoryLoading
                 ? "Loading..."
@@ -2457,11 +2555,35 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
           ),
           _buildDashboardCard(
             title: "Marketing",
-            icon: Icons.campaign_rounded,
             value: "Campaigns",
             lines: [
               "Ads & promotions",
               "Marketing overview",
+            ],
+            onTap: () {},
+          ),
+          _buildDashboardCard(
+            title: "Sales Team DSR",
+            value: "DSR",
+            lines: [
+              "Today's DSR",
+              "Team performance",
+            ],
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SalesTeamCdReportPage(),
+                ),
+              );
+            },
+          ),
+          _buildDashboardCard(
+            title: "Campaigns",
+            value: "Overview",
+            lines: [
+              "Active campaigns",
+              "Campaign performance",
             ],
             onTap: () {},
           ),
@@ -2472,7 +2594,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
 
   Widget _buildDashboardCard({
     required String title,
-    required IconData icon,
+    // required IconData icon,
     required String value,
     required List<dynamic> lines,
     required VoidCallback onTap,
@@ -2523,22 +2645,22 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    Container(
-                      height: 31,
-                      width: 31,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.20),
-                        borderRadius: BorderRadius.circular(11),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.22),
-                        ),
-                      ),
-                      child: Icon(
-                        icon,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ),
+                    // Container(
+                    //   height: 31,
+                    //   width: 31,
+                    //   decoration: BoxDecoration(
+                    //     color: Colors.white.withOpacity(0.20),
+                    //     borderRadius: BorderRadius.circular(11),
+                    //     border: Border.all(
+                    //       color: Colors.white.withOpacity(0.22),
+                    //     ),
+                    //   ),
+                    //   child: Icon(
+                    //     icon,
+                    //     color: Colors.white,
+                    //     size: 18,
+                    //   ),
+                    // ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -4042,15 +4164,36 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   }
 
   Future<void> getdgm() async {
-    try {
-      final token = await getTokenFromPrefs();
+    final token = await getTokenFromPrefs();
 
-      if (token == null) return;
-
+    if (token == null || token.isEmpty) {
+      if (!mounted) return;
       setState(() {
-        dgmLoading = true;
-      });
+        dgmLoading = false;
 
+        todayTotalOrders = 0;
+        todayTotalOrderAmount = 0.0;
+
+        monthTotalOrders = 0;
+        monthTotalOrderAmount = 0.0;
+
+        monthTotalParcelAmount = 0.0;
+        monthTotalWeight = 0.0;
+        monthAverage = 0.0;
+
+        dgmTodayRows = [];
+        dgmTodaySummary = {};
+        dgmCurrentMonthSummary = {};
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      dgmLoading = true;
+    });
+
+    try {
       final response = await http.get(
         Uri.parse('$api/api/warehouse/get/summary/'),
         headers: {
@@ -4060,97 +4203,123 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
       );
 
       if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
+        final decoded = jsonDecode(response.body);
 
         final Map<String, dynamic> todaySummary =
-            Map<String, dynamic>.from(parsed['today_summary'] ?? {});
-        final Map<String, dynamic> currentMonthSummary =
-            Map<String, dynamic>.from(parsed['current_month_summary'] ?? {});
-        final Map<String, dynamic> data =
-            Map<String, dynamic>.from(parsed['data'] ?? {});
+            decoded['today_summary'] is Map
+                ? Map<String, dynamic>.from(decoded['today_summary'])
+                : {};
 
-        List<Map<String, dynamic>> rows = [];
+        final Map<String, dynamic> currentMonthSummary =
+            decoded['current_month_summary'] is Map
+                ? Map<String, dynamic>.from(decoded['current_month_summary'])
+                : {};
+
+        final Map<String, dynamic> data = decoded['data'] is Map
+            ? Map<String, dynamic>.from(decoded['data'])
+            : {};
+
+        final List<Map<String, dynamic>> todayRows = [];
 
         data.forEach((serviceName, serviceValue) {
-          final Map<String, dynamic> today =
-              Map<String, dynamic>.from(serviceValue['today'] ?? {});
+          final Map<String, dynamic> serviceMap = serviceValue is Map
+              ? Map<String, dynamic>.from(serviceValue)
+              : {};
 
-          final int boxes = (today['total_boxes'] ?? 0) is int
-              ? today['total_boxes']
-              : int.tryParse(today['total_boxes'].toString()) ?? 0;
+          final Map<String, dynamic> today = serviceMap['today'] is Map
+              ? Map<String, dynamic>.from(serviceMap['today'])
+              : {};
 
-          if (boxes == 0) return;
+          final int boxes = _asInt(today['total_boxes']);
 
-          rows.add({
-            'service': serviceName.toString(),
-            'boxes': boxes,
-            'total_post_office_weight_kg': ((today['total_weight_field_kg'] ??
-                    today['total_weight_field'] ??
-                    0) as num)
-                .toDouble(),
-            'total_actual_weight_kg':
-                ((today['total_actual_weight_kg'] ?? 0) as num).toDouble(),
-            'volume_kg': ((today['total_volume'] ?? 0) as num).toDouble(),
-            'total_tracking_amount':
-                ((today['total_parcel_amount'] ?? 0) as num).toDouble(),
-            'total_avg': ((today['average'] ?? 0) as num).toDouble(),
-          });
+          if (boxes > 0) {
+            todayRows.add({
+              'service': serviceName.toString(),
+              'boxes': boxes,
+              'orders': _asInt(today['total_orders']),
+              'actual_weight': _asDouble(today['total_actual_weight_kg']),
+              'post_office_weight': _asDouble(
+                today['total_weight_field_kg'] ?? today['total_weight_field'],
+              ),
+              'volume': _asDouble(today['total_volume']),
+              'parcel_amount': _asDouble(today['total_parcel_amount']),
+              'average': _asDouble(today['average']),
+            });
+          }
         });
 
-        rows.sort((a, b) =>
-            a['service'].toString().compareTo(b['service'].toString()));
+        todayRows.sort(
+          (a, b) => a['service'].toString().compareTo(
+                b['service'].toString(),
+              ),
+        );
 
+        if (!mounted) return;
         setState(() {
           dgmTodaySummary = todaySummary;
           dgmCurrentMonthSummary = currentMonthSummary;
-          dgmTodayRows = rows;
+          dgmTodayRows = todayRows;
 
-          // keeping your old variables too, if used elsewhere
-          parcelData = {
-            for (final row in rows)
-              row['service']: {
-                "box": row['boxes'],
-                "total_actual_weight": row['total_actual_weight_kg'],
-                "total_weight": row['total_post_office_weight_kg'],
-                "total_parcel_amount": row['total_tracking_amount'],
-                "total_volume": row['volume_kg'],
-              }
-          };
+          todayTotalOrders = _asInt(todaySummary['total_orders']);
+          todayTotalOrderAmount = _asDouble(todaySummary['total_order_amount']);
 
-          monthTotalActualWeight =
-              ((currentMonthSummary["total_actual_weight_kg"] ?? 0) as num)
-                  .toDouble();
-          totalvolumee =
-              ((currentMonthSummary["total_volume"] ?? 0) as num).toDouble();
-          totalbox =
-              ((currentMonthSummary["total_boxes"] ?? 0) as num).toDouble();
-          monthTotalWeight = ((currentMonthSummary["total_weight_field_kg"] ??
-                  currentMonthSummary["total_weight_field"] ??
-                  0) as num)
-              .toDouble();
+          monthTotalOrders = _asInt(currentMonthSummary['total_orders']);
+          monthTotalOrderAmount =
+              _asDouble(currentMonthSummary['total_order_amount']);
+
           monthTotalParcelAmount =
-              ((currentMonthSummary["total_parcel_amount"] ?? 0) as num)
-                  .toDouble();
-          monthAverage =
-              ((currentMonthSummary["average"] ?? 0) as num).toDouble();
+              _asDouble(currentMonthSummary['total_parcel_amount']);
+
+          monthTotalWeight = _asDouble(
+            currentMonthSummary['total_weight_field_kg'] ??
+                currentMonthSummary['total_weight_field'],
+          );
+
+          monthAverage = _asDouble(currentMonthSummary['average']);
 
           dgmLoading = false;
         });
       } else {
+        if (!mounted) return;
         setState(() {
           dgmLoading = false;
+
+          todayTotalOrders = 0;
+          todayTotalOrderAmount = 0.0;
+
+          monthTotalOrders = 0;
+          monthTotalOrderAmount = 0.0;
+
+          monthTotalParcelAmount = 0.0;
+          monthTotalWeight = 0.0;
+          monthAverage = 0.0;
+
           dgmTodayRows = [];
           dgmTodaySummary = {};
           dgmCurrentMonthSummary = {};
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         dgmLoading = false;
+
+        todayTotalOrders = 0;
+        todayTotalOrderAmount = 0.0;
+
+        monthTotalOrders = 0;
+        monthTotalOrderAmount = 0.0;
+
+        monthTotalParcelAmount = 0.0;
+        monthTotalWeight = 0.0;
+        monthAverage = 0.0;
+
         dgmTodayRows = [];
         dgmTodaySummary = {};
         dgmCurrentMonthSummary = {};
       });
+
+      print("DGM SUMMARY ERROR: $e");
     }
   }
 
@@ -4665,18 +4834,28 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     );
   }
 
+  // String _formatDouble(dynamic value, {int decimals = 2}) {
+  //   final number = (value ?? 0) is num
+  //       ? (value as num).toDouble()
+  //       : double.tryParse(value.toString()) ?? 0.0;
+  //   return number.toStringAsFixed(decimals);
+  // }
+
+  // String _formatCurrency(dynamic value) {
+  //   final number = (value ?? 0) is num
+  //       ? (value as num).toDouble()
+  //       : double.tryParse(value.toString()) ?? 0.0;
+
+  //   return "₹${number.toStringAsFixed(2)}";
+  // }
+
   String _formatDouble(dynamic value, {int decimals = 2}) {
-    final number = (value ?? 0) is num
-        ? (value as num).toDouble()
-        : double.tryParse(value.toString()) ?? 0.0;
+    final double number = _asDouble(value);
     return number.toStringAsFixed(decimals);
   }
 
   String _formatCurrency(dynamic value) {
-    final number = (value ?? 0) is num
-        ? (value as num).toDouble()
-        : double.tryParse(value.toString()) ?? 0.0;
-
+    final double number = _asDouble(value);
     return "₹${number.toStringAsFixed(2)}";
   }
 
@@ -4706,8 +4885,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
       );
     }
 
-    final int totalDgmBoxes =
-        ((dgmTodaySummary['total_boxes'] ?? 0) as num?)?.toInt() ?? 0;
+    final int totalDgmBoxes = _asInt(dgmTodaySummary['total_boxes']);
 
     final double totalDgmPostOfficeWeight =
         ((dgmTodaySummary['total_weight_field_kg'] ??
@@ -6045,6 +6223,41 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                           MaterialPageRoute(
                               builder: (context) =>
                                   AllUsersDailySalesReportPage()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  ListTile(
+                    title: Text('Staff Attendance'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  HrTeamAttendanceScreen()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  if (isManager)
+                   ListTile(
+                    title: Text('Add Team Staff'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  StaffAttendanceTeamMemberScreen()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+                  if (isManager)
+                   ListTile(
+                    title: Text('Add Attendance'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  StaffMarkAttendanceScreen()));
                       // Navigate to the Settings page or perform any other action
                     },
                   ),

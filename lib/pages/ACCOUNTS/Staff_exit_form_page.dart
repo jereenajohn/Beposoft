@@ -50,7 +50,8 @@ class _EmployeeExitFormPageState extends State<EmployeeExitFormPage> {
 
   final TextEditingController exitDateController = TextEditingController();
   final TextEditingController reasonController = TextEditingController();
-  final TextEditingController exitReasonNoteController = TextEditingController();
+  final TextEditingController exitReasonNoteController =
+      TextEditingController();
   final TextEditingController assetResponsibilityController =
       TextEditingController();
   final TextEditingController handoverDateController = TextEditingController();
@@ -81,6 +82,7 @@ class _EmployeeExitFormPageState extends State<EmployeeExitFormPage> {
       TextEditingController();
 
   final TextEditingController exitFormDateController = TextEditingController();
+  final TextEditingController feedbackController = TextEditingController();
 
   String selectedReasonType = 'resignation';
 
@@ -138,6 +140,7 @@ class _EmployeeExitFormPageState extends State<EmployeeExitFormPage> {
     itClearanceNoteController.dispose();
 
     exitFormDateController.dispose();
+    feedbackController.dispose();
     super.dispose();
   }
 
@@ -228,7 +231,8 @@ class _EmployeeExitFormPageState extends State<EmployeeExitFormPage> {
       return path;
     }
 
-    final cleanedApi = api.endsWith('/') ? api.substring(0, api.length - 1) : api;
+    final cleanedApi =
+        api.endsWith('/') ? api.substring(0, api.length - 1) : api;
     final cleanedPath = path.startsWith('/') ? path : '/$path';
     return '$cleanedApi$cleanedPath';
   }
@@ -310,6 +314,7 @@ class _EmployeeExitFormPageState extends State<EmployeeExitFormPage> {
             selectedEmployeeId = extractId(data['employee']);
             exitDateController.text = formatDate(data['exit_date']);
             reasonController.text = data['reason']?.toString() ?? '';
+            feedbackController.text = data['feedback']?.toString() ?? '';
             selectedReasonType =
                 data['reason_type']?.toString() ?? 'resignation';
             exitReasonNoteController.text =
@@ -358,8 +363,7 @@ class _EmployeeExitFormPageState extends State<EmployeeExitFormPage> {
             salesClearance = extractBool(data['sales_clearance']);
             salesClearanceDateController.text =
                 formatDate(data['sales_clearance_date']);
-            selectedSalesClearanceById =
-                extractId(data['sales_clearance_by']);
+            selectedSalesClearanceById = extractId(data['sales_clearance_by']);
             salesClearanceNoteController.text =
                 data['sales_clearance_note']?.toString() ?? '';
             salesSignatureUrl = buildFullImageUrl(
@@ -430,6 +434,8 @@ class _EmployeeExitFormPageState extends State<EmployeeExitFormPage> {
       itClearanceNoteController.clear();
 
       exitFormDateController.clear();
+
+      feedbackController.clear();
 
       selectedReasonType = 'resignation';
 
@@ -551,6 +557,7 @@ class _EmployeeExitFormPageState extends State<EmployeeExitFormPage> {
 
       addDropdownField('handover_to', selectedHandoverToId);
       addField('handover_date', handoverDateController.text);
+      addField('feedback', feedbackController.text);
 
       request.fields['logistics_clearance'] = logisticsClearance.toString();
       addField(
@@ -1023,7 +1030,7 @@ class _EmployeeExitFormPageState extends State<EmployeeExitFormPage> {
     );
   }
 
-   Future<String?> getdepFromPrefs() async {
+  Future<String?> getdepFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('department');
   }
@@ -1040,21 +1047,17 @@ class _EmployeeExitFormPageState extends State<EmployeeExitFormPage> {
         context,
         MaterialPageRoute(builder: (context) => bdm_dashbord()),
       );
-    } 
-    else if (dep == "SD") {
+    } else if (dep == "SD") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => SdDashboard()),
       );
-    } 
-
-    else if (dep == "HR") {
+    } else if (dep == "HR") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => HrDashboard()),
       );
-    } 
-    else if (dep == "warehouse") {
+    } else if (dep == "warehouse") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => WarehouseDashboard()),
@@ -1092,13 +1095,13 @@ class _EmployeeExitFormPageState extends State<EmployeeExitFormPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FB),
       appBar: AppBar(
-         leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                color: Color(0xFF111827)),
-            onPressed: () async {
-              await _navigateBack();
-            },
-          ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Color(0xFF111827)),
+          onPressed: () async {
+            await _navigateBack();
+          },
+        ),
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF111827),
@@ -1271,6 +1274,11 @@ class _EmployeeExitFormPageState extends State<EmployeeExitFormPage> {
                               buildTextField(
                                 controller: reasonController,
                                 label: 'Reason',
+                                maxLines: 3,
+                              ),
+                              buildTextField(
+                                controller: feedbackController,
+                                label: 'Feedback',
                                 maxLines: 3,
                               ),
                               buildTextField(
@@ -1474,7 +1482,9 @@ class _EmployeeExitFormPageState extends State<EmployeeExitFormPage> {
                       ),
                     )
                   : Text(
-                      isEditMode ? 'Update Employee Exit' : 'Save Employee Exit',
+                      isEditMode
+                          ? 'Update Employee Exit'
+                          : 'Save Employee Exit',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,

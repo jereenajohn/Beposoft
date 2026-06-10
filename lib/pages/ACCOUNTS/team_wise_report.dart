@@ -1032,8 +1032,14 @@ class _TeamWiseReportState extends State<TeamWiseReport> {
         [
           'Team Unbilled',
           totals['team_unbilled'] ?? 0,
+          'New Leads',
+          totals['new_leads'] ?? 0,
+        ],
+        [
           'Total Unbilled',
           totals['total_unbilled'] ?? totals['team_unbilled'] ?? 0,
+          'Unbilled To Billed',
+          totals['unbilled_to_billed'] ?? 0,
         ],
         [
           'Unbilled To Billed',
@@ -2303,6 +2309,7 @@ class _TeamWiseReportState extends State<TeamWiseReport> {
             mainAxisSpacing: isSmall ? 8 : 10,
             children: [
               buildMiniMetric("Team Unbilled", totals['team_unbilled']),
+              buildMiniMetric("New Leads", totals['new_leads']),
               // buildMiniMetric(
               //   "Total Unbilled",
               //   totals['total_unbilled'] ?? totals['team_unbilled'],

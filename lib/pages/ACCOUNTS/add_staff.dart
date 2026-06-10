@@ -38,6 +38,11 @@ class _add_staffState extends State<add_staff> {
   List<Map<String, dynamic>> Warehouses = [];
   int? selectedPostingStateId;
 
+  DateTime selecteLastWorking = DateTime.now();
+
+  File? selectedAadharImage;
+  File? selectedPanImage;
+
   @override
   void initState() {
     super.initState();
@@ -76,12 +81,15 @@ class _add_staffState extends State<add_staff> {
   TextEditingController staff_id = TextEditingController();
   TextEditingController emergency_contact_name = TextEditingController();
   TextEditingController emergency_contact_number = TextEditingController();
+  TextEditingController emergency_contact_name1 = TextEditingController();
+  TextEditingController emergency_contact_number1 = TextEditingController();
   TextEditingController experience = TextEditingController();
   TextEditingController previous_company = TextEditingController();
   TextEditingController education = TextEditingController();
   TextEditingController aadhar_no = TextEditingController();
   TextEditingController pan_no = TextEditingController();
   TextEditingController place = TextEditingController();
+  TextEditingController termination_date = TextEditingController();
   List<String> bloodGroups = [
     'A+',
     'A-',
@@ -175,6 +183,23 @@ class _add_staffState extends State<add_staff> {
       setState(() {
         selecteconf = DateTime(picked.year, picked.month, picked.day);
         date2 = DateFormat('yyyy-MM-dd').format(selecteconf);
+      });
+    }
+  }
+
+  Future<void> _selectLastWorkingDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: selecteLastWorking,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+
+    if (picked != null && picked != selecteLastWorking) {
+      setState(() {
+        selecteLastWorking = DateTime(picked.year, picked.month, picked.day);
+        termination_date.text =
+            DateFormat('yyyy-MM-dd').format(selecteLastWorking);
       });
     }
   }
@@ -509,6 +534,62 @@ class _add_staffState extends State<add_staff> {
     } catch (error) {}
   }
 
+  void pickAadharImage() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+      );
+
+      if (result != null) {
+        setState(() {
+          selectedAadharImage = File(result.files.single.path!);
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Aadhar image selected successfully."),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Error while selecting Aadhar image."),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void pickPanImage() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+      );
+
+      if (result != null) {
+        setState(() {
+          selectedPanImage = File(result.files.single.path!);
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("PAN image selected successfully."),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Error while selecting PAN image."),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   void addsupervisor(String name, BuildContext context) async {
     final token = await gettokenFromPrefs();
 
@@ -635,7 +716,10 @@ class _add_staffState extends State<add_staff> {
         'staff_id': staff_id.text,
         'emergency_contact_name': emergency_contact_name.text,
         'emergency_contact_number': emergency_contact_number.text,
-        'experience': int.tryParse(experience.text) ?? 0,
+        'emergency_contact_name1': emergency_contact_name1.text.trim(),
+        'emergency_contact_number1': emergency_contact_number1.text.trim(),
+        'experience': experience.text.trim(),
+        'termination_date': termination_date.text.trim(),
         'previous_company': previous_company.text,
         'blood_group': selectedBloodGroup ?? '',
         'education': education.text,
@@ -705,6 +789,8 @@ class _add_staffState extends State<add_staff> {
     File? image2,
     File? expLetter,
     File? salarySlip,
+    File? aadharImage,
+    File? panImage,
     BuildContext scaffoldContext,
   ) async {
     final token = await gettokenFromPrefs();
@@ -718,27 +804,33 @@ class _add_staffState extends State<add_staff> {
       request.headers['Authorization'] = 'Bearer $token';
 
       if (image1 != null) {
-        request.files.add(
-          await http.MultipartFile.fromPath('image', image1.path),
-        );
+        request.files
+            .add(await http.MultipartFile.fromPath('image', image1.path));
       }
 
       if (image2 != null) {
-        request.files.add(
-          await http.MultipartFile.fromPath('signatur_up', image2.path),
-        );
+        request.files
+            .add(await http.MultipartFile.fromPath('signatur_up', image2.path));
       }
 
       if (expLetter != null) {
         request.files.add(
-          await http.MultipartFile.fromPath('exp_letter', expLetter.path),
-        );
+            await http.MultipartFile.fromPath('exp_letter', expLetter.path));
       }
 
       if (salarySlip != null) {
         request.files.add(
-          await http.MultipartFile.fromPath('salrary_slip', salarySlip.path),
-        );
+            await http.MultipartFile.fromPath('salrary_slip', salarySlip.path));
+      }
+
+      if (aadharImage != null) {
+        request.files.add(await http.MultipartFile.fromPath(
+            'aadhar_image', aadharImage.path));
+      }
+
+      if (panImage != null) {
+        request.files
+            .add(await http.MultipartFile.fromPath('pan_image', panImage.path));
       }
 
       var streamedResponse = await request.send();
@@ -762,7 +854,7 @@ class _add_staffState extends State<add_staff> {
       }
     } catch (e) {
       ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
+        SnackBar(content: Text('File upload error: $e')),
       );
     }
   }
@@ -794,6 +886,9 @@ class _add_staffState extends State<add_staff> {
     education.dispose();
     aadhar_no.dispose();
     pan_no.dispose();
+    emergency_contact_name1.dispose();
+    emergency_contact_number1.dispose();
+    termination_date.dispose();
 
     place.dispose();
     super.dispose();
@@ -869,16 +964,14 @@ class _add_staffState extends State<add_staff> {
         context,
         MaterialPageRoute(builder: (context) => bdo_dashbord()),
       );
-    } 
-        else if (dep == "SD") {
+    } else if (dep == "SD") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
             builder: (context) =>
                 SdDashboard()), // Replace AnotherPage with your target page
       );
-    }
-    else if (dep == "BDM") {
+    } else if (dep == "BDM") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => bdm_dashbord()),
@@ -1746,16 +1839,14 @@ class _add_staffState extends State<add_staff> {
                   context,
                   MaterialPageRoute(builder: (context) => bdo_dashbord()),
                 );
-              } 
-                  else if (dep == "SD") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) =>
-                SdDashboard()), // Replace AnotherPage with your target page
-      );
-    }
-              else if (dep == "BDM") {
+              } else if (dep == "SD") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) =>
+                          SdDashboard()), // Replace AnotherPage with your target page
+                );
+              } else if (dep == "BDM") {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(builder: (context) => bdm_dashbord()),
@@ -1870,6 +1961,16 @@ class _add_staffState extends State<add_staff> {
                               icon: Icons.assignment_ind_outlined),
                           _buildTextField(grade, 'Grade',
                               icon: Icons.stacked_bar_chart_outlined),
+                          _buildTextField(
+                            experience,
+                            'Experience',
+                            icon: Icons.timeline_outlined,
+                            keyboardType: TextInputType.text,
+                          ),
+                          _buildTextField(previous_company, 'Previous Company',
+                              icon: Icons.business_outlined),
+                          _buildTextField(education, 'Education',
+                              icon: Icons.school_outlined),
                           _buildDateField(
                             title: "Joining Date",
                             date: selectejoin,
@@ -1879,6 +1980,11 @@ class _add_staffState extends State<add_staff> {
                             title: "Confirmation Date",
                             date: selecteconf,
                             onTap: () => _selectDate4(context),
+                          ),
+                          _buildDateField(
+                            title: "Last day of working",
+                            date: selecteLastWorking,
+                            onTap: () => _selectLastWorkingDate(context),
                           ),
                           _buildApprovalDropdown(constraints),
                         ],
@@ -1893,45 +1999,59 @@ class _add_staffState extends State<add_staff> {
                               'Emergency Contact Number',
                               icon: Icons.call_outlined,
                               keyboardType: TextInputType.phone),
-                          _buildTextField(experience, 'Experience',
-                              icon: Icons.timeline_outlined,
-                              keyboardType: TextInputType.number),
-                          _buildTextField(previous_company, 'Previous Company',
-                              icon: Icons.business_outlined),
-                          _buildTextField(education, 'Education',
-                              icon: Icons.school_outlined),
-                          _buildBloodGroupDropdown(),
-                          _buildTextField(aadhar_no, 'Aadhar Number',
-                              icon: Icons.credit_card_outlined,
-                              keyboardType: TextInputType.number),
-                          _buildTextField(pan_no, 'PAN Number',
-                              icon: Icons.account_box_outlined,
-                              textCapitalization:
-                                  TextCapitalization.characters),
-                        ],
-                      ),
-                      _buildSectionCard(
-                        title: "License, Address & Country",
-                        children: [
-                          _buildTextField(driving_license, 'Driving License',
-                              icon: Icons.drive_eta_outlined),
-                          _buildDateField(
-                            title: "License Expiry Date",
-                            date: selecteExp,
-                            onTap: () => _selectDate2(context),
+                          _buildTextField(
+                            emergency_contact_name1,
+                            'Emergency Contact Name 2',
+                            icon: Icons.contact_phone_outlined,
                           ),
-                          _buildTextField(address, 'Address',
-                              icon: Icons.location_on_outlined, maxLines: 3),
-                          _buildTextField(city, 'City',
-                              icon: Icons.location_city_outlined),
-                          _buildTextField(Country, 'Country',
-                              icon: Icons.public_outlined),
-                          _buildPostingStateDropdown(),
-                          _buildTextField(place, 'Place',
-                              icon: Icons.place_outlined),
-                          _buildCountryCodeDropdown(),
+                          _buildTextField(
+                            emergency_contact_number1,
+                            'Emergency Contact Number 2',
+                            icon: Icons.call_outlined,
+                            keyboardType: TextInputType.phone,
+                          ),
+                          // _buildTextField(
+                          //   experience,
+                          //   'Experience',
+                          //   icon: Icons.timeline_outlined,
+                          //   keyboardType: TextInputType.text,
+                          // ),
+                          // _buildTextField(previous_company, 'Previous Company',
+                          //     icon: Icons.business_outlined),
+                          // _buildTextField(education, 'Education',
+                          //     icon: Icons.school_outlined),
+                          _buildBloodGroupDropdown(),
+                          // _buildTextField(aadhar_no, 'Aadhar Number',
+                          //     icon: Icons.credit_card_outlined,
+                          //     keyboardType: TextInputType.number),
+                          // _buildTextField(pan_no, 'PAN Number',
+                          //     icon: Icons.account_box_outlined,
+                          //     textCapitalization:
+                          //         TextCapitalization.characters),
                         ],
                       ),
+                      // _buildSectionCard(
+                      //   title: "License, Address & Country",
+                      //   children: [
+                      //     _buildTextField(driving_license, 'Driving License',
+                      //         icon: Icons.drive_eta_outlined),
+                      //     _buildDateField(
+                      //       title: "License Expiry Date",
+                      //       date: selecteExp,
+                      //       onTap: () => _selectDate2(context),
+                      //     ),
+                      //     _buildTextField(address, 'Address',
+                      //         icon: Icons.location_on_outlined, maxLines: 3),
+                      //     _buildTextField(city, 'City',
+                      //         icon: Icons.location_city_outlined),
+                      //     _buildTextField(Country, 'Country',
+                      //         icon: Icons.public_outlined),
+                      //     _buildPostingStateDropdown(),
+                      //     _buildTextField(place, 'Place',
+                      //         icon: Icons.place_outlined),
+                      //     _buildCountryCodeDropdown(),
+                      //   ],
+                      // ),
                       _buildSectionCard(
                         title: "Uploads",
                         children: [
@@ -1941,23 +2061,35 @@ class _add_staffState extends State<add_staff> {
                             file: selectedImage,
                             onTap: imageSelect,
                           ),
-                          _buildUploadTile(
-                            title: "Signature",
-                            fallbackText: "Select Signature",
-                            file: selectedImage1,
-                            onTap: imageSelect1,
-                          ),
+                          // _buildUploadTile(
+                          //   title: "Signature",
+                          //   fallbackText: "Select Signature",
+                          //   file: selectedImage1,
+                          //   onTap: imageSelect1,
+                          // ),
                           _buildUploadTile(
                             title: "Experience Letter",
                             fallbackText: "Select Experience Letter",
                             file: selectedExpLetter,
                             onTap: pickExpLetter,
                           ),
+                          // _buildUploadTile(
+                          //   title: "Salary Slip",
+                          //   fallbackText: "Select Salary Slip",
+                          //   file: selectedSalarySlip,
+                          //   onTap: pickSalarySlip,
+                          // ),
                           _buildUploadTile(
-                            title: "Salary Slip",
-                            fallbackText: "Select Salary Slip",
-                            file: selectedSalarySlip,
-                            onTap: pickSalarySlip,
+                            title: "Aadhar Image",
+                            fallbackText: "Select Aadhar Image",
+                            file: selectedAadharImage,
+                            onTap: pickAadharImage,
+                          ),
+                          _buildUploadTile(
+                            title: "PAN Image",
+                            fallbackText: "Select PAN Image",
+                            file: selectedPanImage,
+                            onTap: pickPanImage,
                           ),
                           const SizedBox(height: 4),
                           SizedBox(
@@ -1984,6 +2116,8 @@ class _add_staffState extends State<add_staff> {
                                   selectedImage1,
                                   selectedExpLetter,
                                   selectedSalarySlip,
+                                  selectedAadharImage,
+                                  selectedPanImage,
                                   scaffoldContext,
                                 );
 
