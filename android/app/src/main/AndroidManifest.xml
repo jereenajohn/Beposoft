@@ -19,7 +19,7 @@
         tools:node="remove" />
 
     <application
-        android:label="beposoft"
+        android:label="PSAGE"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 

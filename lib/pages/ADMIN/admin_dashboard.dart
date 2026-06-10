@@ -35,6 +35,8 @@ import 'package:beposoft/pages/ACCOUNTS/performa_invoice_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/team_wise_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/todays_orders_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/uploadbulkorders.dart';
+import 'package:beposoft/pages/ADMIN/add_attendance.dart';
+import 'package:beposoft/pages/ADMIN/add_team_staff.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_order_view.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_product_approval.dart';
 import 'package:beposoft/pages/logout_hekper.dart';
@@ -73,11 +75,13 @@ class _admin_dashboardState extends State<admin_dashboard> {
   List<Map<String, dynamic>> shippedOrders = [];
 
   String? username = '';
+  bool isManager = false;
   @override
   void initState() {
     super.initState();
     _getUsername(); // Get the username when the page loads
     getGrvList();
+      getProfile();
     fetchproformaData();
     getSalesReport();
     fetchOrderData();
@@ -91,6 +95,33 @@ class _admin_dashboardState extends State<admin_dashboard> {
   int confirm = 0;
   int approvalcount = 0;
   int confirmcount = 0;
+
+  Future<void> getProfile() async {
+  try {
+    final token = await getTokenFromPrefs();
+
+    final response = await http.get(
+      Uri.parse('$api/api/profile/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final parsed = jsonDecode(response.body);
+
+      setState(() {
+        isManager = parsed['data']['is_manager'] ?? false;
+      });
+
+      debugPrint("IS MANAGER : $isManager");
+    }
+  } catch (e) {
+    debugPrint("PROFILE ERROR : $e");
+  }
+}
+
   Future<void> fetchOrderData() async {
     try {
       final token = await getTokenFromPrefs();
@@ -1018,6 +1049,34 @@ class _admin_dashboardState extends State<admin_dashboard> {
                   // Navigate to the Settings page or perform any other action
                 },
               ),
+              if (isManager)
+  ListTile(
+    leading: const Icon(Icons.group_add),
+    title: const Text('Add Team Staff'),
+    onTap: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              StaffAttendanceTeamMemberScreen(),
+        ),
+      );
+    },
+  ),
+              if (isManager)
+  ListTile(
+    leading: const Icon(Icons.fact_check_outlined),
+    title: const Text('Add Attendance'),
+    onTap: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              const StaffMarkAttendanceScreen(),
+        ),
+      );
+    },
+  ),
               //  ListTile(
               //   leading: Icon(Icons.person),
               //   title: Text('Delivery Notes'),

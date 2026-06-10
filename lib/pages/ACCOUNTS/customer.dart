@@ -192,6 +192,7 @@ class _customer_listState extends State<customer_list> {
     }
   }
 
+
   void applyFilters() {
     List<Map<String, dynamic>> temp = List.from(customer);
 

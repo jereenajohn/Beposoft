@@ -4,6 +4,7 @@ import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 // import 'package:beposoft/pages/ACCOUNTS/call_log.dart';
 import 'package:beposoft/pages/ACCOUNTS/customer.dart';
 import 'package:beposoft/pages/ACCOUNTS/order_list.dart';
+import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
 import 'package:beposoft/pages/BDO/add_district.dart';
 import 'package:beposoft/pages/BDO/bdo_customer_list.dart';
 import 'package:beposoft/pages/BDO/bdo_order_list.dart';
@@ -589,6 +590,14 @@ class _bdo_dashbordState extends State<bdo_dashbord> {
                 onTap: () {
                   Navigator.push(context,
                       MaterialPageRoute(builder: (context) => AddDistricts()));
+                },
+              ),
+
+              ListTile(
+                title: Text('Employee Leave Form'),
+                onTap: () {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (context) => EmployeeLeaveFormPage()));
                 },
               ),
 

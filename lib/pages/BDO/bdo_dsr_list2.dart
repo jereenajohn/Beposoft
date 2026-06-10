@@ -545,15 +545,22 @@ class _BdoDsrList2State extends State<BdoDsrList2> {
       await getDistricts();
     }
 
+    final newLeadsController = TextEditingController(
+      text: latestReport['new_leads']?.toString() ?? '0',
+    );
+
     final unbilledController = TextEditingController(
       text: latestReport['unbilled']?.toString() ?? '0',
     );
+
     final billedController = TextEditingController(
       text: latestReport['billed']?.toString() ?? '0',
     );
+
     final newCustomersController = TextEditingController(
       text: latestReport['new_customers']?.toString() ?? '0',
     );
+
     final newConversionsController = TextEditingController(
       text: latestReport['new_conversions']?.toString() ?? '0',
     );
@@ -793,6 +800,12 @@ class _BdoDsrList2State extends State<BdoDsrList2> {
                                     );
                                   },
                                 ),
+                                const SizedBox(height: 12),
+                                _buildDialogTextField(
+                                  label: "New Leads",
+                                  controller: newLeadsController,
+                                  icon: Icons.leaderboard_outlined,
+                                ),
                               ],
                             ),
                           ),
@@ -845,6 +858,8 @@ class _BdoDsrList2State extends State<BdoDsrList2> {
                                         _parseInt(newCustomersController.text);
                                     final int newConversions = _parseInt(
                                         newConversionsController.text);
+                                    final int newLeads =
+                                        _parseInt(newLeadsController.text);
 
                                     if (billed > unbilled) {
                                       messenger.showSnackBar(
@@ -873,6 +888,7 @@ class _BdoDsrList2State extends State<BdoDsrList2> {
                                     final updatedData = {
                                       "state": currentStateId,
                                       "district": currentDistrictId,
+                                      "new_leads": newLeads,
                                       "unbilled": unbilled,
                                       "billed": billed,
                                       "new_customers": newCustomers,
@@ -1595,6 +1611,21 @@ class _BdoDsrList2State extends State<BdoDsrList2> {
                         icon: Icons.trending_up_outlined,
                         valueColor: successGreen,
                         cardColor: const Color(0xffEEFDF3),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 150,
+                      child: _metricBox(
+                        "New Leads",
+                        item['new_leads']?.toString() ?? "0",
+                        icon: Icons.leaderboard_outlined,
+                        valueColor: primaryBlue,
+                        cardColor: const Color(0xffEFF6FF),
                       ),
                     ),
                   ],
