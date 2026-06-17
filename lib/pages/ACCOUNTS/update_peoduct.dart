@@ -54,7 +54,7 @@ class _update_productState extends State<update_product> {
   List<String> purchasetype = ["International", 'Local'];
   String selectpurchasetype = "International";
   List<Map<String, dynamic>> rackDetailsList = [];
-int? editingRackIndex;
+  int? editingRackIndex;
 
   List<String> type = ["single", 'variant'];
 
@@ -89,6 +89,8 @@ int? editingRackIndex;
   TextEditingController size = TextEditingController();
   TextEditingController retailprice = TextEditingController();
   TextEditingController landingprice = TextEditingController();
+  TextEditingController dutycharge = TextEditingController();
+  TextEditingController finalprice = TextEditingController();
   TextEditingController rackStockController =
       TextEditingController(); // Controller for rack stock input
 
@@ -99,7 +101,7 @@ int? editingRackIndex;
   List<Map<String, dynamic>> variantProducts = [];
   List<Map<String, dynamic>> singleProducts = [];
   List<Map<String, dynamic>> Warehouses = [];
-    List<Map<String, dynamic>> allRacks = []; // Holds full rack list from API
+  List<Map<String, dynamic>> allRacks = []; // Holds full rack list from API
   List<Map<String, dynamic>> filteredRacks =
       []; // Only racks matching selected warehouse
   List<Map<String, dynamic>> rackDetails = [];
@@ -107,11 +109,11 @@ int? editingRackIndex;
   String? selectedcategoryName;
   int? selectedrackId; // Variable to store the selected department's ID
   String? selectedrackName;
- List<String> rackColumns = []; // State variable
+  List<String> rackColumns = []; // State variable
   List<String> columnNames = []; // For storing selected rack's columns
   String? selectedColumn; // For selected column
- String? selectedUsability;
-   List<String> usabilityOptions = ["usable", "damaged", "partially_damaged"];
+  String? selectedUsability;
+  List<String> usabilityOptions = ["usable", "damaged", "partially_damaged"];
 
   var selecttype;
   @override
@@ -138,46 +140,43 @@ int? editingRackIndex;
     }
   }
 
-  
-Future<void> AddStatusTime(BuildContext scaffoldContext) async {
-  final token = await gettokenFromPrefs();
-  try {
-    final response = await http.post(
-      Uri.parse('$api/api/datalog/create/'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-         'before_data': {"Action": "$singleProducts updated "},
-        'after_data':  {"Data": "$respo"},
-        'order': "",
-      }),
-    );
-
-    // print("====================${response.body}");
-
-    if (response.statusCode == 201) {
-
-      ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.green,
-          content: Text('time added Successfully.'),
-        ),
+  Future<void> AddStatusTime(BuildContext scaffoldContext) async {
+    final token = await gettokenFromPrefs();
+    try {
+      final response = await http.post(
+        Uri.parse('$api/api/datalog/create/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'before_data': {"Action": "$singleProducts updated "},
+          'after_data': {"Data": "$respo"},
+          'order': "",
+        }),
       );
-    } else {
-      ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.red,
-          content: Text('Adding time failed.'),
-        ),
-      );
-    }
-  } catch (e) {
+
+      // print("====================${response.body}");
+
+      if (response.statusCode == 201) {
+        ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.green,
+            content: Text('time added Successfully.'),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('Adding time failed.'),
+          ),
+        );
+      }
+    } catch (e) {}
   }
-}
 
-Future<void> getrack() async {
+  Future<void> getrack() async {
     final token = await gettokenFromPrefs();
     try {
       final response = await http.get(
@@ -211,37 +210,36 @@ Future<void> getrack() async {
           });
         });
       }
-    } catch (e) {
+    } catch (e) {}
+  }
+
+  void addRackDetail() {
+    if (selectedrackId != null &&
+        selectedColumn != null &&
+        selectedUsability != null &&
+        rackStockController.text.isNotEmpty) {
+      // Find rack name from filteredRacks
+      String? rackName = filteredRacks
+          .firstWhere((rack) => rack['id'] == selectedrackId)['rack_name'];
+
+      setState(() {
+        rackDetailsList.add({
+          "rack_id": selectedrackId,
+          "rack_name": rackName, // <-- Add rack_name
+          "column_name": selectedColumn,
+          "usability": selectedUsability!.toLowerCase(),
+          "rack_stock": int.parse(rackStockController.text),
+        });
+        // Clear after adding
+        selectedrackId = null;
+        selectedColumn = null;
+        selectedUsability = null;
+        rackStockController.clear();
+      });
     }
   }
 
-   void addRackDetail() {
-  if (selectedrackId != null &&
-      selectedColumn != null &&
-      selectedUsability != null &&
-      rackStockController.text.isNotEmpty) {
-    // Find rack name from filteredRacks
-    String? rackName = filteredRacks
-        .firstWhere((rack) => rack['id'] == selectedrackId)['rack_name'];
-
-    setState(() {
-      rackDetailsList.add({
-        "rack_id": selectedrackId,
-        "rack_name": rackName, // <-- Add rack_name
-        "column_name": selectedColumn,
-        "usability": selectedUsability!.toLowerCase(),
-        "rack_stock": int.parse(rackStockController.text),
-      });
-      // Clear after adding
-      selectedrackId = null;
-      selectedColumn = null;
-      selectedUsability = null;
-      rackStockController.clear();
-    });
-  }
-}
-
- List<Map<String, dynamic>> category = [];
+  List<Map<String, dynamic>> category = [];
 
   Future<void> getproductcategory() async {
     try {
@@ -265,10 +263,11 @@ Future<void> getrack() async {
             'id': productData['id'],
             'name': productData['category_name'],
           });
-        setState(() {
-          category = categorylist;
-        });
-      }}
+          setState(() {
+            category = categorylist;
+          });
+        }
+      }
     } catch (error) {}
   }
 
@@ -304,20 +303,15 @@ Future<void> getrack() async {
     } catch (e) {}
   }
 
-  void calculateLandingPrice() {
-    double purchaseRate = double.tryParse(purchaserate.text) ?? 0.0;
-    double taxPercentage = tax; // From taxx TextField
+void calculateLandingPrice() {
+  double purchaseRate = double.tryParse(purchaserate.text) ?? 0.0;
+  double dutyChargePercent = double.tryParse(dutycharge.text) ?? 0.0;
 
-    // Calculate the tax amount
-    double taxAmount = (purchaseRate * taxPercentage) / 100;
+  double dutyChargeAmount = (purchaseRate * dutyChargePercent) / 100;
+  double landingPrice = purchaseRate + dutyChargeAmount;
 
-    // Calculate the landing price
-    double landingPrice = purchaseRate + taxAmount;
-
-    // Update the landing price TextField
-    landingprice.text =
-        landingPrice.toStringAsFixed(2); // Set to 2 decimal places
-  }
+  landingprice.text = landingPrice.toStringAsFixed(2);
+}
 
   var image;
   final ImagePicker _picker = ImagePicker();
@@ -394,8 +388,8 @@ Future<void> getrack() async {
         var productData = parsed['products']; // Map of the product
         var variantIDs = productData['variantIDs']; // List of variants
         var rackDetails = productData['rack_details'] ?? [];
-          var  warehouseId = productData[
-                'warehouse']; // Set the warehouse ID from the response
+        var warehouseId =
+            productData['warehouse']; // Set the warehouse ID from the response
         if (variantIDs is List) {
           setState(() {
             selectedwarehouseId = warehouseId;
@@ -422,6 +416,10 @@ Future<void> getrack() async {
                     singleProducts[0]['landing_cost']?.toString() ?? '';
                 retailprice.text =
                     singleProducts[0]['retail_price']?.toString() ?? '';
+                dutycharge.text =
+                    singleProducts[0]['duty_charge']?.toString() ?? '';
+                finalprice.text =
+                    singleProducts[0]['final_price']?.toString() ?? '';
                 fami = singleProducts[0]['family'];
                 rackDetailsList = List<Map<String, dynamic>>.from(rackDetails);
               }
@@ -448,8 +446,7 @@ Future<void> getrack() async {
                 retailprice.text =
                     singleProducts[0]['retail_price']?.toString() ?? '';
                 fami = singleProducts[0]['family'];
-                                rackDetailsList = List<Map<String, dynamic>>.from(rackDetails);
-
+                rackDetailsList = List<Map<String, dynamic>>.from(rackDetails);
 
                 ;
               }
@@ -502,6 +499,8 @@ Future<void> getrack() async {
         'landing_cost': landingPriceValue,
         'warehouse': selectedwarehouseId,
         'stock': stock.text,
+        'duty_charge': dutycharge.text,
+        'final_price': finalprice.text,
         'approval_status':
             approvalStatus, // Set approval status to 'Disapproved'
       };
@@ -532,12 +531,11 @@ Future<void> getrack() async {
       if (responseData.statusCode == 200) {
         // Parse the response body
         final Map<String, dynamic> responseBody = jsonDecode(responseData.body);
-         respo=responseBody['data'];
-
+        respo = responseBody['data'];
 
         // Store the product ID in the global variable
         globalProductId = responseBody['data']['id'].toString();
-AddStatusTime(context);
+        AddStatusTime(context);
         // Show success message
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
           SnackBar(
@@ -597,7 +595,6 @@ AddStatusTime(context);
       // Send the request
       var response = await request.send();
       var responseData = await http.Response.fromStream(response);
-
 
       if (responseData.statusCode == 200) {
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
@@ -1105,289 +1102,301 @@ AddStatusTime(context);
                             ),
 
                             SizedBox(height: 10),
-ListView.builder(
-  shrinkWrap: true,
-  physics: NeverScrollableScrollPhysics(),
-  itemCount: rackDetailsList.length,
-  itemBuilder: (context, index) {
-    final rack = rackDetailsList[index];
-    return GestureDetector(
-      onTap: () {
-  final tappedRack = rackDetailsList[index];
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: NeverScrollableScrollPhysics(),
+                              itemCount: rackDetailsList.length,
+                              itemBuilder: (context, index) {
+                                final rack = rackDetailsList[index];
+                                return GestureDetector(
+                                  onTap: () {
+                                    final tappedRack = rackDetailsList[index];
 
+                                    final matchingRack = allRacks.firstWhere(
+                                      (rack) =>
+                                          rack['id'] == tappedRack['rack_id'],
+                                      orElse: () => <String, dynamic>{},
+                                    );
 
-  final matchingRack = allRacks.firstWhere(
-    (rack) => rack['id'] == tappedRack['rack_id'],
-    orElse: () => <String, dynamic>{},
-  );
+                                    if (matchingRack != null) {
+                                      setState(() {
+                                        editingRackIndex =
+                                            index; // 👈 track the index to update later
+                                        filteredRacks = [matchingRack];
+                                        selectedrackId = filteredRacks[0]['id'];
+                                        selectedrackName =
+                                            filteredRacks[0]['name'];
+                                        selectedColumn =
+                                            tappedRack['column_name'];
+                                        selectedUsability =
+                                            tappedRack['usability'];
+                                        rackStockController.text =
+                                            tappedRack['rack_stock'].toString();
+                                        columnNames = List<String>.from(
+                                            matchingRack['column_names']);
+                                      });
+                                    } else {}
+                                  },
+                                  child: Card(
+                                    elevation: 2,
+                                    margin: EdgeInsets.symmetric(
+                                        vertical: 6, horizontal: 12),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12.0),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.warehouse_outlined),
+                                          SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  'Column: ${rack["column_name"]}',
+                                                  style: TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold),
+                                                ),
+                                                SizedBox(height: 4),
+                                                Text(
+                                                    'Usability: ${rack["usability"]}'),
+                                                Text(
+                                                    'Stock: ${rack["rack_stock"]}'),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
 
-  if (matchingRack != null) {
-    setState(() {
-      editingRackIndex = index; // 👈 track the index to update later
-      filteredRacks = [matchingRack];
-      selectedrackId=filteredRacks[0]['id'];
-      selectedrackName=filteredRacks[0]['name'];
-      selectedColumn =tappedRack['column_name'];
-      selectedUsability = tappedRack['usability'];
-rackStockController.text = tappedRack['rack_stock'].toString();
-columnNames = List<String>.from(matchingRack['column_names']);
+                            if (filteredRacks.isNotEmpty)
+                              Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10.0),
+                                  border: Border.all(color: Colors.grey),
+                                ),
+                                padding: EdgeInsets.symmetric(horizontal: 12),
+                                child: DropdownButton<int>(
+                                  isExpanded: true,
+                                  value: selectedrackId,
+                                  hint: Text('Select a Rack'),
+                                  underline: SizedBox(),
+                                  onChanged: (int? newValue) {
+                                    setState(() {
+                                      selectedrackId = newValue;
+                                      final selectedRack =
+                                          filteredRacks.firstWhere(
+                                              (rack) => rack['id'] == newValue);
+                                      selectedrackName =
+                                          selectedRack['rack_name'];
+                                      columnNames = List<String>.from(
+                                          selectedRack['column_names']);
+                                      selectedColumn = null;
+                                    });
+                                  },
+                                  items: filteredRacks.map((rack) {
+                                    return DropdownMenuItem<int>(
+                                      value: rack['id'],
+                                      child: Text(rack['rack_name']),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
 
-    });
-  } else {
-  }
-},
+                            SizedBox(height: 10),
 
-      child: Card(
-        elevation: 2,
-        margin: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Row(
-            children: [
-              Icon(Icons.warehouse_outlined),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Column: ${rack["column_name"]}',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 4),
-                    Text('Usability: ${rack["usability"]}'),
-                    Text('Stock: ${rack["rack_stock"]}'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  },
-)
-,
-                           
-                              if (filteredRacks.isNotEmpty)
-  Container(
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(10.0),
-      border: Border.all(color: Colors.grey),
-    ),
-    padding: EdgeInsets.symmetric(horizontal: 12),
-    child: DropdownButton<int>(
-      isExpanded: true,
-      value: selectedrackId,
-      hint: Text('Select a Rack'),
-      underline: SizedBox(),
-      onChanged: (int? newValue) {
-        setState(() {
-          selectedrackId = newValue;
-          final selectedRack = filteredRacks.firstWhere(
-              (rack) => rack['id'] == newValue);
-          selectedrackName = selectedRack['rack_name'];
-          columnNames = List<String>.from(selectedRack['column_names']);
-          selectedColumn = null;
-        });
-      },
-      items: filteredRacks.map((rack) {
-        return DropdownMenuItem<int>(
-          value: rack['id'],
-          child: Text(rack['rack_name']),
-        );
-      }).toList(),
-    ),
-  ),
-
-                              SizedBox(height: 10),
-
-                             
-                             Container(
-  decoration: BoxDecoration(
-    borderRadius: BorderRadius.circular(10.0),
-    border: Border.all(color: Colors.grey),
-  ),
-  padding: EdgeInsets.symmetric(horizontal: 12),
-  child: DropdownButton<String>(
-    isExpanded: true,
-    value: selectedColumn,
-    hint: Text('Select a Column'),
-    underline: SizedBox(),
-    onChanged: (String? newValue) {
-      setState(() {
-        selectedColumn = newValue;
-      });
-    },
-    items: columnNames.map((col) {
-      return DropdownMenuItem<String>(
-        value: col,
-        child: Text(col),
-      );
-    }).toList(),
-  ),
-),
-
-                              SizedBox(height: 10),
                             Container(
-  decoration: BoxDecoration(
-    borderRadius: BorderRadius.circular(10.0),
-    border: Border.all(color: Colors.grey),
-  ),
-  padding: EdgeInsets.symmetric(horizontal: 12),
-  child: DropdownButton<String>(
-    isExpanded: true,
-    value: selectedUsability,
-    hint: Text('Select Usability'),
-    underline: SizedBox(),
-    onChanged: (String? newValue) {
-      setState(() {
-        selectedUsability = newValue;
-      });
-    },
-    items: usabilityOptions.map((option) {
-      return DropdownMenuItem<String>(
-        value: option,
-        child: Text(option),
-      );
-    }).toList(),
-  ),
-),
-
-                              SizedBox(
-                                height: 10,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10.0),
+                                border: Border.all(color: Colors.grey),
                               ),
-                              TextField(
-                                controller: rackStockController,
-                                keyboardType: TextInputType.number,
-                                decoration: InputDecoration(
-                                  labelText: 'Rack Stock',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10.0),
-                                    borderSide: BorderSide(color: Colors.grey),
-                                  ),
-                                  contentPadding:
-                                      EdgeInsets.symmetric(vertical: 8.0),
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: DropdownButton<String>(
+                                isExpanded: true,
+                                value: selectedColumn,
+                                hint: Text('Select a Column'),
+                                underline: SizedBox(),
+                                onChanged: (String? newValue) {
+                                  setState(() {
+                                    selectedColumn = newValue;
+                                  });
+                                },
+                                items: columnNames.map((col) {
+                                  return DropdownMenuItem<String>(
+                                    value: col,
+                                    child: Text(col),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+
+                            SizedBox(height: 10),
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10.0),
+                                border: Border.all(color: Colors.grey),
+                              ),
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: DropdownButton<String>(
+                                isExpanded: true,
+                                value: selectedUsability,
+                                hint: Text('Select Usability'),
+                                underline: SizedBox(),
+                                onChanged: (String? newValue) {
+                                  setState(() {
+                                    selectedUsability = newValue;
+                                  });
+                                },
+                                items: usabilityOptions.map((option) {
+                                  return DropdownMenuItem<String>(
+                                    value: option,
+                                    child: Text(option),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+
+                            SizedBox(
+                              height: 10,
+                            ),
+                            TextField(
+                              controller: rackStockController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: 'Rack Stock',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10.0),
+                                  borderSide: BorderSide(color: Colors.grey),
                                 ),
+                                contentPadding:
+                                    EdgeInsets.symmetric(vertical: 8.0),
                               ),
-                              SizedBox(
-                                height: 10,
-                              ),
-                              if (rackDetails.isNotEmpty)
-                                ...rackDetails.map((rack) => ListTile(
-                                      title: Text(
-                                          'Rack: ${rack["rack_name"]}  ${rack["column_name"]} (${rack["usability"]})'),
-                                      subtitle:
-                                          Text('Stock: ${rack["rack_stock"]}'),
-                                    )),
+                            ),
+                            SizedBox(
+                              height: 10,
+                            ),
+                            if (rackDetails.isNotEmpty)
+                              ...rackDetails.map((rack) => ListTile(
+                                    title: Text(
+                                        'Rack: ${rack["rack_name"]}  ${rack["column_name"]} (${rack["usability"]})'),
+                                    subtitle:
+                                        Text('Stock: ${rack["rack_stock"]}'),
+                                  )),
 
-                                if(selectedrackId!=null && selectedColumn !=null)
-                                   ElevatedButton(
-  onPressed: () {
-    if (editingRackIndex != null) {
-      final updatedRack = {
-        "rack_id": selectedrackId,
-        "column_name": selectedColumn,
-        "usability": selectedUsability,
-        "rack_stock": int.tryParse(rackStockController.text) ?? 0,
-        'rack_lock':0
-      };
-
-      setState(() {
-        rackDetailsList[editingRackIndex!] = updatedRack;
-        
-        editingRackIndex = null; // reset
-        selectedrackId = null;
-
-        selectedrackName = null;
-        selectedColumn = null;
-        selectedUsability = null;
-        rackStockController.clear();
-        columnNames = [];
-        getrack();
-      });
-
-    } else {
-    }
-  },
-  child: Row(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      Icon(Icons.add_box_outlined, size: 22, color: Colors.white),
-      SizedBox(width: 8),
-      Text("Update Rack Details"),
-    ],
-  ),
-),
-
-                              SizedBox(
-                                height: 10,
-                              ),
+                            if (selectedrackId != null &&
+                                selectedColumn != null)
                               ElevatedButton(
-                                onPressed: addRackDetail,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Color(
-                                      0xFF1976D2), // Professional blue shade
-                                  foregroundColor: Colors.white, // Text color
-                                  minimumSize: Size(double.infinity,
-                                      48), // Full width, taller button
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  elevation: 3,
-                                  padding: EdgeInsets.symmetric(vertical: 14),
-                                  textStyle: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
+                                onPressed: () {
+                                  if (editingRackIndex != null) {
+                                    final updatedRack = {
+                                      "rack_id": selectedrackId,
+                                      "column_name": selectedColumn,
+                                      "usability": selectedUsability,
+                                      "rack_stock": int.tryParse(
+                                              rackStockController.text) ??
+                                          0,
+                                      'rack_lock': 0
+                                    };
+
+                                    setState(() {
+                                      rackDetailsList[editingRackIndex!] =
+                                          updatedRack;
+
+                                      editingRackIndex = null; // reset
+                                      selectedrackId = null;
+
+                                      selectedrackName = null;
+                                      selectedColumn = null;
+                                      selectedUsability = null;
+                                      rackStockController.clear();
+                                      columnNames = [];
+                                      getrack();
+                                    });
+                                  } else {}
+                                },
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Icon(Icons.add_box_outlined,
                                         size: 22, color: Colors.white),
                                     SizedBox(width: 8),
-                                    Text("Add Rack Details"),
+                                    Text("Update Rack Details"),
                                   ],
                                 ),
                               ),
-                              SizedBox(
-                                height: 10,
+
+                            SizedBox(
+                              height: 10,
+                            ),
+                            ElevatedButton(
+                              onPressed: addRackDetail,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Color(
+                                    0xFF1976D2), // Professional blue shade
+                                foregroundColor: Colors.white, // Text color
+                                minimumSize: Size(double.infinity,
+                                    48), // Full width, taller button
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                elevation: 3,
+                                padding: EdgeInsets.symmetric(vertical: 14),
+                                textStyle: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
                               ),
-
-
-
-
-                              Container(
-  decoration: BoxDecoration(
-    borderRadius: BorderRadius.circular(10.0),
-    border: Border.all(color: Colors.grey),
-  ),
-  padding: EdgeInsets.symmetric(horizontal: 12),
-  child: DropdownButton<int>(
-    isExpanded: true,
-    value: selectedcategoryId,
-    hint: Text('Select a Category'),
-    underline: SizedBox(),
-    onChanged: (int? newValue) {
-      setState(() {
-        selectedcategoryId = newValue;
-        selectedcategoryName = category.firstWhere(
-            (element) => element['id'] == newValue)['name'];
-      });
-    },
-    items: category.map<DropdownMenuItem<int>>((categoryItem) {
-      return DropdownMenuItem<int>(
-        value: categoryItem['id'],
-        child: Text(categoryItem['name']),
-      );
-    }).toList(),
-  ),
-),
- SizedBox(
-                                height: 10,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.add_box_outlined,
+                                      size: 22, color: Colors.white),
+                                  SizedBox(width: 8),
+                                  Text("Add Rack Details"),
+                                ],
                               ),
+                            ),
+                            SizedBox(
+                              height: 10,
+                            ),
+
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10.0),
+                                border: Border.all(color: Colors.grey),
+                              ),
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: DropdownButton<int>(
+                                isExpanded: true,
+                                value: selectedcategoryId,
+                                hint: Text('Select a Category'),
+                                underline: SizedBox(),
+                                onChanged: (int? newValue) {
+                                  setState(() {
+                                    selectedcategoryId = newValue;
+                                    selectedcategoryName = category.firstWhere(
+                                        (element) =>
+                                            element['id'] == newValue)['name'];
+                                  });
+                                },
+                                items: category
+                                    .map<DropdownMenuItem<int>>((categoryItem) {
+                                  return DropdownMenuItem<int>(
+                                    value: categoryItem['id'],
+                                    child: Text(categoryItem['name']),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                            SizedBox(
+                              height: 10,
+                            ),
 
                             Container(
                               decoration: BoxDecoration(
@@ -1591,6 +1600,7 @@ columnNames = List<String>.from(matchingRack['column_names']);
                               style: TextStyle(
                                   fontSize: 15, fontWeight: FontWeight.bold),
                             ),
+
                             SizedBox(
                               height: 10,
                             ),
@@ -1620,6 +1630,35 @@ columnNames = List<String>.from(matchingRack['column_names']);
                                   });
                                 },
                               ),
+                            ),
+
+                            SizedBox(height: 10),
+
+                            Text(
+                              "Duty Charge",
+                              style: TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+
+                            SizedBox(height: 10),
+
+                            TextField(
+                              controller: dutycharge,
+                              keyboardType: TextInputType.numberWithOptions(
+                                  decimal: true),
+                              decoration: InputDecoration(
+                                labelText: '',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10.0),
+                                ),
+                                contentPadding:
+                                    EdgeInsets.symmetric(vertical: 8.0),
+                              ),
+                              onChanged: (value) {
+                                setState(() {
+                                  calculateLandingPrice();
+                                });
+                              },
                             ),
 
                             SizedBox(
@@ -1734,6 +1773,7 @@ columnNames = List<String>.from(matchingRack['column_names']);
                               style: TextStyle(
                                   fontSize: 15, fontWeight: FontWeight.bold),
                             ),
+
                             SizedBox(
                               height: 10,
                             ),
@@ -1745,6 +1785,29 @@ columnNames = List<String>.from(matchingRack['column_names']);
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10.0),
                                   borderSide: BorderSide(color: Colors.grey),
+                                ),
+                                contentPadding:
+                                    EdgeInsets.symmetric(vertical: 8.0),
+                              ),
+                            ),
+                            SizedBox(height: 10),
+
+                            Text(
+                              "Final Price",
+                              style: TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+
+                            SizedBox(height: 10),
+
+                            TextField(
+                              controller: finalprice,
+                              keyboardType: TextInputType.numberWithOptions(
+                                  decimal: true),
+                              decoration: InputDecoration(
+                                labelText: '',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10.0),
                                 ),
                                 contentPadding:
                                     EdgeInsets.symmetric(vertical: 8.0),

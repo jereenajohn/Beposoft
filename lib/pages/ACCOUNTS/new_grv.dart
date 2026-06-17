@@ -12,8 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:beposoft/pages/api.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 
 class NewGrv extends StatefulWidget {
   const NewGrv({super.key});
@@ -36,7 +36,7 @@ class _NewGrvState extends State<NewGrv> {
   String selectedInvoiceAddress = '';
   String createdAtDate = '';
   bool hasItems = true; // Flag to track if items exist
-
+  Timer? _invoiceSearchDebounce;
   @override
   void initState() {
     super.initState();
@@ -88,6 +88,8 @@ class _NewGrvState extends State<NewGrv> {
     }
     returnQuantityController.dispose();
     returnreason.dispose();
+    _invoiceSearchDebounce?.cancel();
+    textEditingController.dispose();
     super.dispose();
   }
 
@@ -400,50 +402,91 @@ class _NewGrvState extends State<NewGrv> {
 
   int currentPage = 1;
   String? nextPageUrl;
-  Future<void> fetchOrders({bool loadMore = false}) async {
-    final token = await getTokenFromPrefs();
-    try {
-      String url = loadMore && nextPageUrl != null
-          ? nextPageUrl!
-          : "$api/api/orders/Shipped/";
+ Future<void> fetchOrders({
+  bool loadMore = false,
+  String search = '',
+}) async {
+  final token = await getTokenFromPrefs();
 
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-        nextPageUrl = parsed['next'];
+  try {
+    final uri = Uri.parse("$api/api/orders/").replace(
+      queryParameters: {
+        'page': loadMore ? currentPage.toString() : '1',
+        'search': search.trim().isNotEmpty ? search.trim() : null,
+        'status': 'Shipped',
+      }..removeWhere((key, value) => value == null || value.isEmpty),
+    );
 
-        final List data = parsed['results'];
-        List<Map<String, dynamic>> orderList = [];
+    final response = await http.get(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
 
-        for (var order in data) {
-          orderList.add({
-            'id': order['id'],
-            'manage_staff': order['manage_staff'] ?? 'Unknown',
-            'name': order['customer']['name'] ?? 'Unknown',
-            'invoice': order['invoice'] ?? 'Unknown',
-            'address': order['billing_address']['address'] ?? 'Unknown Address',
-            'created_at': order['customer']['created_at'] ?? 'Unknown Date',
-          });
+    if (response.statusCode == 200) {
+      final parsed = jsonDecode(response.body);
+
+      nextPageUrl = parsed['next'];
+
+      final List data = parsed['results'] is Map
+          ? parsed['results']['results'] ?? []
+          : parsed['results'] ?? [];
+
+      final List<Map<String, dynamic>> orderList =
+          data.map<Map<String, dynamic>>((order) {
+        String parcelServiceName = 'No Parcel Service';
+
+        if (order['warehouse_data'] is List &&
+            order['warehouse_data'].isNotEmpty) {
+          final firstWarehouse = order['warehouse_data'][0];
+
+          if (firstWarehouse is Map &&
+              firstWarehouse['parcel_service_name'] != null &&
+              firstWarehouse['parcel_service_name'].toString().trim().isNotEmpty) {
+            parcelServiceName =
+                firstWarehouse['parcel_service_name'].toString();
+          }
         }
 
-        setState(() {
-          if (loadMore) {
-            orders.addAll(orderList.reversed.toList());
-          } else {
-            orders = orderList.reversed.toList();
-          }
-        });
-      } else {}
-    } catch (error) {
-      ;
+        if (parcelServiceName == 'No Parcel Service' &&
+            order['shipping_mode'] != null &&
+            order['shipping_mode'].toString().trim().isNotEmpty) {
+          parcelServiceName = order['shipping_mode'].toString();
+        }
+
+        return {
+          'id': order['id'],
+          'manage_staff': order['manage_staff'] ?? 'Unknown',
+          'name': order['customer']?['name'] ?? 'Unknown',
+          'invoice': order['invoice'] ?? 'Unknown',
+          'parcel_service_name': parcelServiceName,
+          'address':
+              order['billing_address']?['address'] ?? 'Unknown Address',
+          'created_at': order['order_date'] ??
+              order['customer']?['created_at'] ??
+              'Unknown Date',
+        };
+      }).toList();
+
+      if (!mounted) return;
+
+      setState(() {
+        if (loadMore) {
+          orders.addAll(orderList);
+        } else {
+          orders = orderList;
+          currentPage = 1;
+        }
+      });
+    } else {
+      debugPrint("Order fetch failed: ${response.body}");
     }
+  } catch (error) {
+    debugPrint("Error fetching orders: $error");
   }
+}
 
   final Map<int, TextEditingController> _returnQtyCtrlByItem = {};
 
@@ -930,7 +973,6 @@ class _NewGrvState extends State<NewGrv> {
           body: jsonEncode(payload),
         );
 
-      
         if (res.statusCode != 200 && res.statusCode != 201) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             backgroundColor: Colors.red,
@@ -1042,6 +1084,194 @@ class _NewGrvState extends State<NewGrv> {
     }
   }
 
+String _selectedInvoiceText() {
+  if (selectedValue == null) return 'Select Invoice';
+
+  final order = orders.firstWhere(
+    (order) => order['id'].toString() == selectedValue,
+    orElse: () => {},
+  );
+
+  if (order.isEmpty) return 'Select Invoice';
+
+  return '${order['invoice']} / ${order['parcel_service_name']}';
+}
+
+  Future<void> _showInvoiceSearchSheet() async {
+    textEditingController.clear();
+    _invoiceSearchDebounce?.cancel();
+    await fetchOrders();
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) {
+        bool isSearching = false;
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            Future<void> searchInvoices(String value) async {
+              _invoiceSearchDebounce?.cancel();
+
+              setSheetState(() {
+                isSearching = true;
+              });
+
+              _invoiceSearchDebounce = Timer(
+                const Duration(milliseconds: 250),
+                () async {
+                  await fetchOrders(search: value);
+
+                  if (mounted) {
+                    setSheetState(() {
+                      isSearching = false;
+                    });
+                  }
+                },
+              );
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height * 0.68,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Search Invoice',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(sheetContext),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: textEditingController,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'Search invoice number or customer...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: isSearching
+                            ? const Padding(
+                                padding: EdgeInsets.all(14),
+                                child: SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onChanged: searchInvoices,
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: orders.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'No invoice found',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: orders.length,
+                              separatorBuilder: (_, __) => const Divider(
+                                height: 1,
+                              ),
+                              itemBuilder: (context, index) {
+                                final order = orders[index];
+                                final isSelected = selectedValue ==
+                                    order['id'].toString();
+
+                                return ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: CircleAvatar(
+                                    backgroundColor: isSelected
+                                        ? Colors.blue.shade700
+                                        : Colors.blue.shade50,
+                                    child: Icon(
+                                      Icons.receipt_long,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : Colors.blue.shade700,
+                                      size: 20,
+                                    ),
+                                  ),
+                             title: Text(
+  '${order['invoice']} / ${order['parcel_service_name']?.toString().isNotEmpty == true ? order['parcel_service_name'] : 'No Parcel Service'} / ${order['name']}',
+  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+),
+                                  subtitle: Text(
+                                    order['address']?.toString() ?? '',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  trailing: isSelected
+                                      ? const Icon(
+                                          Icons.check_circle,
+                                          color: Colors.green,
+                                        )
+                                      : null,
+                                  onTap: () {
+                                    setState(() {
+                                      selectedValue = order['id'].toString();
+                                      orderId = order['id'].toString();
+                                      manageStaffName =
+                                          order['manage_staff'] ?? 'Unknown';
+                                      selectedInvoiceAddress =
+                                          order['address'] ?? 'Unknown Address';
+                                      createdAtDate =
+                                          order['created_at'] ?? 'Unknown Date';
+                                      orderItems = [];
+                                      _allocationsByItem.clear();
+                                      _postRacksByProduct.clear();
+                                    });
+
+                                    fetchOrderItems(orderId);
+                                    Navigator.pop(sheetContext);
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -1146,124 +1376,37 @@ class _NewGrvState extends State<NewGrv> {
                       children: [
                         Padding(
                           padding: const EdgeInsets.only(right: 10),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              return Container(
-                                child: DropdownButtonHideUnderline(
-                                  child: Container(
-                                    height: 46,
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                          color: Colors.grey, width: 1.0),
-                                      borderRadius: BorderRadius.circular(8.0),
-                                    ),
-                                    child: DropdownButton2<String>(
-                                      isExpanded: true,
-                                      hint: Text(
-                                        'Select Invoice',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: Theme.of(context).hintColor),
+                          child: InkWell(
+                            onTap: _showInvoiceSearchSheet,
+                            borderRadius: BorderRadius.circular(8.0),
+                            child: Container(
+                              height: 46,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 14),
+                              decoration: BoxDecoration(
+                                border:
+                                    Border.all(color: Colors.grey, width: 1.0),
+                                borderRadius: BorderRadius.circular(8.0),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      _selectedInvoiceText(),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: selectedValue == null
+                                            ? Theme.of(context).hintColor
+                                            : Colors.black87,
                                       ),
-                                      items: orders.map((order) {
-                                        return DropdownMenuItem<String>(
-                                          value:
-                                              '${order['invoice']} / ${order['name']}',
-                                          child: Text(
-                                            '${order['invoice']} / ${order['name']}',
-                                            style:
-                                                const TextStyle(fontSize: 12),
-                                          ),
-                                        );
-                                      }).toList(),
-                                      value: selectedValue,
-                                      onChanged: (value) {
-                                        setState(() {
-                                          selectedValue = value;
-                                          final selectedOrder =
-                                              orders.firstWhere(
-                                            (order) =>
-                                                '${order['invoice']} / ${order['name']}' ==
-                                                value,
-                                            orElse: () => {},
-                                          );
-                                          if (selectedOrder != null) {
-                                            orderId =
-                                                selectedOrder['id'].toString();
-                                            manageStaffName =
-                                                selectedOrder['manage_staff'];
-                                            selectedInvoiceAddress =
-                                                selectedOrder['address'];
-                                            createdAtDate =
-                                                selectedOrder['created_at'];
-                                            fetchOrderItems(orderId);
-                                          }
-                                        });
-                                      },
-                                      buttonStyleData: const ButtonStyleData(
-                                        padding: EdgeInsets.symmetric(
-                                            horizontal: 16),
-                                        height: 40,
-                                      ),
-                                      dropdownStyleData:
-                                          const DropdownStyleData(
-                                        maxHeight: 200,
-                                      ),
-                                      menuItemStyleData:
-                                          const MenuItemStyleData(
-                                        height: 40,
-                                      ),
-                                      dropdownSearchData: DropdownSearchData(
-                                        searchController: textEditingController,
-                                        searchInnerWidgetHeight: 50,
-                                        searchInnerWidget: Container(
-                                          height: 50,
-                                          padding: const EdgeInsets.only(
-                                              top: 8,
-                                              bottom: 4,
-                                              right: 8,
-                                              left: 8),
-                                          child: TextFormField(
-                                            expands: true,
-                                            maxLines: null,
-                                            controller: textEditingController,
-                                            decoration: InputDecoration(
-                                              isDense: true,
-                                              contentPadding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 8),
-                                              hintText:
-                                                  'Search for an invoice...',
-                                              hintStyle:
-                                                  const TextStyle(fontSize: 12),
-                                              border: OutlineInputBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8)),
-                                            ),
-                                          ),
-                                        ),
-                                        searchMatchFn: (item, searchValue) {
-                                          return item.value
-                                              .toString()
-                                              .toLowerCase()
-                                              .contains(
-                                                  searchValue.toLowerCase());
-                                        },
-                                      ),
-                                      onMenuStateChange: (isOpen) {
-                                        if (isOpen && nextPageUrl != null) {
-                                          fetchOrders(); // Load more when dropdown opens
-                                        }
-                                        if (!isOpen) {
-                                          textEditingController.clear();
-                                        }
-                                      },
                                     ),
                                   ),
-                                ),
-                              );
-                            },
+                                  const Icon(Icons.arrow_drop_down),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                         SizedBox(height: 20),

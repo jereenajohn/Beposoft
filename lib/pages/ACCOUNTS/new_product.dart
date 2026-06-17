@@ -137,6 +137,7 @@ class _new_productState extends State<new_product> {
   TextEditingController excludedprice = TextEditingController();
   TextEditingController stock = TextEditingController();
   TextEditingController retailprice = TextEditingController();
+  TextEditingController finalprice = TextEditingController();
   double landingPriceValue = 0.0;
   List<Map<String, dynamic>> fam = [];
   List<bool> _checkboxValues = [];
@@ -429,6 +430,7 @@ class _new_productState extends State<new_product> {
         'landing_cost': landingPriceValue,
         'selling_price': sellingprice.text,
         'retail_price': retailprice.text,
+        'final_price': finalprice.text,
         'warehouse': selectedwarehouseId,
         'rack_details': rackDetails
       };
@@ -1593,6 +1595,32 @@ class _new_productState extends State<new_product> {
                                 keyboardType: TextInputType.number,
                                 decoration: InputDecoration(
                                   labelText: ' ',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10.0),
+                                    borderSide: BorderSide(color: Colors.grey),
+                                  ),
+                                  contentPadding:
+                                      EdgeInsets.symmetric(vertical: 8.0),
+                                ),
+                              ),
+
+                              SizedBox(height: 10),
+
+                              Text(
+                                "Final Price",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+
+                              SizedBox(height: 10),
+
+                              TextField(
+                                controller: finalprice,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  labelText: '',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10.0),
                                     borderSide: BorderSide(color: Colors.grey),

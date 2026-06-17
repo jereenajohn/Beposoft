@@ -12,12 +12,15 @@ import 'package:beposoft/pages/ACCOUNTS/bulk_customer_upload.dart';
 // import 'package:beposoft/pages/ACCOUNTS/call_log.dart';
 import 'package:beposoft/pages/ACCOUNTS/graph.dart';
 import 'package:beposoft/pages/ACCOUNTS/grv_list.dart';
+import 'package:beposoft/pages/auth_status_checker.dart';
 import 'package:beposoft/pages/ACCOUNTS/order_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/performa_invoice_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/todays_orders_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/uploadbulkorders.dart';
 import 'package:beposoft/pages/ADMIN/add_attendance.dart';
 import 'package:beposoft/pages/ADMIN/add_team_staff.dart';
+import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
+import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
 import 'package:beposoft/pages/MARKETING/upload_excel_bepocart_orders.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_order_view.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_product_approval.dart';
@@ -68,6 +71,9 @@ class _marketing_dashboardState extends State<marketing_dashboard> {
     getSalesReport();
     fetchOrderData();
     fetchshippedorders();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+  AuthStatusChecker.start(context);
+});
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkAppUpdate(context);
     });
@@ -675,7 +681,7 @@ class _marketing_dashboardState extends State<marketing_dashboard> {
                 ),
                 if (isManager) ...[
                  Divider(),
-                ListTile(
+                 ListTile(
                   leading: Icon(Icons.person_add),
                   title: Text('Add Team Staff '),
                   onTap: () {
@@ -699,7 +705,33 @@ class _marketing_dashboardState extends State<marketing_dashboard> {
                     // Navigate to the Settings page or perform any other action
                   },
                 ),
+
+                 Divider(),
+                ListTile(
+                  leading: Icon(Icons.people),
+                  title: Text('Leave Requests'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => ManagerLeaveRequestsPage()));
+                    // Navigate to the Settings page or perform any other action
+                  },
+                ),
                 ],
+
+                 Divider(),
+                ListTile(
+                  leading: Icon(Icons.people),
+                  title: Text('employee Leave form'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => EmployeeLeaveFormPage()));
+                    // Navigate to the Settings page or perform any other action
+                  },
+                ),
 
                 Divider(),
                 ListTile(

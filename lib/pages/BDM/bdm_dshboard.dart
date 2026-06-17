@@ -5,16 +5,18 @@ import 'package:beposoft/pages/ACCOUNTS/grv_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/order_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/performa_invoice_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/view_staff.dart';
+import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
 import 'package:beposoft/pages/BDM/approve_bdo__call_duration.dart';
 import 'package:beposoft/pages/BDM/bdm_customer_list.dart';
 import 'package:beposoft/pages/BDM/bdm_grv_list.dart';
 import 'package:beposoft/pages/BDM/bdm_order_list.dart';
 import 'package:beposoft/pages/BDM/bdm_staff_list.dart';
 import 'package:beposoft/pages/BDM/bdm_today_order_list.dart';
+import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_order_view.dart';
 import 'package:beposoft/pages/logout_hekper.dart';
 import 'package:intl/intl.dart';
-
+import 'package:beposoft/pages/auth_status_checker.dart';
 import 'package:beposoft/loginpage.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_attribute.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_bank.dart';
@@ -63,6 +65,8 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
   double familyTodaysTotalAmount = 0.0;
   bool isFamilySummaryLoading = false;
 
+  bool isManager = false;
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +77,9 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
     fetchOrderData();
     getcustomer();
     fetchMyTeamDetailedSummary();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+  AuthStatusChecker.start(context);
+});
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkAppUpdate(context);
@@ -1193,7 +1200,8 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
         var productsData = parsed['data'];
 
         setState(() {
-          family = productsData['family'].toString() ?? '';
+          family = productsData['family']?.toString() ?? '';
+          isManager = productsData['is_manager'] ?? false;
 
           getGrvList();
 
@@ -1204,11 +1212,14 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
 
           familyName = matchingFamily['name'];
         });
+
         fetchFamilyWiseOrderSummary();
         fetchbdmOrderData();
         getcustomer();
       }
-    } catch (error) {}
+    } catch (error) {
+      debugPrint("Error in getprofiledata: $error");
+    }
   }
 
   Future<void> getfamily() async {
@@ -1667,32 +1678,32 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
 
   drower d = drower();
 
-Widget _buildDropdownTile(
-    BuildContext context, String title, List<String> options) {
-  return ExpansionTile(
-    backgroundColor: Colors.white,
-    collapsedBackgroundColor: Colors.white,
-    iconColor: Colors.black,
-    collapsedIconColor: Colors.black,
-    title: Text(
-      title,
-      style: const TextStyle(color: Colors.black),
-    ),
-    children: options.map((option) {
-      return ListTile(
-        tileColor: Colors.white,
-        title: Text(
-          option,
-          style: const TextStyle(color: Colors.black),
-        ),
-        onTap: () {
-          Navigator.pop(context);
-          d.navigateToSelectedPage3(context, option);
-        },
-      );
-    }).toList(),
-  );
-}
+  Widget _buildDropdownTile(
+      BuildContext context, String title, List<String> options) {
+    return ExpansionTile(
+      backgroundColor: Colors.white,
+      collapsedBackgroundColor: Colors.white,
+      iconColor: Colors.black,
+      collapsedIconColor: Colors.black,
+      title: Text(
+        title,
+        style: const TextStyle(color: Colors.black),
+      ),
+      children: options.map((option) {
+        return ListTile(
+          tileColor: Colors.white,
+          title: Text(
+            option,
+            style: const TextStyle(color: Colors.black),
+          ),
+          onTap: () {
+            Navigator.pop(context);
+            d.navigateToSelectedPage3(context, option);
+          },
+        );
+      }).toList(),
+    );
+  }
 
   Widget buildMyTeamSummarySection() {
     if (isTeamSummaryLoading) {
@@ -2126,82 +2137,113 @@ Widget _buildDropdownTile(
           actions: [],
         ),
         drawer: Drawer(
-            backgroundColor: Colors.white,
-            child: Container(
-              color: Colors.white,
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: <Widget>[
-               DrawerHeader(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(18),
-                          child: Image.asset(
-                            "lib/assets/appstore.png",
-                            width: 90,
-                            height: 90,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ],
-                    ),
+          backgroundColor: Colors.white,
+          child: Container(
+            color: Colors.white,
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: <Widget>[
+                DrawerHeader(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
                   ),
-              ListTile(
-                leading: Icon(Icons.dashboard),
-                title: Text('Dashboard'),
-                onTap: () {
-                  Navigator.push(context,
-                      MaterialPageRoute(builder: (context) => bdm_dashbord()));
-                },
-              ),
-              Divider(),
-              _buildDropdownTile(context, 'Customers', [
-                'Add Customer',
-                'Customers',
-              ]),
-              _buildDropdownTile(context, 'Proforma Invoice', [
-                'New Proforma Invoice',
-                'Proforma Invoice List',
-              ]),
-              _buildDropdownTile(
-                  context, 'Orders', ['New Orders', 'Orders List']),
-              _buildDropdownTile(context, 'Approve BDO DSR', [
-                'Add Team',
-                'Add Team Members',
-                'Add BDO Attendence',
-                'View Call Duration List'
-              ]),
-              Divider(),
-              ListTile(
-                leading: Icon(Icons.person_2),
-                title: Text('Staff'),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => bdm_staff_list(
-                        family: familyName,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: Image.asset(
+                          "lib/assets/appstore.png",
+                          width: 90,
+                          height: 90,
+                          fit: BoxFit.cover,
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-              Divider(),
-              ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text('Logout'),
-                onTap: () async {
-                  await logoutUser(context);
-                },
-              ),
-            ],
+                    ],
+                  ),
+                ),
+                ListTile(
+                  leading: Icon(Icons.dashboard),
+                  title: Text('Dashboard'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => bdm_dashbord()));
+                  },
+                ),
+                Divider(),
+                _buildDropdownTile(context, 'Customers', [
+                  'Add Customer',
+                  'Customers',
+                ]),
+                _buildDropdownTile(context, 'Proforma Invoice', [
+                  'New Proforma Invoice',
+                  'Proforma Invoice List',
+                ]),
+                _buildDropdownTile(
+                    context, 'Orders', ['New Orders', 'Orders List']),
+                _buildDropdownTile(context, 'Approve BDO DSR', [
+                  'Add Team',
+                  'Add Team Members',
+                  'Add BDO Attendence',
+                  'View Call Duration List'
+                ]),
+                Divider(),
+                ListTile(
+                  leading: Icon(Icons.person_2),
+                  title: Text('Staff'),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => bdm_staff_list(
+                          family: familyName,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                if (isManager) ...[
+                  Divider(),
+                  ListTile(
+                    leading: Icon(Icons.person_2),
+                    title: Text('Leave Requests'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ManagerLeaveRequestsPage(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+                Divider(),
+                  ListTile(
+                    leading: Icon(Icons.person_2),
+                    title: Text('Employee Leave Form'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => EmployeeLeaveFormPage(),
+                        ),
+                      );
+                    },
+                  ),
+                Divider(),
+                ListTile(
+                  leading: const Icon(Icons.logout),
+                  title: const Text('Logout'),
+                  onTap: () async {
+                    await logoutUser(context);
+                  },
+                ),
+              ],
+            ),
           ),
-        ),),
+        ),
         body: SafeArea(
           child: RefreshIndicator(
             onRefresh: refreshDashboardData,
@@ -2495,8 +2537,6 @@ Widget _buildDropdownTile(
       ),
     );
   }
-
-  
 
   Widget _buildGridItem(IconData icon, String title, [int? count]) {
     return Card(

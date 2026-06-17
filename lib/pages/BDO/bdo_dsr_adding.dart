@@ -45,6 +45,8 @@ class _BdoDsrAddingState extends State<BdoDsrAdding> {
   final TextEditingController newCustomerctrl = TextEditingController();
   final TextEditingController newConvertionctrl = TextEditingController();
   final TextEditingController newLeadsCtrl = TextEditingController();
+  final TextEditingController mdCtrl = TextEditingController();
+  final TextEditingController sdCtrl = TextEditingController();
 
   Duration selectedDuration = Duration.zero;
 
@@ -215,6 +217,8 @@ class _BdoDsrAddingState extends State<BdoDsrAdding> {
     newCustomerctrl.dispose();
     newConvertionctrl.dispose();
     newLeadsCtrl.dispose();
+    mdCtrl.dispose();
+    sdCtrl.dispose();
     super.dispose();
   }
 
@@ -391,6 +395,8 @@ class _BdoDsrAddingState extends State<BdoDsrAdding> {
         "new_customers": newCustomerctrl.text.trim(),
         "new_conversions": newConvertionctrl.text.trim(),
         "new_leads": newLeadsCtrl.text.trim(),
+        "md": mdCtrl.text.trim(),
+        "sd": sdCtrl.text.trim(),
       };
 
       final response = await http.post(
@@ -422,6 +428,8 @@ class _BdoDsrAddingState extends State<BdoDsrAdding> {
           newCustomerctrl.clear();
           newConvertionctrl.clear();
           newLeadsCtrl.clear();
+          mdCtrl.clear();
+          sdCtrl.clear();
         });
       } else {
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
@@ -577,7 +585,7 @@ class _BdoDsrAddingState extends State<BdoDsrAdding> {
                     children: [
                       SizedBox(height: 10),
                       Text(
-                        " DAILY SALES REPORTT",
+                        " DAILY SALES REPORT",
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -772,6 +780,52 @@ class _BdoDsrAddingState extends State<BdoDsrAdding> {
                           ],
                           decoration: InputDecoration(
                             hintText: "Enter new leads",
+                            hintStyle: const TextStyle(color: Colors.grey),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          "MD",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        TextFormField(
+                          controller: mdCtrl,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          decoration: InputDecoration(
+                            hintText: "Enter MD",
+                            hintStyle: const TextStyle(color: Colors.grey),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          "SD",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        TextFormField(
+                          controller: sdCtrl,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          decoration: InputDecoration(
+                            hintText: "Enter SD",
                             hintStyle: const TextStyle(color: Colors.grey),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),

@@ -422,9 +422,7 @@ class _HrTeamAttendanceScreenState extends State<HrTeamAttendanceScreen> {
               ),
             ],
           ),
-
           const SizedBox(height: 10),
-
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
@@ -452,9 +450,7 @@ class _HrTeamAttendanceScreenState extends State<HrTeamAttendanceScreen> {
               ],
             ),
           ),
-
           const SizedBox(height: 12),
-
           Row(
             children: [
               Expanded(child: _buildCountChip("Present", presentCount)),
@@ -466,9 +462,7 @@ class _HrTeamAttendanceScreenState extends State<HrTeamAttendanceScreen> {
               Expanded(child: _buildCountChip("Total", totalCount)),
             ],
           ),
-
           const SizedBox(height: 12),
-
           const Text(
             "Members Attendance",
             style: TextStyle(
@@ -477,9 +471,7 @@ class _HrTeamAttendanceScreenState extends State<HrTeamAttendanceScreen> {
               color: Color(0xff111827),
             ),
           ),
-
           const SizedBox(height: 8),
-
           attendanceList.isEmpty
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: 10),
@@ -557,13 +549,27 @@ class _HrTeamAttendanceScreenState extends State<HrTeamAttendanceScreen> {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              attendance['staff_name'] ?? '',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: Color(0xff111827),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  attendance['staff_name'] ?? '',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xff111827),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  "Time: ${attendance['attendance_time'] ?? '-'}",
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xff64748b),
+                  ),
+                ),
+              ],
             ),
           ),
           Container(

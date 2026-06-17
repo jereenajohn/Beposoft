@@ -477,7 +477,6 @@
 //   }
 // }
 
-
 import 'dart:convert';
 import 'package:beposoft/pages/api.dart';
 import 'package:flutter/material.dart';
@@ -665,7 +664,7 @@ class _EmployeeLeaveFormPageState extends State<EmployeeLeaveFormPage> {
       final token = await getTokenFromPrefs();
 
       final response = await http.get(
-        Uri.parse('$api/api/supervisors/'),
+        Uri.parse('$api/api/staff/managers/'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -683,10 +682,10 @@ class _EmployeeLeaveFormPageState extends State<EmployeeLeaveFormPage> {
           });
         }
       } else {
-        showMessage('Failed to load supervisors');
+        showMessage('Failed to load managers');
       }
     } catch (e) {
-      showMessage('Error loading supervisors');
+      showMessage('Error loading managers');
     } finally {
       setState(() => isSupervisorLoading = false);
     }
@@ -754,7 +753,8 @@ class _EmployeeLeaveFormPageState extends State<EmployeeLeaveFormPage> {
           label: label,
           icon: icon,
           suffixIcon: isDate
-              ? const Icon(Icons.calendar_month_rounded, color: Color(0xFF2563EB))
+              ? const Icon(Icons.calendar_month_rounded,
+                  color: Color(0xFF2563EB))
               : null,
         ),
       ),
@@ -772,14 +772,10 @@ class _EmployeeLeaveFormPageState extends State<EmployeeLeaveFormPage> {
   }
 
   String formatLeaveType(String value) {
-    return value
-        .replaceAll('_', ' ')
-        .split(' ')
-        .map((word) {
-          if (word.isEmpty) return word;
-          return word[0].toUpperCase() + word.substring(1);
-        })
-        .join(' ');
+    return value.replaceAll('_', ' ').split(' ').map((word) {
+      if (word.isEmpty) return word;
+      return word[0].toUpperCase() + word.substring(1);
+    }).join(' ');
   }
 
   Widget buildLeaveCard(Map<String, dynamic> item) {
@@ -967,42 +963,42 @@ class _EmployeeLeaveFormPageState extends State<EmployeeLeaveFormPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
           children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF2563EB).withOpacity(0.25),
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.beach_access_rounded,
-                      color: Colors.white, size: 34),
-                  SizedBox(width: 14),
-                  Expanded(
-                    child: Text(
-                      'Apply leave quickly and track your request status easily.',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        height: 1.35,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            // Container(
+            //   padding: const EdgeInsets.all(16),
+            //   decoration: BoxDecoration(
+            //     gradient: const LinearGradient(
+            //       colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+            //       begin: Alignment.topLeft,
+            //       end: Alignment.bottomRight,
+            //     ),
+            //     borderRadius: BorderRadius.circular(24),
+            //     boxShadow: [
+            //       BoxShadow(
+            //         color: const Color(0xFF2563EB).withOpacity(0.25),
+            //         blurRadius: 18,
+            //         offset: const Offset(0, 8),
+            //       ),
+            //     ],
+            //   ),
+            //   child: const Row(
+            //     children: [
+            //       Icon(Icons.beach_access_rounded,
+            //           color: Colors.white, size: 34),
+            //       SizedBox(width: 14),
+            //       Expanded(
+            //         child: Text(
+            //           'Apply leave quickly and track your request status easily.',
+            //           style: TextStyle(
+            //             color: Colors.white,
+            //             fontSize: 15,
+            //             fontWeight: FontWeight.w700,
+            //             height: 1.35,
+            //           ),
+            //         ),
+            //       ),
+            //     ],
+            //   ),
+            // ),
             const SizedBox(height: 18),
 
             Form(
@@ -1029,7 +1025,6 @@ class _EmployeeLeaveFormPageState extends State<EmployeeLeaveFormPage> {
                       icon: Icons.edit_calendar_rounded,
                     ),
                     const SizedBox(height: 18),
-
                     DropdownButtonFormField<String>(
                       value: selectedLeaveType,
                       isExpanded: true,
@@ -1049,9 +1044,7 @@ class _EmployeeLeaveFormPageState extends State<EmployeeLeaveFormPage> {
                         });
                       },
                     ),
-
                     const SizedBox(height: 14),
-
                     Row(
                       children: [
                         Expanded(
@@ -1073,14 +1066,12 @@ class _EmployeeLeaveFormPageState extends State<EmployeeLeaveFormPage> {
                         ),
                       ],
                     ),
-
                     buildTextField(
                       controller: noOfDaysController,
                       label: 'No Of Days',
                       keyboardType: TextInputType.number,
                       icon: Icons.numbers_rounded,
                     ),
-
                     Padding(
                       padding: const EdgeInsets.only(bottom: 14),
                       child: DropdownButtonFormField<String>(
@@ -1096,7 +1087,7 @@ class _EmployeeLeaveFormPageState extends State<EmployeeLeaveFormPage> {
                           return DropdownMenuItem<String>(
                             value: item['id'].toString(),
                             child: Text(
-                              '${item['name']} - ${item['department']}',
+                              '${item['name']} - ${item['department_name']}',
                               overflow: TextOverflow.ellipsis,
                             ),
                           );
@@ -1114,16 +1105,13 @@ class _EmployeeLeaveFormPageState extends State<EmployeeLeaveFormPage> {
                         },
                       ),
                     ),
-
                     buildTextField(
                       controller: reasonController,
                       label: 'Reason',
                       maxLines: 3,
                       icon: Icons.notes_rounded,
                     ),
-
                     const SizedBox(height: 6),
-
                     SizedBox(
                       width: double.infinity,
                       height: 54,
