@@ -17,6 +17,7 @@ import 'package:beposoft/pages/ACCOUNTS/add_warehouse.dart';
 import 'package:beposoft/pages/ACCOUNTS/all_users_categorywise_sales_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/all_users_sales_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/assetmanagement.dart';
+import 'package:beposoft/pages/auth_status_checker.dart';
 import 'package:beposoft/pages/ACCOUNTS/assetmanegment2.dart';
 import 'package:beposoft/pages/ACCOUNTS/bulk_customer_upload.dart';
 import 'package:beposoft/pages/ACCOUNTS/call_log.dart';
@@ -54,9 +55,11 @@ import 'package:beposoft/pages/ADMIN/dgm_page.dart';
 import 'package:beposoft/pages/ADMIN/family_detailed_summary_page.dart';
 
 import 'package:beposoft/pages/ADMIN/family_wise_analysis_details_page.dart';
+import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
 import 'package:beposoft/pages/ADMIN/sales_report_excel.dart';
 import 'package:beposoft/pages/ADMIN/salesteam_cd_reportpage.dart';
 import 'package:beposoft/pages/ADMIN/warehouse_summary.dart';
+import 'package:beposoft/pages/HR/EmployeeLeaveListPage.dart';
 import 'package:beposoft/pages/HR/staff_attendance.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_order_view.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_product_approval.dart';
@@ -187,6 +190,14 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   bool isManager = false;
   int teamWiseTotalPresent = 0;
 
+  List<Map<String, dynamic>> salesTeamCdTeamTotals = [];
+  bool salesTeamCdLoading = false;
+
+  Map<String, bool> dashboardCardExpanded = {};
+
+  int teamWiseTotalAbsent = 0;
+  int teamWiseTotalHalfDay = 0;
+
   // int getFamilyPresentCount(String familyName) {
   //   return familyAttendanceData.where((item) {
   //     final family =
@@ -235,7 +246,9 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   void initState() {
     super.initState();
     _getUsername(); // Get the username when the page loads
-
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AuthStatusChecker.start(context);
+    });
     final now = DateTime.now();
     fetchTeamWiseAttendanceCount();
 
@@ -245,7 +258,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     );
 
     initdata();
-getProfile();
+    getProfile();
     getGrvList();
     fetchproformaData();
     getSalesReport();
@@ -261,6 +274,7 @@ getProfile();
     fetchOrdersSummaryFamilyData();
     fetchBeposoftSummary();
     fetchDashboardInventorySummary();
+    fetchSalesTeamCdTotalsForCeo();
 
     //   fetchInternalTransfersData(
     // getdgnvd);
@@ -295,64 +309,66 @@ getProfile();
   }
 
   Future<void> fetchTeamWiseAttendanceCount() async {
-  try {
-    final token = await getTokenFromPrefs();
+    try {
+      final token = await getTokenFromPrefs();
 
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-    final response = await http.get(
-      Uri.parse('$api/api/staff/attendance/team/wise/count/').replace(
-        queryParameters: {
-          'start_date': today,
-          'end_date': today,
+      final response = await http.get(
+        Uri.parse('$api/api/staff/attendance/team/wise/count/').replace(
+          queryParameters: {
+            'start_date': today,
+            'end_date': today,
+          },
+        ),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
         },
-      ),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
+      );
 
-    if (response.statusCode == 200) {
-      final parsed = jsonDecode(response.body);
-      final summary = parsed['summary'] ?? {};
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+        final summary = parsed['summary'] ?? {};
 
-      setState(() {
-        teamWiseTotalPresent = _asInt(summary['total_present']);
-      });
+        setState(() {
+          teamWiseTotalPresent = _asInt(summary['total_present']);
+          teamWiseTotalAbsent = _asInt(summary['total_absent']);
+          teamWiseTotalHalfDay = _asInt(summary['total_half_day']);
+        });
 
-      debugPrint("TODAY TOTAL PRESENT: $teamWiseTotalPresent");
+        debugPrint("TODAY TOTAL PRESENT: $teamWiseTotalPresent");
+      }
+    } catch (e) {
+      debugPrint("TEAM WISE ATTENDANCE COUNT ERROR: $e");
     }
-  } catch (e) {
-    debugPrint("TEAM WISE ATTENDANCE COUNT ERROR: $e");
   }
-}
 
   Future<void> getProfile() async {
-  try {
-    final token = await getTokenFromPrefs();
+    try {
+      final token = await getTokenFromPrefs();
 
-    final response = await http.get(
-      Uri.parse('$api/api/profile/'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
+      final response = await http.get(
+        Uri.parse('$api/api/profile/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-    if (response.statusCode == 200) {
-      final parsed = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
 
-      setState(() {
-        isManager = parsed['data']['is_manager'] ?? false;
-      });
+        setState(() {
+          isManager = parsed['data']['is_manager'] ?? false;
+        });
 
-      debugPrint("IS MANAGER : $isManager");
+        debugPrint("IS MANAGER : $isManager");
+      }
+    } catch (e) {
+      debugPrint("PROFILE ERROR : $e");
     }
-  } catch (e) {
-    debugPrint("PROFILE ERROR : $e");
   }
-}
 
   Future<String?> getdepFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -391,6 +407,7 @@ getProfile();
       Future(() => getFilteredCategoryWiseProducts()),
       Future(() => fetchBeposoftSummary()),
       Future(() => fetchDashboardInventorySummary()),
+      Future(() => fetchSalesTeamCdTotalsForCeo()),
       Future(() => fetchBdoStatewiseReport(
             startDate: DateTime(now.year, now.month, now.day),
             endDate: DateTime(now.year, now.month, now.day),
@@ -514,6 +531,66 @@ getProfile();
         dashboardInventoryLoading = false;
       });
       print("DASHBOARD INVENTORY SUMMARY ERROR: $e");
+    }
+  }
+
+  Future<void> fetchSalesTeamCdTotalsForCeo() async {
+    try {
+      final token = await getTokenFromPrefs();
+      if (token == null || token.isEmpty) return;
+
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+      setState(() {
+        salesTeamCdLoading = true;
+      });
+
+      final uri = Uri.parse('$api/api/sales/team/cd/report/').replace(
+        queryParameters: {
+          'start_date': today,
+          'end_date': today,
+        },
+      );
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        final List data = decoded['data'] ?? [];
+
+        final teamTotals = data.map<Map<String, dynamic>>((team) {
+          final teamTotal = Map<String, dynamic>.from(team['team_total'] ?? {});
+
+          return {
+            'team_name': team['team_name'] ?? '',
+            'avg_cd': _asDouble(teamTotal['AVG_CD']),
+            'new_leads': _asInt(teamTotal['new_deals']),
+          };
+        }).toList();
+
+        if (!mounted) return;
+        setState(() {
+          salesTeamCdTeamTotals = teamTotals;
+          salesTeamCdLoading = false;
+        });
+      } else {
+        if (!mounted) return;
+        setState(() {
+          salesTeamCdLoading = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        salesTeamCdLoading = false;
+      });
+      debugPrint("CEO SALES TEAM CD TOTAL ERROR: $e");
     }
   }
 
@@ -2337,6 +2414,13 @@ getProfile();
       (sum, item) => sum + _asInt(item['present_count']),
     );
 
+    final bool salesAnalysisExpanded =
+        dashboardCardExpanded["Sales Analysis"] ?? false;
+
+    final salesAnalysisDisplayList = salesAnalysisExpanded
+        ? salesTeamCdTeamTotals
+        : salesTeamCdTeamTotals.take(1).toList();
+
     // final withInternalTransfer = _asMap(todayData['with_internal_transfer']);
     // final financeOpeningBalance =
     //     _asDouble(withInternalTransfer['open_balance']);
@@ -2358,6 +2442,28 @@ getProfile();
     final monthCredit = _asDouble(currentMonthBank['credit']);
     final monthDebit = _asDouble(currentMonthBank['debit']);
     final monthClosingBalance = _asDouble(currentMonthBank['closing_balance']);
+    final grvReturnSummary = _asMap(productsData?['grv_return_summary']);
+
+    final grvToday = _asMap(grvReturnSummary['today']);
+    final grvMonth = _asMap(grvReturnSummary['month']);
+
+    final todayCodReturn = _asMap(grvToday['cod_return']);
+    final todayCashReturn = _asMap(grvToday['cash_return']);
+
+    final monthCodReturn = _asMap(grvMonth['cod_return']);
+    final monthCashReturn = _asMap(grvMonth['cash_return']);
+
+    final todayCodReturnCount = _asInt(todayCodReturn['invoice_count']);
+    final todayCodReturnAmount = _asDouble(todayCodReturn['total']);
+
+    final todayCashReturnCount = _asInt(todayCashReturn['invoice_count']);
+    final todayCashReturnAmount = _asDouble(todayCashReturn['total']);
+
+    final monthCodReturnCount = _asInt(monthCodReturn['invoice_count']);
+    final monthCodReturnAmount = _asDouble(monthCodReturn['total']);
+
+    final monthCashReturnCount = _asInt(monthCashReturn['invoice_count']);
+    final monthCashReturnAmount = _asDouble(monthCashReturn['total']);
 
     final purchaseSummary = _asMap(beposoftSummary['purchase_summary']);
     final purchaseCount = _asInt(purchaseSummary['total_count']);
@@ -2391,7 +2497,7 @@ getProfile();
         physics: const NeverScrollableScrollPhysics(),
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: 0.70,
+        childAspectRatio: 0.75,
         children: [
           _buildDashboardCard(
             title: "Sales",
@@ -2477,18 +2583,24 @@ getProfile();
                   value: "$activeStaffs",
                   icon: Icons.check_circle_rounded,
                 ),
-                // const SizedBox(height: 6),
-                // _buildEmployeeColumnItem(
-                //   title: "Resigned",
-                //   value: "$deactiveStaffs",
-                //   icon: Icons.cancel_rounded,
-                // ),
                 const SizedBox(height: 6),
-                 _buildEmployeeColumnItem(
-  title: "Present",
-  value: "$teamWiseTotalPresent",
-  icon: Icons.person_pin_circle_rounded,
-),
+                _buildEmployeeColumnItem(
+                  title: "Present",
+                  value: "$teamWiseTotalPresent",
+                  icon: Icons.person_pin_circle_rounded,
+                ),
+                const SizedBox(height: 6),
+                _buildEmployeeColumnItem(
+                  title: "Absent",
+                  value: "$teamWiseTotalAbsent",
+                  icon: Icons.cancel_rounded,
+                ),
+                const SizedBox(height: 6),
+                _buildEmployeeColumnItem(
+                  title: "Half Day",
+                  value: "$teamWiseTotalHalfDay",
+                  icon: Icons.access_time_filled_rounded,
+                ),
               ],
             ),
             onTap: () {
@@ -2517,13 +2629,57 @@ getProfile();
             value: _formatDashboardAmount(purchaseAmount),
             lines: [
               "Invoices: $purchaseCount",
-              "Suppliers & Invoices",
             ],
+            bottomTopSpacing: 0,
+            bottom: Column(
+              children: [
+                _buildDashboardLineItem(
+                  title: "Today COD SR INV",
+                  value: "$todayCodReturnCount",
+                ),
+                const SizedBox(height: 6),
+                _buildDashboardLineItem(
+                  title: "Amount",
+                  value: _formatDashboardAmount(todayCodReturnAmount),
+                ),
+                const SizedBox(height: 8),
+                _buildDashboardLineItem(
+                  title: "Today Cash SR INV",
+                  value: "$todayCashReturnCount",
+                ),
+                const SizedBox(height: 6),
+                _buildDashboardLineItem(
+                  title: "Amount",
+                  value: _formatDashboardAmount(todayCashReturnAmount),
+                ),
+                // const SizedBox(height: 8),
+                // _buildDashboardLineItem(
+                //   title: "Monthly COD Return COUNT",
+                //   value: "$monthCodReturnCount",
+                // ),
+                // const SizedBox(height: 6),
+                // _buildDashboardLineItem(
+                //   title: "Amount",
+                //   value: _formatDashboardAmount(monthCodReturnAmount),
+                // ),
+                // const SizedBox(height: 8),
+                // _buildDashboardLineItem(
+                //   title: "Monthly Cash Return COUNT",
+                //   value: "$monthCashReturnCount",
+                // ),
+                // const SizedBox(height: 6),
+                // _buildDashboardLineItem(
+                //   title: "Amount",
+                //   value: _formatDashboardAmount(monthCashReturnAmount),
+                // ),
+              ],
+            ),
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (context) => SellerInvoiceListPage()),
+                  builder: (context) => SellerInvoiceListPage(),
+                ),
               );
             },
           ),
@@ -2563,12 +2719,53 @@ getProfile();
             onTap: () {},
           ),
           _buildDashboardCard(
-            title: "Sales Team DSR",
+            title: "Sales Analysis",
             value: "DSR",
-            lines: [
-              "Today's DSR",
-              "Team performance",
-            ],
+            lines: const [],
+            bottom: salesTeamCdLoading
+                ? const Text(
+                    "Loading CD report...",
+                    style: TextStyle(color: Colors.white),
+                  )
+                : salesTeamCdTeamTotals.isEmpty
+                    ? _buildSalesTeamContainer(
+                        teamName: "No Team",
+                        avgCd: "0.00",
+                        newLeads: "0",
+                      )
+                    : Column(
+                        children: [
+                          ...salesAnalysisDisplayList.map((team) {
+                            return _buildSalesTeamContainer(
+                              teamName: team['team_name'].toString(),
+                              avgCd:
+                                  _asDouble(team['avg_cd']).toStringAsFixed(2),
+                              newLeads: _asInt(team['new_leads']).toString(),
+                            );
+                          }).toList(),
+                          if (salesTeamCdTeamTotals.length > 1)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    dashboardCardExpanded["Sales Analysis"] =
+                                        !salesAnalysisExpanded;
+                                  });
+                                },
+                                child: Text(
+                                  salesAnalysisExpanded
+                                      ? "See Less"
+                                      : "See More",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
             onTap: () {
               Navigator.push(
                 context,
@@ -2581,6 +2778,7 @@ getProfile();
           _buildDashboardCard(
             title: "Campaigns",
             value: "Overview",
+            // enableSeeMore: true,
             lines: [
               "Active campaigns",
               "Campaign performance",
@@ -2592,15 +2790,63 @@ getProfile();
     );
   }
 
+  Widget _buildSalesTeamContainer({
+    required String teamName,
+    required String avgCd,
+    required String newLeads,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            teamName,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "Avg CD : $avgCd",
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "New Leads : $newLeads",
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDashboardCard({
     required String title,
-    // required IconData icon,
     required String value,
     required List<dynamic> lines,
     required VoidCallback onTap,
     String valueLabel = "",
     Widget? bottom,
+    bool enableSeeMore = false,
+    double bottomTopSpacing = 8,
   }) {
+    final bool isExpanded = dashboardCardExpanded[title] ?? false;
+
+    final bool hasMore = enableSeeMore && lines.length > 1;
+
+    final visibleLines =
+        hasMore && !isExpanded ? lines.take(1).toList() : lines;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -2686,14 +2932,17 @@ getProfile();
                   ),
                 if (value.isNotEmpty) const SizedBox(height: 7),
                 // ...lines.take(3).map((line) {
-                ...lines.map((line) {
+                ...visibleLines.map((line) {
                   if (line is Widget) {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 5),
                       child: Container(
                         width: double.infinity,
-                        height: 28,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        constraints: const BoxConstraints(minHeight: 44),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.14),
                           borderRadius: BorderRadius.circular(11),
@@ -2708,6 +2957,25 @@ getProfile();
                       ),
                     );
                   }
+                  if (hasMore)
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          dashboardCardExpanded[title] = !isExpanded;
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          isExpanded ? "See less" : "See more",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    );
 
                   final text = line?.toString() ?? '';
                   final parts = text.split(':');
@@ -2726,11 +2994,16 @@ getProfile();
                     ),
                   );
                 }).toList(),
-                if (bottom != null) ...[
-                  const SizedBox(height: 8),
-                  bottom,
-                ] else
-                  const Spacer(),
+               if (bottom != null) ...[
+  if (bottomTopSpacing > 0) SizedBox(height: bottomTopSpacing),
+  Flexible(
+    child: SingleChildScrollView(
+      physics: const ClampingScrollPhysics(),
+      child: bottom,
+    ),
+  ),
+] else
+  const Spacer(),
               ],
             ),
           ),
@@ -6232,32 +6505,55 @@ getProfile();
                       Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (context) =>
-                                  HrTeamAttendanceScreen()));
+                              builder: (context) => HrTeamAttendanceScreen()));
                       // Navigate to the Settings page or perform any other action
                     },
                   ),
                   if (isManager)
-                   ListTile(
-                    title: Text('Add Team Staff'),
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) =>
-                                  StaffAttendanceTeamMemberScreen()));
-                      // Navigate to the Settings page or perform any other action
-                    },
-                  ),
+                    ListTile(
+                      title: Text('Add Team Staff'),
+                      onTap: () {
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                    StaffAttendanceTeamMemberScreen()));
+                        // Navigate to the Settings page or perform any other action
+                      },
+                    ),
                   if (isManager)
-                   ListTile(
-                    title: Text('Add Attendance'),
+                    ListTile(
+                      title: Text('Add Attendance'),
+                      onTap: () {
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                    StaffMarkAttendanceScreen()));
+                        // Navigate to the Settings page or perform any other action
+                      },
+                    ),
+
+                  if (isManager)
+                    ListTile(
+                      title: Text('Leave Requests'),
+                      onTap: () {
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                    ManagerLeaveRequestsPage()));
+                        // Navigate to the Settings page or perform any other action
+                      },
+                    ),
+
+                  ListTile(
+                    title: Text('Employee Leave List'),
                     onTap: () {
                       Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (context) =>
-                                  StaffMarkAttendanceScreen()));
+                              builder: (context) => EmployeeLeaveListPage()));
                       // Navigate to the Settings page or perform any other action
                     },
                   ),

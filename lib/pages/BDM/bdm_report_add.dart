@@ -34,6 +34,8 @@ class _BdmReportAddState extends State<BdmReportAdd> {
   DateTime selectedViewDate = DateTime.now();
   List<Map<String, dynamic>> selectedDateEntries = [];
 
+  TextEditingController attendanceTimeController = TextEditingController();
+
   final Map<String, String> statusOptions = {
     "present": "Present",
     "absent": "Absent",
@@ -45,6 +47,11 @@ class _BdmReportAddState extends State<BdmReportAdd> {
   @override
   void initState() {
     super.initState();
+
+    final now = TimeOfDay.now();
+    attendanceTimeController.text =
+        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+
     getProfileData();
   }
 
@@ -163,6 +170,7 @@ class _BdmReportAddState extends State<BdmReportAdd> {
                   'staff_entry_id': entry['id'],
                   'created_at': entry['created_at'],
                   'updated_at': entry['updated_at'],
+                  'attendance_time': record['attendance_time'],
                 });
               }
             }
@@ -178,6 +186,7 @@ class _BdmReportAddState extends State<BdmReportAdd> {
                 uniqueEntries[staffId] = entry;
               }
             }
+
             uniqueGrouped[date] = uniqueEntries.values.toList();
           });
           final sortedDates = uniqueGrouped.keys.toList()
@@ -286,6 +295,7 @@ class _BdmReportAddState extends State<BdmReportAdd> {
 
       final body = {
         "attendance_date": formattedDate,
+        "attendance_time": attendanceTimeController.text,
         "staff_entries": tempEntries.map((e) {
           return {
             "staff": int.parse(e['staff'].toString()),
@@ -317,6 +327,10 @@ class _BdmReportAddState extends State<BdmReportAdd> {
             tempEntries.clear();
             selectedStaff = null;
             selectedStatus = null;
+            final now = TimeOfDay.now();
+
+            attendanceTimeController.text =
+                "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
           });
 
           ScaffoldMessenger.of(context).showSnackBar(
@@ -614,8 +628,8 @@ class _BdmReportAddState extends State<BdmReportAdd> {
   Widget _buildEntryCard(Map<String, dynamic> item) {
     final chipColor = _getStatusColor(item['status']);
     final statusIcon = _getStatusIcon(item['status']);
-    final bool canModify =
-        _formatDateForApi(selectedViewDate) == _formatDateForApi(DateTime.now());
+    final bool canModify = _formatDateForApi(selectedViewDate) ==
+        _formatDateForApi(DateTime.now());
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -653,6 +667,14 @@ class _BdmReportAddState extends State<BdmReportAdd> {
                     ),
                   ),
                 ),
+                if (item['attendance_time'] != null)
+                  Text(
+                    "Time: ${item['attendance_time']}",
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey,
+                    ),
+                  ),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
@@ -721,32 +743,64 @@ class _BdmReportAddState extends State<BdmReportAdd> {
             borderRadius: BorderRadius.circular(18),
           ),
           title: Text("Edit Status for ${entry['staff_name']}"),
-          content: DropdownButtonFormField<String>(
-            value: entry['status'],
-            decoration: const InputDecoration(
-              labelText: "Select Status",
-              border: OutlineInputBorder(),
-            ),
-            items: statusOptions.entries.map((statusEntry) {
-              return DropdownMenuItem(
-                value: statusEntry.key,
-                child: Text(statusEntry.value),
-              );
-            }).toList(),
-            onChanged: (value) {
-              Navigator.pop(context, value);
-            },
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: entry['status'],
+                decoration: const InputDecoration(
+                  labelText: "Select Status",
+                  border: OutlineInputBorder(),
+                ),
+                items: statusOptions.entries.map((statusEntry) {
+                  return DropdownMenuItem(
+                    value: statusEntry.key,
+                    child: Text(statusEntry.value),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  entry['new_status'] = value;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: attendanceTimeController,
+                readOnly: true,
+                decoration: const InputDecoration(
+                  labelText: "Attendance Time",
+                  prefixIcon: Icon(Icons.access_time),
+                  border: OutlineInputBorder(),
+                ),
+                onTap: () async {
+                  final picked = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.now(),
+                  );
+
+                  if (picked != null) {
+                    attendanceTimeController.text =
+                        "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
+                  }
+                },
+              ),
+            ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text("Cancel"),
             ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context, entry['new_status'] ?? entry['status']);
+              },
+              child: const Text("Update"),
+            ),
           ],
         ),
       );
 
-      if (newStatus == null || newStatus == entry['status']) {
+      if (newStatus == null) {
         return;
       }
 
@@ -772,6 +826,7 @@ class _BdmReportAddState extends State<BdmReportAdd> {
 
       final body = {
         "attendance_date": formattedDate,
+        "attendance_time": attendanceTimeController.text,
         "staff_entries": updatedEntries,
       };
 
@@ -871,6 +926,7 @@ class _BdmReportAddState extends State<BdmReportAdd> {
       } else {
         final body = {
           "attendance_date": formattedDate,
+          "attendance_time": attendanceTimeController.text,
           "staff_entries": remainingEntries,
         };
 
@@ -904,12 +960,11 @@ class _BdmReportAddState extends State<BdmReportAdd> {
     }
   }
 
-    Future<String?> getdepFromPrefs() async {
+  Future<String?> getdepFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('department');
   }
 
-  
   Future<void> _navigateBack() async {
     final dep = await getdepFromPrefs();
     if (!mounted) return;
@@ -947,7 +1002,6 @@ class _BdmReportAddState extends State<BdmReportAdd> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     final bool pageLoading = staffList.isEmpty && isLoadingAttendance;
@@ -958,12 +1012,12 @@ class _BdmReportAddState extends State<BdmReportAdd> {
         elevation: 0,
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.white,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.black87),
-            onPressed: () async {
-              await _navigateBack();
-            },
-          ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          onPressed: () async {
+            await _navigateBack();
+          },
+        ),
         titleSpacing: 4,
         title: const Padding(
           padding: EdgeInsets.only(left: 4),
@@ -1030,6 +1084,29 @@ class _BdmReportAddState extends State<BdmReportAdd> {
                                 selectedStaff = value;
                                 selectedStatus = null;
                               });
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: attendanceTimeController,
+                            readOnly: true,
+                            decoration: InputDecoration(
+                              labelText: "Attendance Time",
+                              prefixIcon: const Icon(Icons.access_time),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            onTap: () async {
+                              final picked = await showTimePicker(
+                                context: context,
+                                initialTime: TimeOfDay.now(),
+                              );
+
+                              if (picked != null) {
+                                attendanceTimeController.text =
+                                    "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
+                              }
                             },
                           ),
                           const SizedBox(height: 12),

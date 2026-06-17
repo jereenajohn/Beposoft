@@ -121,28 +121,22 @@ class _SalesTeamCdReportPageState extends State<SalesTeamCdReportPage> {
         context,
         MaterialPageRoute(builder: (context) => SdDashboard()),
       );
-    }
-     else if (dep == "CEO") {
+    } else if (dep == "CEO") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => ceo_dashboard()),
       );
-    }
-
-     else if (dep == "COO") {
+    } else if (dep == "COO") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => ceo_dashboard()),
       );
-    }
-
-      else if (dep == "ADMIN") {
+    } else if (dep == "ADMIN") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => admin_dashboard()),
       );
-    }
-     else if (dep == "BDM") {
+    } else if (dep == "BDM") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => bdm_dashbord()),
@@ -293,6 +287,10 @@ class _SalesTeamCdReportPageState extends State<SalesTeamCdReportPage> {
       sheet.setColWidth(4, 10);
       sheet.setColWidth(5, 12);
       sheet.setColWidth(6, 16);
+      sheet.setColWidth(7, 10);
+      sheet.setColWidth(8, 10);
+      sheet.setColWidth(9, 12);
+      sheet.setColWidth(10, 14);
       sheet.setColWidth(7, 12);
       sheet.setColWidth(8, 14);
 
@@ -391,7 +389,7 @@ class _SalesTeamCdReportPageState extends State<SalesTeamCdReportPage> {
 
       sheet.merge(
         ex.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
-        ex.CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: row),
+        ex.CellIndex.indexByColumnRow(columnIndex: 10, rowIndex: row),
       );
 
       row++;
@@ -409,7 +407,7 @@ class _SalesTeamCdReportPageState extends State<SalesTeamCdReportPage> {
       final reportLabel = hasDateRange ? 'DATE RANGE: $reportDate' : reportDate;
 
       setCell(0, row, reportLabel, leftStyle);
-      for (int c = 1; c <= 8; c++) {
+      for (int c = 1; c <= 10; c++) {
         setCell(c, row, "", normalStyle);
       }
 
@@ -423,6 +421,8 @@ class _SalesTeamCdReportPageState extends State<SalesTeamCdReportPage> {
         "ACD",
         "AVG CD",
         "NEW LEADS",
+        "MD",
+        "SD",
         "BILL",
         "VOLUME",
       ];
@@ -455,8 +455,10 @@ class _SalesTeamCdReportPageState extends State<SalesTeamCdReportPage> {
           setCell(4, row, formatNumber(member["ACD"]), normalStyle);
           setCell(5, row, formatNumber(member["AVG_CD"]), normalStyle);
           setCell(6, row, formatNumber(member["new_deals"]), normalStyle);
-          setCell(7, row, formatNumber(member["bill_count"]), normalStyle);
-          setCell(8, row, formatNumber(member["volume"]), normalStyle);
+          setCell(7, row, formatNumber(member["md"]), normalStyle);
+          setCell(8, row, formatNumber(member["sd"]), normalStyle);
+          setCell(9, row, formatNumber(member["bill_count"]), normalStyle);
+          setCell(10, row, formatNumber(member["volume"]), normalStyle);
 
           row++;
         }
@@ -486,9 +488,11 @@ class _SalesTeamCdReportPageState extends State<SalesTeamCdReportPage> {
         setCell(4, row, formatNumber(teamTotal["ACD"]), yellowTotalStyle);
         setCell(5, row, formatNumber(teamTotal["AVG_CD"]), yellowTotalStyle);
         setCell(6, row, formatNumber(teamTotal["new_deals"]), yellowTotalStyle);
+        setCell(7, row, formatNumber(teamTotal["md"]), yellowTotalStyle);
+        setCell(8, row, formatNumber(teamTotal["sd"]), yellowTotalStyle);
         setCell(
-            7, row, formatNumber(teamTotal["bill_count"]), yellowTotalStyle);
-        setCell(8, row, formatNumber(teamTotal["volume"]), yellowTotalStyle);
+            9, row, formatNumber(teamTotal["bill_count"]), yellowTotalStyle);
+        setCell(10, row, formatNumber(teamTotal["volume"]), yellowTotalStyle);
 
         row++;
       }
@@ -507,8 +511,10 @@ class _SalesTeamCdReportPageState extends State<SalesTeamCdReportPage> {
       setCell(4, row, formatNumber(totals["ACD"]), grandTotalStyle);
       setCell(5, row, formatNumber(totals["AVG_CD"]), grandTotalStyle);
       setCell(6, row, formatNumber(totals["new_deals"]), grandTotalStyle);
-      setCell(7, row, formatNumber(totals["bill_count"]), grandTotalStyle);
-      setCell(8, row, formatNumber(totals["volume"]), grandTotalStyle);
+      setCell(7, row, formatNumber(totals["md"]), grandTotalStyle);
+      setCell(8, row, formatNumber(totals["sd"]), grandTotalStyle);
+      setCell(9, row, formatNumber(totals["bill_count"]), grandTotalStyle);
+      setCell(10, row, formatNumber(totals["volume"]), grandTotalStyle);
 
       final fileBytes = excel.encode();
       final tempDir = await getTemporaryDirectory();
@@ -802,6 +808,8 @@ class _SalesTeamCdReportPageState extends State<SalesTeamCdReportPage> {
         tableCell('ACD', width: 85),
         tableCell('AVG CD', width: 95),
         tableCell('NEW LEADS', width: 120),
+        tableCell('MD', width: 70),
+        tableCell('SD', width: 70),
         tableCell('BILL', width: 95),
         tableCell('VOLUME', width: 110),
       ],
@@ -825,6 +833,8 @@ class _SalesTeamCdReportPageState extends State<SalesTeamCdReportPage> {
         tableCell(formatNumber(member['ACD']), width: 85),
         tableCell(formatNumber(member['AVG_CD']), width: 95),
         tableCell(formatNumber(member['new_deals']), width: 120),
+        tableCell(formatNumber(member['md']), width: 70),
+        tableCell(formatNumber(member['sd']), width: 70),
         tableCell(formatNumber(member['bill_count']), width: 95),
         tableCell(formatNumber(member['volume']), width: 110),
       ],
@@ -860,6 +870,16 @@ class _SalesTeamCdReportPageState extends State<SalesTeamCdReportPage> {
             textColor: grandTotal ? Colors.black : Colors.red),
         tableCell(formatNumber(total['new_deals']),
             width: 120,
+            bold: true,
+            bgColor: bgColor,
+            textColor: grandTotal ? Colors.black : Colors.red),
+        tableCell(formatNumber(total['md']),
+            width: 70,
+            bold: true,
+            bgColor: bgColor,
+            textColor: grandTotal ? Colors.black : Colors.red),
+        tableCell(formatNumber(total['sd']),
+            width: 70,
             bold: true,
             bgColor: bgColor,
             textColor: grandTotal ? Colors.black : Colors.red),
@@ -946,7 +966,7 @@ class _SalesTeamCdReportPageState extends State<SalesTeamCdReportPage> {
       appBar: AppBar(
         title: const Text(
           'Sales Team CD Report',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
         ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,

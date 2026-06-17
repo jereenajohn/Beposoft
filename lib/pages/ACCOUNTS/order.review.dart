@@ -7032,32 +7032,43 @@ class _OrderReviewState extends State<OrderReview> {
                             ),
                           ),
                           onPressed: () {
-                            // ✅ ALWAYS log status time on submit
                             AddStatusTime(context);
 
-                            // FULL COD → direct update
+                            final String paymentStatus = (selectedPayStatus ??
+                                    ord?['payment_status'] ??
+                                    '')
+                                .toString()
+                                .trim()
+                                .toLowerCase();
+
+                            final String codType =
+                                (cod_status ?? ord?['cod_status'] ?? '')
+                                    .toString()
+                                    .trim()
+                                    .toUpperCase();
+
                             if (selectedStatus == "Invoice Rejected") {
                               updatestatus();
                               return;
-                            } else {
-                              if (cod_status == "FULL_COD") {
-                                updatestatus();
-                                return;
-                              }
-
-                              if (selectedPayStatus == "credit") {
-                                updatestatus();
-                                return;
-                              }
-
-                              // OTHER COD TYPES → Must have proof image
-                              if (selectedImageData.isNotEmpty) {
-                                updatestatus();
-                                return;
-                              }
                             }
 
-                            // No images → show message
+                            if (paymentStatus == "cod" ||
+                                codType == "FULL_COD" ||
+                                codType == "PARTIAL_COD") {
+                              updatestatus();
+                              return;
+                            }
+
+                            if (selectedPayStatus == "credit") {
+                              updatestatus();
+                              return;
+                            }
+
+                            if (selectedImageData.isNotEmpty) {
+                              updatestatus();
+                              return;
+                            }
+
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(

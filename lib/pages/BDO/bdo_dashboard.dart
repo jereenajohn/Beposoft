@@ -12,7 +12,7 @@ import 'package:beposoft/pages/BDO/categorywise_sales_report.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_order_view.dart';
 import 'package:beposoft/pages/logout_hekper.dart';
 import 'package:intl/intl.dart';
-
+import 'package:beposoft/pages/auth_status_checker.dart';
 import 'package:beposoft/loginpage.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_attribute.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_bank.dart';
@@ -58,6 +58,9 @@ class _bdo_dashbordState extends State<bdo_dashbord> {
     getSalesReport();
     fetchOrderData();
     getcustomer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+  AuthStatusChecker.start(context);
+});
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkAppUpdate(context);
     });

@@ -549,6 +549,14 @@ class _BdoDsrList2State extends State<BdoDsrList2> {
       text: latestReport['new_leads']?.toString() ?? '0',
     );
 
+    final mdController = TextEditingController(
+      text: latestReport['md']?.toString() ?? '0',
+    );
+
+    final sdController = TextEditingController(
+      text: latestReport['sd']?.toString() ?? '0',
+    );
+
     final unbilledController = TextEditingController(
       text: latestReport['unbilled']?.toString() ?? '0',
     );
@@ -806,6 +814,18 @@ class _BdoDsrList2State extends State<BdoDsrList2> {
                                   controller: newLeadsController,
                                   icon: Icons.leaderboard_outlined,
                                 ),
+                                const SizedBox(height: 12),
+                                _buildDialogTextField(
+                                  label: "MD",
+                                  controller: mdController,
+                                  icon: Icons.person_outline,
+                                ),
+                                const SizedBox(height: 12),
+                                _buildDialogTextField(
+                                  label: "SD",
+                                  controller: sdController,
+                                  icon: Icons.groups_outlined,
+                                ),
                               ],
                             ),
                           ),
@@ -860,6 +880,8 @@ class _BdoDsrList2State extends State<BdoDsrList2> {
                                         newConversionsController.text);
                                     final int newLeads =
                                         _parseInt(newLeadsController.text);
+                                    final int md = _parseInt(mdController.text);
+                                    final int sd = _parseInt(sdController.text);
 
                                     if (billed > unbilled) {
                                       messenger.showSnackBar(
@@ -889,6 +911,8 @@ class _BdoDsrList2State extends State<BdoDsrList2> {
                                       "state": currentStateId,
                                       "district": currentDistrictId,
                                       "new_leads": newLeads,
+                                      "md": md,
+                                      "sd": sd,
                                       "unbilled": unbilled,
                                       "billed": billed,
                                       "new_customers": newCustomers,
@@ -1618,8 +1642,7 @@ class _BdoDsrList2State extends State<BdoDsrList2> {
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    SizedBox(
-                      width: 150,
+                    Expanded(
                       child: _metricBox(
                         "New Leads",
                         item['new_leads']?.toString() ?? "0",
@@ -1628,6 +1651,31 @@ class _BdoDsrList2State extends State<BdoDsrList2> {
                         cardColor: const Color(0xffEFF6FF),
                       ),
                     ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _metricBox(
+                        "MD",
+                        item['md']?.toString() ?? "0",
+                        icon: Icons.person_outline,
+                        valueColor: Colors.purple,
+                        cardColor: const Color(0xffF5F0FF),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _metricBox(
+                        "SD",
+                        item['sd']?.toString() ?? "0",
+                        icon: Icons.groups_outlined,
+                        valueColor: Colors.deepOrange,
+                        cardColor: const Color(0xffFFF4EE),
+                      ),
+                    ),
+                    const Expanded(child: SizedBox()),
                   ],
                 ),
               ],

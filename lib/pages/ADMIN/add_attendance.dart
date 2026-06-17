@@ -27,6 +27,8 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
   bool isMemberLoading = false;
   bool isSaving = false;
 
+  TextEditingController attendanceTimeController = TextEditingController();
+
   DateTime attendanceViewDate = DateTime.now();
 
   String get todayDate => DateTime.now().toIso8601String().split('T').first;
@@ -42,6 +44,10 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
   @override
   void initState() {
     super.initState();
+
+    final now = TimeOfDay.now();
+    attendanceTimeController.text =
+        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
     getMembersForDropdown();
     getMyTeamAttendance();
   }
@@ -138,6 +144,7 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
                   'team_id': team['team_id'],
                   'team_name': team['team_name'] ?? '',
                   'team_leader_name': team['team_leader_name'] ?? '',
+                  'attendance_time': attendance['attendance_time'],
                 });
               }
             }
@@ -158,76 +165,80 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
     }
   }
 
-Future<void> markAttendance() async {
-  if (selectedMember == null) {
-    showMsg("Select member");
-    return;
-  }
+  Future<void> markAttendance() async {
+    if (selectedMember == null) {
+      showMsg("Select member");
+      return;
+    }
 
-  final alreadyMarked = selectedDateAttendance.any(
-    (attendance) =>
-        attendance['staff'] == selectedMember!['member'] &&
-        attendance['attendance_date'] == todayDate,
-  );
-
-  if (alreadyMarked) {
-    showMsg(
-      "${selectedMember!['member_name']} attendance is already marked for today",
-    );
-    return;
-  }
-
-  try {
-    setState(() => isSaving = true);
-
-    final token = await gettokenFromPrefs();
-
-    final body = {
-      "staff": selectedMember!['member'],
-      "attendance_date": todayDate,
-      "status": selectedStatus,
-    };
-
-    final response = await http.post(
-      Uri.parse('$api/api/staff/attendance/'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(body),
+    final alreadyMarked = selectedDateAttendance.any(
+      (attendance) =>
+          attendance['staff'] == selectedMember!['member'] &&
+          attendance['attendance_date'] == todayDate,
     );
 
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      showMsg("Attendance marked successfully");
-
-      setState(() {
-        selectedMember = null;
-        selectedStatus = 'present';
-        editingAttendanceId = null;
-        attendanceViewDate = DateTime.now();
-      });
-
-      await refreshAll();
-    } else if (response.statusCode == 400) {
-      final parsed = jsonDecode(response.body);
-
+    if (alreadyMarked) {
       showMsg(
-        parsed['message']?.toString() ??
-            parsed['errors']?.toString() ??
-            "Attendance already marked for this member",
+        "${selectedMember!['member_name']} attendance is already marked for today",
       );
-    } else {
-      showMsg("Failed: ${response.body}");
+      return;
     }
-  } catch (e) {
-    debugPrint("Mark attendance error: $e");
-    showMsg("Failed to mark attendance");
-  } finally {
-    if (mounted) {
-      setState(() => isSaving = false);
+
+    try {
+      setState(() => isSaving = true);
+
+      final token = await gettokenFromPrefs();
+
+      final body = {
+        "staff": selectedMember!['member'],
+        "attendance_date": todayDate,
+        "attendance_time": attendanceTimeController.text,
+        "status": selectedStatus,
+      };
+
+      final response = await http.post(
+        Uri.parse('$api/api/staff/attendance/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        showMsg("Attendance marked successfully");
+
+        setState(() {
+          selectedMember = null;
+          selectedStatus = 'present';
+          editingAttendanceId = null;
+          attendanceViewDate = DateTime.now();
+          attendanceTimeController.text =
+              "${TimeOfDay.now().hour.toString().padLeft(2, '0')}:${TimeOfDay.now().minute.toString().padLeft(2, '0')}";
+        });
+
+        await refreshAll();
+      } else if (response.statusCode == 400) {
+        final parsed = jsonDecode(response.body);
+
+        showMsg(
+          parsed['message']?.toString() ??
+              parsed['errors']?.toString() ??
+              "Attendance already marked for this member",
+        );
+      } else {
+        showMsg("Failed: ${response.body}");
+      }
+    } catch (e) {
+      debugPrint("Mark attendance error: $e");
+      showMsg("Failed to mark attendance");
+    } finally {
+      if (mounted) {
+        setState(() => isSaving = false);
+      }
     }
   }
-}
+
   Future<void> updateAttendance() async {
     if (editingAttendanceId == null) {
       showMsg("Select attendance to update");
@@ -247,6 +258,7 @@ Future<void> markAttendance() async {
       final body = {
         "staff": selectedMember!['member'],
         "attendance_date": todayDate,
+        "attendance_time": attendanceTimeController.text,
         "status": selectedStatus,
       };
 
@@ -267,6 +279,8 @@ Future<void> markAttendance() async {
           selectedStatus = 'present';
           editingAttendanceId = null;
           attendanceViewDate = DateTime.now();
+          attendanceTimeController.text =
+              "${TimeOfDay.now().hour.toString().padLeft(2, '0')}:${TimeOfDay.now().minute.toString().padLeft(2, '0')}";
         });
 
         await refreshAll();
@@ -328,6 +342,7 @@ Future<void> markAttendance() async {
       editingAttendanceId = item['id'];
       selectedMember = member;
       selectedStatus = item['status'] ?? 'present';
+      attendanceTimeController.text = item['attendance_time']?.toString() ?? '';
     });
   }
 
@@ -553,6 +568,7 @@ Future<void> markAttendance() async {
               color: Color(0xff111827),
             ),
           ),
+          
           const SizedBox(height: 8),
           Row(
             children: [
@@ -571,6 +587,37 @@ Future<void> markAttendance() async {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "Reporting Time",
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: Color(0xff111827),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: attendanceTimeController,
+            readOnly: true,
+            decoration: InputDecoration(
+              prefixIcon: Icon(Icons.access_time),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onTap: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: TimeOfDay.now(),
+              );
+
+              if (picked != null) {
+                attendanceTimeController.text =
+                    "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
+              }
+            },
           ),
           const SizedBox(height: 16),
           SizedBox(
@@ -667,9 +714,8 @@ Future<void> markAttendance() async {
           color: isSelected ? const Color(0xffdbeafe) : const Color(0xfff8fafc),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected
-                ? const Color(0xff2563eb)
-                : const Color(0xffe5e7eb),
+            color:
+                isSelected ? const Color(0xff2563eb) : const Color(0xffe5e7eb),
             width: isSelected ? 1.4 : 1,
           ),
         ),
@@ -771,6 +817,13 @@ Future<void> markAttendance() async {
                                     ),
                                     Text(
                                       item['team_name'] ?? '',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Color(0xff64748b),
+                                      ),
+                                    ),
+                                    Text(
+                                      "Time: ${item['attendance_time'] ?? '-'}",
                                       style: const TextStyle(
                                         fontSize: 11,
                                         color: Color(0xff64748b),

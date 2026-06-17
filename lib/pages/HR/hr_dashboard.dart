@@ -8,6 +8,7 @@ import 'package:beposoft/pages/ACCOUNTS/view_staff.dart';
 import 'package:beposoft/pages/HR/EmployeeLeaveListPage.dart';
 import 'package:beposoft/pages/HR/add_teamlead.dart';
 import 'package:beposoft/pages/HR/attendance.dart';
+import 'package:beposoft/pages/auth_status_checker.dart';
 import 'package:beposoft/pages/HR/staff_attendance.dart';
 import 'package:beposoft/pages/logout_hekper.dart';
 import 'package:flutter/material.dart';
@@ -27,7 +28,10 @@ class _HrDashboardState extends State<HrDashboard> {
   String? username = '';
   void initState() {
     super.initState();
-    _getUsername(); // Get the username when the page loads
+    _getUsername(); 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+  AuthStatusChecker.start(context);
+});// Get the username when the page loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkAppUpdate(context);
     });
