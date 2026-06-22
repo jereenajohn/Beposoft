@@ -1,10 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/customer.dart';
 import 'package:beposoft/pages/ACCOUNTS/grv_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/order_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/performa_invoice_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/view_staff.dart';
+import 'package:beposoft/pages/ADMIN/add_attendance.dart';
+import 'package:beposoft/pages/ADMIN/add_team_staff.dart';
 import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
 import 'package:beposoft/pages/BDM/approve_bdo__call_duration.dart';
 import 'package:beposoft/pages/BDM/bdm_customer_list.dart';
@@ -56,6 +59,7 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
   bool isTeamSummaryLoading = false;
   String? selectedHourSlot;
   DateTime selectedTeamDate = DateTime.now();
+  bool isManager = false;
 
   String? username = '';
   int familyTotalBills = 0;
@@ -64,8 +68,6 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
   int familyTodaysBills = 0;
   double familyTodaysTotalAmount = 0.0;
   bool isFamilySummaryLoading = false;
-
-  bool isManager = false;
 
   @override
   void initState() {
@@ -78,8 +80,8 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
     getcustomer();
     fetchMyTeamDetailedSummary();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-  AuthStatusChecker.start(context);
-});
+      AuthStatusChecker.start(context);
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkAppUpdate(context);
@@ -218,79 +220,147 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
     final currentVersion = packageInfo.version;
 
     try {
-      final response = await http.get(Uri.parse(
-        'https://play.google.com/store/apps/details?id=com.bepositive.beposoft&hl=en',
-      ));
+      String? storeVersion;
+      Uri? storeUrl;
 
-      if (response.statusCode == 200) {
-        final content = response.body;
-        final versionRegex = RegExp(r'\[\[\["([0-9.]+)"\]\]');
-        final match = versionRegex.firstMatch(content);
+      if (Platform.isAndroid) {
+        final response = await http.get(Uri.parse(
+          'https://play.google.com/store/apps/details?id=com.bepositive.beposoft&hl=en',
+        ));
 
-        if (match != null) {
-          final storeVersion = match.group(1);
-          if (storeVersion != null && storeVersion != currentVersion) {
-            final result = await showDialog<bool>(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) => AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                titlePadding: const EdgeInsets.only(top: 20),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                title: Column(
-                  children: [
-                    Icon(Icons.system_update, size: 48, color: Colors.green),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Update Available',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                content: Text(
-                  'A new version ($storeVersion) is available.\n\nYou are using $currentVersion.\n\nPlease update the app to continue enjoying the latest features and improvements.',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                actionsAlignment: MainAxisAlignment.spaceEvenly,
-                actions: [
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.open_in_new, size: 18),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    label: const Text("Update Now"),
-                    onPressed: () async {
-                      final playStoreUrl = Uri.parse(
-                          'https://play.google.com/store/apps/details?id=com.bepositive.beposoft');
-                      if (await canLaunchUrl(playStoreUrl)) {
-                        await launchUrl(playStoreUrl,
-                            mode: LaunchMode.externalApplication);
-                      }
-                      Navigator.of(context).pop(false);
-                    },
-                  ),
-                  TextButton(
-                    child: const Text("Maybe Later"),
-                    onPressed: () => Navigator.of(context).pop(true),
-                  ),
-                ],
-              ),
+        if (response.statusCode == 200) {
+          final content = response.body;
+          final versionRegex = RegExp(r'\[\[\["([0-9.]+)"\]\]');
+          final match = versionRegex.firstMatch(content);
+
+          if (match != null) {
+            storeVersion = match.group(1);
+            storeUrl = Uri.parse(
+              'https://play.google.com/store/apps/details?id=com.bepositive.beposoft',
             );
-            return result == true;
+          }
+        }
+      } else if (Platform.isIOS) {
+        final response = await http.get(
+          Uri.parse('https://itunes.apple.com/lookup?id=6748010646&country=in'),
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+
+          if (data['resultCount'] != null &&
+              data['resultCount'] > 0 &&
+              data['results'] != null &&
+              data['results'] is List &&
+              data['results'].isNotEmpty) {
+            final appData = data['results'][0];
+            storeVersion = appData['version']?.toString();
+            storeUrl = Uri.parse(
+              'https://apps.apple.com/in/app/beposoft/id6748010646',
+            );
           }
         }
       }
-    } catch (e) {}
+
+      if (storeVersion != null &&
+          _isUpdateAvailable(currentVersion, storeVersion)) {
+        final result = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            titlePadding: const EdgeInsets.only(top: 20),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            title: Column(
+              children: [
+                Icon(
+                  Icons.system_update,
+                  size: 48,
+                  color: Colors.green,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Update Available',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              'A new version ($storeVersion) is available.\n\nYou are using $currentVersion.\n\nPlease update the app to continue enjoying the latest features and improvements.',
+              style: const TextStyle(fontSize: 16),
+            ),
+            actionsAlignment: MainAxisAlignment.spaceEvenly,
+            actions: [
+              ElevatedButton.icon(
+                icon: const Icon(Icons.open_in_new, size: 18),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                label: const Text("Update Now"),
+                onPressed: () async {
+                  if (storeUrl != null && await canLaunchUrl(storeUrl)) {
+                    await launchUrl(
+                      storeUrl,
+                      mode: LaunchMode.externalApplication,
+                    );
+                  }
+                  Navigator.of(context).pop(false);
+                },
+              ),
+              TextButton(
+                child: const Text("Maybe Later"),
+                onPressed: () => Navigator.of(context).pop(true),
+              ),
+            ],
+          ),
+        );
+
+        return result == true;
+      }
+    } catch (e) {
+      // Optional: print(e);
+    }
 
     return true;
+  }
+
+  bool _isUpdateAvailable(String currentVersion, String storeVersion) {
+    List<int> currentParts =
+        currentVersion.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+
+    List<int> storeParts =
+        storeVersion.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+
+    int maxLength = currentParts.length > storeParts.length
+        ? currentParts.length
+        : storeParts.length;
+
+    while (currentParts.length < maxLength) {
+      currentParts.add(0);
+    }
+    while (storeParts.length < maxLength) {
+      storeParts.add(0);
+    }
+
+    for (int i = 0; i < maxLength; i++) {
+      if (storeParts[i] > currentParts[i]) {
+        return true;
+      } else if (storeParts[i] < currentParts[i]) {
+        return false;
+      }
+    }
+
+    return false;
   }
 
   Future<void> fetchMyTeamDetailedSummary() async {
@@ -1200,8 +1270,8 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
         var productsData = parsed['data'];
 
         setState(() {
-          family = productsData['family']?.toString() ?? '';
-          isManager = productsData['is_manager'] ?? false;
+          family = productsData['family'].toString() ?? '';
+          isManager = parsed['data']['is_manager'] ?? false;
 
           getGrvList();
 
@@ -1212,14 +1282,11 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
 
           familyName = matchingFamily['name'];
         });
-
         fetchFamilyWiseOrderSummary();
         fetchbdmOrderData();
         getcustomer();
       }
-    } catch (error) {
-      debugPrint("Error in getprofiledata: $error");
-    }
+    } catch (error) {}
   }
 
   Future<void> getfamily() async {
@@ -2186,13 +2253,68 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
                 _buildDropdownTile(context, 'Approve BDO DSR', [
                   'Add Team',
                   'Add Team Members',
-                  'Add BDO Attendence',
+                  // 'Add BDO Attendence',
                   'View Call Duration List'
                 ]),
-                Divider(),
+               
+                       if (isManager)
+                  ListTile(
+                    leading: const Icon(Icons.group_add),
+                    title: const Text('Add Attendance Team'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              StaffAttendanceTeamMemberScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                if (isManager)
+                  ListTile(
+                    leading: const Icon(Icons.fact_check_outlined),
+                    title: const Text('Add Attendance'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              const StaffMarkAttendanceScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                // Divider(),
+               
                 ListTile(
+                   leading: Icon(Icons.pages),
+                  title: Text('Request Leave Form'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => EmployeeLeaveFormPage()));
+                  },
+                ),
+                // Divider(),
+                if (isManager)
+                  ListTile(
+                    leading: Icon(Icons.person_2),
+                    title: Text('Approve Leave Requests'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ManagerLeaveRequestsPage(),
+                        ),
+                      );
+                    },
+                  ),
+
+                   ListTile(
                   leading: Icon(Icons.person_2),
-                  title: Text('Staff'),
+                  title: Text('View Staffs'),
                   onTap: () {
                     Navigator.push(
                       context,
@@ -2204,34 +2326,6 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
                     );
                   },
                 ),
-                if (isManager) ...[
-                  Divider(),
-                  ListTile(
-                    leading: Icon(Icons.person_2),
-                    title: Text('Leave Requests'),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ManagerLeaveRequestsPage(),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-                Divider(),
-                  ListTile(
-                    leading: Icon(Icons.person_2),
-                    title: Text('Employee Leave Form'),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => EmployeeLeaveFormPage(),
-                        ),
-                      );
-                    },
-                  ),
                 Divider(),
                 ListTile(
                   leading: const Icon(Icons.logout),

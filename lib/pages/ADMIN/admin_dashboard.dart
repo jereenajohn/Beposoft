@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:beposoft/pages/ACCOUNTS/Bulk_Bepocart_Orders.dart';
 import 'package:beposoft/pages/ACCOUNTS/Create_Purchase_Product_List.dart';
 import 'package:beposoft/pages/ACCOUNTS/Today_shipped_orders.dart';
@@ -14,6 +15,11 @@ import 'package:beposoft/pages/ACCOUNTS/add_purpose_of_payment.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_supplier.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_team.dart';
+import 'package:beposoft/pages/ADMIN/add_staffwise_department.dart';
+import 'package:beposoft/pages/ADMIN/admin_add_attendance.dart';
+import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
+import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
+import 'package:beposoft/pages/auth_status_checker.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_warehouse.dart';
 import 'package:beposoft/pages/ACCOUNTS/addrack.dart';
 import 'package:beposoft/pages/ACCOUNTS/all_users_categorywise_sales_report.dart';
@@ -26,7 +32,6 @@ import 'package:beposoft/pages/ACCOUNTS/categorywise_sales_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/daily_bdo_sales_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/dailyproductcategorywisecyclingskating.dart';
 import 'package:beposoft/pages/ACCOUNTS/graph.dart';
-import 'package:beposoft/pages/auth_status_checker.dart';
 import 'package:beposoft/pages/ACCOUNTS/grv_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/monthlyproductcategorycyclingskating.dart';
 import 'package:beposoft/pages/ACCOUNTS/order_list.dart';
@@ -38,8 +43,6 @@ import 'package:beposoft/pages/ACCOUNTS/todays_orders_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/uploadbulkorders.dart';
 import 'package:beposoft/pages/ADMIN/add_attendance.dart';
 import 'package:beposoft/pages/ADMIN/add_team_staff.dart';
-import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
-import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_order_view.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_product_approval.dart';
 import 'package:beposoft/pages/logout_hekper.dart';
@@ -90,10 +93,10 @@ class _admin_dashboardState extends State<admin_dashboard> {
     fetchOrderData();
     fetchshippedorders();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      AuthStatusChecker.start(context);
+      checkAppUpdate(context);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      checkAppUpdate(context);
+      AuthStatusChecker.start(context);
     });
   }
 
@@ -442,88 +445,152 @@ class _admin_dashboardState extends State<admin_dashboard> {
     });
   }
 
+  bool _isUpdateAvailable(String currentVersion, String storeVersion) {
+    List<int> currentParts =
+        currentVersion.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+
+    List<int> storeParts =
+        storeVersion.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+
+    int maxLength = currentParts.length > storeParts.length
+        ? currentParts.length
+        : storeParts.length;
+
+    while (currentParts.length < maxLength) {
+      currentParts.add(0);
+    }
+    while (storeParts.length < maxLength) {
+      storeParts.add(0);
+    }
+
+    for (int i = 0; i < maxLength; i++) {
+      if (storeParts[i] > currentParts[i]) {
+        return true;
+      } else if (storeParts[i] < currentParts[i]) {
+        return false;
+      }
+    }
+
+    return false;
+  }
+
   Future<bool> checkAppUpdate(BuildContext context) async {
     final packageInfo = await PackageInfo.fromPlatform();
     final currentVersion = packageInfo.version;
 
     try {
-      final response = await http.get(Uri.parse(
-        'https://play.google.com/store/apps/details?id=com.bepositive.beposoft&hl=en',
-      ));
+      String? storeVersion;
+      Uri? storeUrl;
 
-      if (response.statusCode == 200) {
-        final content = response.body;
-        final versionRegex = RegExp(r'\[\[\["([0-9.]+)"\]\]');
-        final match = versionRegex.firstMatch(content);
+      if (Platform.isAndroid) {
+        final response = await http.get(Uri.parse(
+          'https://play.google.com/store/apps/details?id=com.bepositive.beposoft&hl=en',
+        ));
 
-        if (match != null) {
-          final storeVersion = match.group(1);
-          if (storeVersion != null && storeVersion != currentVersion) {
-            final result = await showDialog<bool>(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) => AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                titlePadding: const EdgeInsets.only(top: 20),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                title: Column(
-                  children: [
-                    Icon(Icons.system_update, size: 48, color: Colors.green),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Update Available',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                content: Text(
-                  'A new version ($storeVersion) is available.\n\nYou are using $currentVersion.\n\nPlease update the app to continue enjoying the latest features and improvements.',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                actionsAlignment: MainAxisAlignment.spaceEvenly,
-                actions: [
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.open_in_new, size: 18),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    label: const Text("Update Now"),
-                    onPressed: () async {
-                      final playStoreUrl = Uri.parse(
-                          'https://play.google.com/store/apps/details?id=com.bepositive.beposoft');
-                      if (await canLaunchUrl(playStoreUrl)) {
-                        await launchUrl(playStoreUrl,
-                            mode: LaunchMode.externalApplication);
-                      }
-                      Navigator.of(context)
-                          .pop(false); // Prevent app from loading
-                    },
-                  ),
-                  TextButton(
-                    child: const Text("Maybe Later"),
-                    onPressed: () =>
-                        Navigator.of(context).pop(true), // Continue with app
-                  ),
-                ],
-              ),
+        if (response.statusCode == 200) {
+          final content = response.body;
+          final versionRegex = RegExp(r'\[\[\["([0-9.]+)"\]\]');
+          final match = versionRegex.firstMatch(content);
+
+          if (match != null) {
+            storeVersion = match.group(1);
+            storeUrl = Uri.parse(
+              'https://play.google.com/store/apps/details?id=com.bepositive.beposoft',
             );
-            return result == true;
+          }
+        }
+      } else if (Platform.isIOS) {
+        final response = await http.get(
+          Uri.parse('https://itunes.apple.com/lookup?id=6748010646&country=in'),
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+
+          if (data['resultCount'] != null &&
+              data['resultCount'] > 0 &&
+              data['results'] != null &&
+              data['results'] is List &&
+              data['results'].isNotEmpty) {
+            final appData = data['results'][0];
+            storeVersion = appData['version']?.toString();
+            storeUrl = Uri.parse(
+              'https://apps.apple.com/in/app/beposoft/id6748010646',
+            );
           }
         }
       }
+
+      if (storeVersion != null &&
+          _isUpdateAvailable(currentVersion, storeVersion)) {
+        final result = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            titlePadding: const EdgeInsets.only(top: 20),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            title: Column(
+              children: [
+                Icon(
+                  Icons.system_update,
+                  size: 48,
+                  color: Colors.green,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Update Available',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              'A new version ($storeVersion) is available.\n\nYou are using $currentVersion.\n\nPlease update the app to continue enjoying the latest features and improvements.',
+              style: const TextStyle(fontSize: 16),
+            ),
+            actionsAlignment: MainAxisAlignment.spaceEvenly,
+            actions: [
+              ElevatedButton.icon(
+                icon: const Icon(Icons.open_in_new, size: 18),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                label: const Text("Update Now"),
+                onPressed: () async {
+                  if (storeUrl != null && await canLaunchUrl(storeUrl)) {
+                    await launchUrl(
+                      storeUrl,
+                      mode: LaunchMode.externalApplication,
+                    );
+                  }
+                  Navigator.of(context).pop(false);
+                },
+              ),
+              TextButton(
+                child: const Text("Maybe Later"),
+                onPressed: () => Navigator.of(context).pop(true),
+              ),
+            ],
+          ),
+        );
+
+        return result == true;
+      }
     } catch (e) {
-      // Optionally log error
+      // Optional: print(e);
     }
 
-    return true; // Proceed normally if no update
+    return true;
   }
 
   void logout() async {
@@ -986,6 +1053,8 @@ class _admin_dashboardState extends State<admin_dashboard> {
                     // Navigate to the Settings page or perform any other action
                   },
                 ),
+
+                
                 ListTile(
                   leading: Icon(Icons.person),
                   title: Text('Supervisors'),
@@ -1068,6 +1137,18 @@ class _admin_dashboardState extends State<admin_dashboard> {
                     // Navigate to the Settings page or perform any other action
                   },
                 ),
+                  if (isManager)
+                  ListTile(
+                    title: Text('Add Attendance Department'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => AttendanceDepartmentPage( baseUrl: api,)));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+             
                 if (isManager)
                   ListTile(
                     leading: const Icon(Icons.group_add),
@@ -1096,24 +1177,10 @@ class _admin_dashboardState extends State<admin_dashboard> {
                       );
                     },
                   ),
-
-                ListTile(
-                  leading: const Icon(Icons.fact_check_outlined),
-                  title: const Text('Employee Leave Form'),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const EmployeeLeaveFormPage(),
-                      ),
-                    );
-                  },
-                ),
-
                 if (isManager)
                   ListTile(
                     leading: const Icon(Icons.fact_check_outlined),
-                    title: const Text('Leave Requests'),
+                    title: const Text('Approve Leave Request'),
                     onTap: () {
                       Navigator.push(
                         context,
@@ -1125,6 +1192,18 @@ class _admin_dashboardState extends State<admin_dashboard> {
                     },
                   ),
 
+                     ListTile(
+                  title: Text('Employee Leave Form'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => EmployeeLeaveFormPage()));
+                  },
+                ),
+
+               
+                
                 //  ListTile(
                 //   leading: Icon(Icons.person),
                 //   title: Text('Delivery Notes'),
@@ -1209,6 +1288,8 @@ class _admin_dashboardState extends State<admin_dashboard> {
                   'Damaged Stock',
                   'Finance Report',
                   'Actual Delivery Report',
+                                      'Order Comparison Report',
+
                 ]),
 
                 _buildDropdownTile(context, 'Staff', [

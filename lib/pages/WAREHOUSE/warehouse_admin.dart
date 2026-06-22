@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:beposoft/pages/ACCOUNTS/add_attendence_self.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/order_list.dart';
 import 'package:beposoft/pages/ADMIN/add_attendance.dart';
@@ -553,6 +554,14 @@ Future<bool> checkAppUpdate(BuildContext context) async {
                   Navigator.push(context, MaterialPageRoute(builder: (context) => Warehouse_Order_Request(status: null,)));
                 },
               ),
+              //   ListTile(
+              //   leading: Icon(Icons.dashboard),
+              //   title: Text('Add Attendence'),
+              //   onTap: () {
+              //     Navigator.push(context,
+              //         MaterialPageRoute(builder: (context) => AttendanceAddPage()));
+              //   },
+              // ),
               if (isManager)
               ListTile(
                 title: Text('Add Team Staff'),

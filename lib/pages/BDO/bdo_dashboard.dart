@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:beposoft/pages/ACCOUNTS/add_attendence_self.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_district.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 // import 'package:beposoft/pages/ACCOUNTS/call_log.dart';
@@ -52,7 +53,7 @@ class _bdo_dashbordState extends State<bdo_dashbord> {
   @override
   void initState() {
     super.initState();
-    _getUsername(); // Get the username when the page loads
+    _getUsername(); 
     getGrvList();
     fetchproformaData();
     getSalesReport();
@@ -568,10 +569,10 @@ class _bdo_dashbordState extends State<bdo_dashbord> {
               ),
               // ListTile(
               //   leading: Icon(Icons.dashboard),
-              //   title: Text('Call Report'),
+              //   title: Text('Add Attendence'),
               //   onTap: () {
               //     Navigator.push(context,
-              //         MaterialPageRoute(builder: (context) => CallLog()));
+              //         MaterialPageRoute(builder: (context) => AttendanceAddPage()));
               //   },
               // ),
 

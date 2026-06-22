@@ -44,13 +44,16 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
   @override
   void initState() {
     super.initState();
-
-    final now = TimeOfDay.now();
-    attendanceTimeController.text =
-        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+    attendanceTimeController.clear();
     getMembersForDropdown();
     getMyTeamAttendance();
   }
+
+  @override
+void dispose() {
+  attendanceTimeController.dispose();
+  super.dispose();
+}
 
   Future<void> getMembersForDropdown() async {
     try {
@@ -170,6 +173,10 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
       showMsg("Select member");
       return;
     }
+    if (attendanceTimeController.text.trim().isEmpty) {
+      showMsg("Choose reporting time");
+      return;
+    }
 
     final alreadyMarked = selectedDateAttendance.any(
       (attendance) =>
@@ -213,8 +220,7 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
           selectedStatus = 'present';
           editingAttendanceId = null;
           attendanceViewDate = DateTime.now();
-          attendanceTimeController.text =
-              "${TimeOfDay.now().hour.toString().padLeft(2, '0')}:${TimeOfDay.now().minute.toString().padLeft(2, '0')}";
+          attendanceTimeController.clear();
         });
 
         await refreshAll();
@@ -249,7 +255,10 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
       showMsg("Select member");
       return;
     }
-
+    if (attendanceTimeController.text.trim().isEmpty) {
+      showMsg("Choose reporting time");
+      return;
+    }
     try {
       setState(() => isSaving = true);
 
@@ -279,8 +288,7 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
           selectedStatus = 'present';
           editingAttendanceId = null;
           attendanceViewDate = DateTime.now();
-          attendanceTimeController.text =
-              "${TimeOfDay.now().hour.toString().padLeft(2, '0')}:${TimeOfDay.now().minute.toString().padLeft(2, '0')}";
+          attendanceTimeController.clear();
         });
 
         await refreshAll();
@@ -568,7 +576,6 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
               color: Color(0xff111827),
             ),
           ),
-          
           const SizedBox(height: 8),
           Row(
             children: [
@@ -598,27 +605,32 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          TextFormField(
-            controller: attendanceTimeController,
-            readOnly: true,
-            decoration: InputDecoration(
-              prefixIcon: Icon(Icons.access_time),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onTap: () async {
-              final picked = await showTimePicker(
-                context: context,
-                initialTime: TimeOfDay.now(),
-              );
+       TextFormField(
+  controller: attendanceTimeController,
+  readOnly: true,
+  decoration: InputDecoration(
+    hintText: "Choose reporting time",
+    prefixIcon: const Icon(Icons.access_time),
+    filled: true,
+    fillColor: const Color(0xfff8fafc),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+    ),
+  ),
+  onTap: () async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
 
-              if (picked != null) {
-                attendanceTimeController.text =
-                    "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
-              }
-            },
-          ),
+    if (picked != null) {
+      setState(() {
+        attendanceTimeController.text =
+            "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
+      });
+    }
+  },
+),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
