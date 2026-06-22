@@ -1,5 +1,6 @@
 import 'package:beposoft/loginpage.dart';
 import 'package:beposoft/pages/ACCOUNTS/Staff_exit_form_page.dart';
+import 'package:beposoft/pages/ACCOUNTS/add_attendence_self.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_staff.dart';
 import 'package:beposoft/pages/ACCOUNTS/dorwer.dart';
 import 'package:beposoft/pages/ACCOUNTS/profilepage.dart';
@@ -274,6 +275,14 @@ Widget _buildDropdownTile(
                     MaterialPageRoute(builder: (context) => StaffAttendanceTeamScreen()));
               },
             ),
+              // ListTile(
+              //   leading: Icon(Icons.dashboard),
+              //   title: Text('Add Attendence'),
+              //   onTap: () {
+              //     Navigator.push(context,
+              //         MaterialPageRoute(builder: (context) => AttendanceAddPage()));
+              //   },
+              // ),
             ListTile(
               title: Text('Staff Attendance'),
               onTap: () {

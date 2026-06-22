@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:beposoft/pages/ACCOUNTS/Bulk_Bepocart_Orders.dart';
 import 'package:beposoft/pages/ACCOUNTS/Today_shipped_orders.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_EMI.dart';
+import 'package:beposoft/pages/ACCOUNTS/add_attendence_self.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_category.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_purpose_of_payment.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
@@ -630,15 +631,14 @@ class _marketing_dashboardState extends State<marketing_dashboard> {
                     ],
                   ),
                 ),
-                // ListTile(
-                //   leading: Icon(Icons.dashboard),
-                //   title: Text('Dashboard'),
-                //   onTap: () {
-                //     Navigator.push(context,
-                //         MaterialPageRoute(builder: (context) => Graph()));
-                //   },
-                // ),
-
+              //  ListTile(
+              //   leading: Icon(Icons.dashboard),
+              //   title: Text('Add Attendence'),
+              //   onTap: () {
+              //     Navigator.push(context,
+              //         MaterialPageRoute(builder: (context) => AttendanceAddPage()));
+              //   },
+              // ),
                 _buildDropdownTile(context, 'Customers', [
                   'Add Customer',
                   'Customers',

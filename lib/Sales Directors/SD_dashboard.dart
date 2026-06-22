@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:beposoft/Sales%20Directors/sd_confirm_call_duration.dart';
+import 'package:beposoft/pages/ACCOUNTS/add_attendence_self.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/customer.dart';
 import 'package:beposoft/pages/ACCOUNTS/grv_list.dart';
@@ -2379,6 +2380,14 @@ class _SdDashboardState extends State<SdDashboard> {
                   },
                 ),
                 Divider(),
+              //     ListTile(
+              //   leading: Icon(Icons.dashboard),
+              //   title: Text('Add Attendence'),
+              //   onTap: () {
+              //     Navigator.push(context,
+              //         MaterialPageRoute(builder: (context) => AttendanceAddPage()));
+              //   },
+              // ),
                 _buildDropdownTile(context, 'Customers', [
                   'Add Customer',
                   'Customers',

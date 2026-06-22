@@ -6,11 +6,17 @@ import 'package:beposoft/pages/ACCOUNTS/add_Expenses.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_Recipt.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_bank.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_credit_note.dart';
+import 'package:beposoft/pages/ACCOUNTS/ordercomparison_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/staff_exit_form_list.dart';
-import 'package:beposoft/pages/ACCOUNTS/statewise_order_list.dart';
+import 'package:beposoft/pages/ADMIN/add_staffwise_department.dart';
+import 'package:beposoft/pages/ADMIN/admin_add_attendance.dart';
+import 'package:beposoft/pages/ADMIN/admin_add_team_staff.dart';
+import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
 import 'package:beposoft/pages/ADMIN/salesteam_cd_reportpage.dart';
 import 'package:beposoft/pages/BDM/add_team_member.dart';
-import 'package:beposoft/pages/MARKETING/bepocart_order_list.dart';
+import 'package:beposoft/pages/HR/EmployeeLeaveListPage.dart';
+import 'package:beposoft/pages/HR/staff_attendance.dart';
+import 'package:beposoft/pages/api.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -109,7 +115,8 @@ import 'package:beposoft/pages/BDM/bdm_order_list.dart';
 import 'package:flutter/material.dart';
 
 class drower {
-  Future<void> navigateToSelectedPage(BuildContext context, String option) async {
+  Future<void> navigateToSelectedPage(
+      BuildContext context, String option) async {
     // Navigate to the selected page based on the option
     switch (option) {
       case 'Add Customer':
@@ -143,6 +150,49 @@ class drower {
         );
         break;
 
+      case 'Add Department & Managers':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => AttendanceDepartmentPage(
+                    baseUrl: api,
+                  )),
+        );
+        break;
+      case 'Add Dept-wise Staffs':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => AllMembersPage()),
+        );
+        break;
+      case 'Add Attendance':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => AllAttendanceAddPage()),
+        );
+        break;
+
+      case 'View Attendance':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => HrTeamAttendanceScreen()),
+        );
+        break;
+      case 'Employee Leave Requests':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => ManagerLeaveRequestsPage()),
+        );
+        break;
+      case 'View Leave List':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => EmployeeLeaveListPage()),
+        );
+        break;
+
+      //
+
       case 'Add Team':
         Navigator.push(
           context,
@@ -153,6 +203,12 @@ class drower {
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => TeamWiseReport()),
+        );
+        break;
+      case 'Sales Team DSR Report':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => SalesTeamCdReportPage()),
         );
         break;
 
@@ -179,14 +235,13 @@ class drower {
           context,
           MaterialPageRoute(builder: (context) => staff_list()),
         );
-        break;
-        case 'Staff Exit Form':
+      case 'Staff Exit Form':
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => EmployeeExitFormPage()),
         );
         break;
-        case 'Staff Exit List':
+      case 'Staff Exit List':
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => EmployeeExitListPage()),
@@ -271,6 +326,23 @@ class drower {
           MaterialPageRoute(builder: (context) => cod_transfer()),
         );
         break;
+      case 'Sales Team CD Report':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => SalesTeamCdReportPage()),
+        );
+        break;
+
+      case 'Order Comparison Report':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => OrderComparisonReportPage(
+                    baseUrl: api,
+                  )),
+        );
+        break;
+
       case 'COD Transfer List':
         Navigator.push(
           context,
@@ -454,7 +526,7 @@ class drower {
         Navigator.push(
           context,
           MaterialPageRoute(
-              builder: (context) => bepocartOrderList(
+              builder: (context) => bdm_OrderList(
                     status: null,
                   )),
         );
@@ -553,15 +625,10 @@ class drower {
               builder: (context) => CyclingProductwiseStatewiseReport()),
         );
         break;
-     case 'Order Items Excel Report':
+      case 'Order Items Excel Report':
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => OrderItemsExcelReport()),
-        );
-        case 'Sales Team CD Summary Report':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => SalesTeamCdReportPage()),
         );
 
       case 'Shipping Address Excel Report':

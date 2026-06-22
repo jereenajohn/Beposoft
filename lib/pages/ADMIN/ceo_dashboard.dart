@@ -17,6 +17,9 @@ import 'package:beposoft/pages/ACCOUNTS/add_warehouse.dart';
 import 'package:beposoft/pages/ACCOUNTS/all_users_categorywise_sales_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/all_users_sales_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/assetmanagement.dart';
+import 'package:beposoft/pages/ADMIN/add_staffwise_department.dart';
+import 'package:beposoft/pages/ADMIN/admin_add_attendance.dart';
+import 'package:beposoft/pages/ADMIN/admin_add_team_staff.dart';
 import 'package:beposoft/pages/auth_status_checker.dart';
 import 'package:beposoft/pages/ACCOUNTS/assetmanegment2.dart';
 import 'package:beposoft/pages/ACCOUNTS/bulk_customer_upload.dart';
@@ -2719,8 +2722,8 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
             onTap: () {},
           ),
           _buildDashboardCard(
-            title: "Sales Analysis",
-            value: "DSR",
+            title: "Sales Analysis(DSR)",
+            value: "",
             lines: const [],
             bottom: salesTeamCdLoading
                 ? const Text(
@@ -2731,40 +2734,16 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                     ? _buildSalesTeamContainer(
                         teamName: "No Team",
                         avgCd: "0.00",
-                        newLeads: "0",
                       )
                     : Column(
-                        children: [
-                          ...salesAnalysisDisplayList.map((team) {
-                            return _buildSalesTeamContainer(
-                              teamName: team['team_name'].toString(),
-                              avgCd:
-                                  _asDouble(team['avg_cd']).toStringAsFixed(2),
-                              newLeads: _asInt(team['new_leads']).toString(),
-                            );
-                          }).toList(),
-                          if (salesTeamCdTeamTotals.length > 1)
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                onPressed: () {
-                                  setState(() {
-                                    dashboardCardExpanded["Sales Analysis"] =
-                                        !salesAnalysisExpanded;
-                                  });
-                                },
-                                child: Text(
-                                  salesAnalysisExpanded
-                                      ? "See Less"
-                                      : "See More",
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
+                        children: salesTeamCdTeamTotals.map((team) {
+                          return _buildSalesTeamContainer(
+                            teamName:
+                                _teamShortName(team['team_name'].toString()),
+                            avgCd:
+                                "${_asDouble(team['avg_cd']).toStringAsFixed(2)}%",
+                          );
+                        }).toList(),
                       ),
             onTap: () {
               Navigator.push(
@@ -2793,7 +2772,6 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   Widget _buildSalesTeamContainer({
     required String teamName,
     required String avgCd,
-    required String newLeads,
   }) {
     return Container(
       width: double.infinity,
@@ -2804,30 +2782,48 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.white24),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            teamName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
+          Expanded(
+            child: Text(
+              teamName,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(height: 6),
           Text(
-            "Avg CD : $avgCd",
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            "New Leads : $newLeads",
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            "Avg CD: $avgCd",
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
     );
+  }
+
+  String _teamShortName(String teamName) {
+    final cleanName = teamName.trim();
+
+    if (cleanName.isEmpty) return "-";
+
+    final words =
+        cleanName.split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
+
+    if (words.length >= 2) {
+      return "${words[0][0]}${words[1][0]}".toUpperCase();
+    }
+
+    return cleanName.length >= 2
+        ? cleanName.substring(0, 2).toUpperCase()
+        : cleanName.toUpperCase();
   }
 
   Widget _buildDashboardCard({
@@ -2884,7 +2880,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                         title,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: FontWeight.w700,
                         ),
                         maxLines: 1,
@@ -2921,7 +2917,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                               : value,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 16,
+                            fontSize: 15,
                             fontWeight: FontWeight.w800,
                           ),
                           maxLines: 1,
@@ -2994,16 +2990,16 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                     ),
                   );
                 }).toList(),
-               if (bottom != null) ...[
-  if (bottomTopSpacing > 0) SizedBox(height: bottomTopSpacing),
-  Flexible(
-    child: SingleChildScrollView(
-      physics: const ClampingScrollPhysics(),
-      child: bottom,
-    ),
-  ),
-] else
-  const Spacer(),
+                if (bottom != null) ...[
+                  if (bottomTopSpacing > 0) SizedBox(height: bottomTopSpacing),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      physics: const ClampingScrollPhysics(),
+                      child: bottom,
+                    ),
+                  ),
+                ] else
+                  const Spacer(),
               ],
             ),
           ),
@@ -6020,6 +6016,14 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                   //   },
                   // ),
 
+                  // ListTile(
+                  //               leading: Icon(Icons.dashboard),
+                  //               title: Text('Add Attendence'),
+                  //               onTap: () {
+                  //                 Navigator.push(context,
+                  //                     MaterialPageRoute(builder: (context) => AttendanceAddPage()));
+                  //               },
+                  //             ),
                   _buildDropdownTile(context, 'Customers', [
                     'Add Customer',
                     'Customers',
@@ -6090,6 +6094,16 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
 
                   _buildDropdownTile(context, 'Daily Sales Reports',
                       ['Add Team', 'Team wise Report']),
+
+                  _buildDropdownTile(context, 'Attendance', [
+                    'Add Department & Managers',
+                    'Add Dept-wise Staffs',
+                    'Add Attendance',
+                    'View Attendance',
+                    'Employee Leave Requests',
+                    'View Leave List',
+                  ]),
+                  Divider(),
 
                   ListTile(
                     leading: Icon(Icons.person),
@@ -6499,64 +6513,99 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                       // Navigate to the Settings page or perform any other action
                     },
                   ),
-                  ListTile(
-                    title: Text('Staff Attendance'),
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => HrTeamAttendanceScreen()));
-                      // Navigate to the Settings page or perform any other action
-                    },
-                  ),
-                  if (isManager)
-                    ListTile(
-                      title: Text('Add Team Staff'),
-                      onTap: () {
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) =>
-                                    StaffAttendanceTeamMemberScreen()));
-                        // Navigate to the Settings page or perform any other action
-                      },
-                    ),
-                  if (isManager)
-                    ListTile(
-                      title: Text('Add Attendance'),
-                      onTap: () {
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) =>
-                                    StaffMarkAttendanceScreen()));
-                        // Navigate to the Settings page or perform any other action
-                      },
-                    ),
 
-                  if (isManager)
-                    ListTile(
-                      title: Text('Leave Requests'),
-                      onTap: () {
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) =>
-                                    ManagerLeaveRequestsPage()));
-                        // Navigate to the Settings page or perform any other action
-                      },
-                    ),
+                  // ListTile(
+                  //   title: Text('Add Attendance Department'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //         context,
+                  //         MaterialPageRoute(
+                  //             builder: (context) => AttendanceDepartmentPage(
+                  //                   baseUrl: api,
+                  //                 )));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
 
-                  ListTile(
-                    title: Text('Employee Leave List'),
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => EmployeeLeaveListPage()));
-                      // Navigate to the Settings page or perform any other action
-                    },
-                  ),
+                  // if (isManager)
+                  //   ListTile(
+                  //     title: Text('Add Team Staff'),
+                  //     onTap: () {
+                  //       Navigator.push(
+                  //           context,
+                  //           MaterialPageRoute(
+                  //               builder: (context) =>
+                  //                   StaffAttendanceTeamMemberScreen()));
+                  //       // Navigate to the Settings page or perform any other action
+                  //     },
+                  //   ),
+                  // if (isManager)
+                  //   ListTile(
+                  //     title: Text('Add Attendance'),
+                  //     onTap: () {
+                  //       Navigator.push(
+                  //           context,
+                  //           MaterialPageRoute(
+                  //               builder: (context) =>
+                  //                   StaffMarkAttendanceScreen()));
+                  //       // Navigate to the Settings page or perform any other action
+                  //     },
+                  //   ),
+
+                  // if (isManager)
+                  //   ListTile(
+                  //     title: Text('Leave Requests'),
+                  //     onTap: () {
+                  //       Navigator.push(
+                  //           context,
+                  //           MaterialPageRoute(
+                  //               builder: (context) =>
+                  //                   ManagerLeaveRequestsPage()));
+                  //       // Navigate to the Settings page or perform any other action
+                  //     },
+                  //   ),
+
+                  // ListTile(
+                  //   title: Text('Employee Leave List'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //         context,
+                  //         MaterialPageRoute(
+                  //             builder: (context) => EmployeeLeaveListPage()));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
+
+                  // ListTile(
+                  //   title: Text('Admin Add Department Members'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //         context,
+                  //         MaterialPageRoute(
+                  //             builder: (context) => AllMembersPage()));
+                  //   },
+                  // ),
+
+                  // ListTile(
+                  //   title: Text('Admin Add Attendance'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //         context,
+                  //         MaterialPageRoute(
+                  //             builder: (context) => AllAttendanceAddPage()));
+                  //   },
+                  // ),
+
+                  // ListTile(
+                  //   title: Text('Staff Attendance'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //         context,
+                  //         MaterialPageRoute(
+                  //             builder: (context) => HrTeamAttendanceScreen()));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
 
                   //   ListTile(
                   //   leading: Icon(Icons.person),
@@ -6570,17 +6619,17 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                   //   },
                   // ),
 
-                  ListTile(
-                    title: Text('Categorywise sales report'),
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) =>
-                                  UserwiseCategorywiseSalesReport()));
-                      // Navigate to the Settings page or perform any other action
-                    },
-                  ),
+                  // ListTile(
+                  //   title: Text('Categorywise sales report'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //         context,
+                  //         MaterialPageRoute(
+                  //             builder: (context) =>
+                  //                 UserwiseCategorywiseSalesReport()));
+                  //     // Navigate to the Settings page or perform any other action
+                  //   },
+                  // ),
 
                   _buildDropdownTile(
                       context, 'BDO Daily Sales Report', ['BDO Call List']),
@@ -6607,6 +6656,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                     'Damaged Stock',
                     'Finance Report',
                     'Actual Delivery Report',
+                    'Order Comparison Report',
                   ]),
 
                   _buildDropdownTile(context, 'Staff', [

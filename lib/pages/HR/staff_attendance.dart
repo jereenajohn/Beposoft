@@ -1,4 +1,10 @@
 import 'dart:convert';
+import 'package:beposoft/pages/ACCOUNTS/dashboard.dart';
+import 'package:beposoft/pages/ADMIN/ceo_dashboard.dart';
+import 'package:beposoft/pages/BDM/bdm_dshboard.dart';
+import 'package:beposoft/pages/BDO/bdo_dashboard.dart';
+import 'package:beposoft/pages/WAREHOUSE/warehouse_admin.dart';
+import 'package:beposoft/pages/WAREHOUSE/warehouse_dashboard.dart';
 import 'package:beposoft/pages/api.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -113,6 +119,59 @@ class _HrTeamAttendanceScreenState extends State<HrTeamAttendanceScreen> {
     }
   }
 
+ Future<String?> getdepFromPrefs() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getString('department');
+  }
+
+  Future<void> _navigateBack() async {
+    final dep = await getdepFromPrefs();
+   if(dep=="BDO" ){
+   Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => bdo_dashbord()), // Replace AnotherPage with your target page
+            );
+
+}
+else if(dep=="BDM" ){
+   Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => bdm_dashbord()), // Replace AnotherPage with your target page
+            );
+}
+else if(dep=="warehouse" ){
+   Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => WarehouseDashboard()), // Replace AnotherPage with your target page
+            );
+}
+else if(dep=="CEO" ){
+   Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => ceo_dashboard()), // Replace AnotherPage with your target page
+            );
+}
+else if(dep=="COO" ){
+   Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => ceo_dashboard()), // Replace AnotherPage with your target page
+            );
+}
+
+
+else if(dep=="Warehouse Admin" ){
+   Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => WarehouseAdmin()), // Replace AnotherPage with your target page
+            );
+}else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => dashboard()),
+      );
+    }
+  }
+
   void showMsg(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg)),
@@ -193,25 +252,31 @@ class _HrTeamAttendanceScreenState extends State<HrTeamAttendanceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xffeef3f9),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        title: const Text(
-          "HR Attendance",
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-        actions: [
-          IconButton(
-            onPressed: pickAttendanceDate,
-            icon: const Icon(Icons.calendar_month_outlined),
-          ),
-          IconButton(
-            onPressed: getAllAttendance,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
+     appBar: AppBar(
+  automaticallyImplyLeading: false,
+  leading: IconButton(
+    tooltip: 'Back',
+    icon: const Icon(Icons.arrow_back_ios_new_rounded),
+    onPressed: _navigateBack,
+  ),
+  elevation: 0,
+  backgroundColor: Colors.white,
+  foregroundColor: Colors.black,
+  title: const Text(
+    "Attendance",
+    style: TextStyle(fontWeight: FontWeight.w700),
+  ),
+  actions: [
+    IconButton(
+      onPressed: pickAttendanceDate,
+      icon: const Icon(Icons.calendar_month_outlined),
+    ),
+    IconButton(
+      onPressed: getAllAttendance,
+      icon: const Icon(Icons.refresh),
+    ),
+  ],
+),
       body: RefreshIndicator(
         onRefresh: getAllAttendance,
         child: SingleChildScrollView(

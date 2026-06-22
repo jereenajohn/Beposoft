@@ -4,6 +4,7 @@ import 'package:beposoft/pages/ACCOUNTS/Create_Purchase_Product_List.dart';
 import 'package:beposoft/pages/ACCOUNTS/Today_shipped_orders.dart';
 import 'package:beposoft/pages/ACCOUNTS/activity_log.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_EMI.dart';
+import 'package:beposoft/pages/ACCOUNTS/add_attendence_self.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_bank_type.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_category.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_country_code.dart' show add_country;
@@ -618,6 +619,14 @@ class _admin_dashboardState extends State<dashboard> {
                     // Navigate to the Settings page or perform any other action
                   },
                 ),
+              //     ListTile(
+              //   leading: Icon(Icons.dashboard),
+              //   title: Text('Add Attendence'),
+              //   onTap: () {
+              //     Navigator.push(context,
+              //         MaterialPageRoute(builder: (context) => AttendanceAddPage()));
+              //   },
+              // ),
                 _buildDropdownTile(context, 'Customers', [
                   'Add Customer',
                   'Customers',
