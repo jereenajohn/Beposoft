@@ -60,13 +60,12 @@ class _AddTeamMembersState extends State<AddTeamMembers> {
     }
   }
 
-   Future<String?> getdepFromPrefs() async {
+  Future<String?> getdepFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('department');
   }
 
-
-   Future<void> _navigateBack() async {
+  Future<void> _navigateBack() async {
     final dep = await getdepFromPrefs();
     if (!mounted) return;
 
@@ -102,7 +101,6 @@ class _AddTeamMembersState extends State<AddTeamMembers> {
       );
     }
   }
-
 
   Future<String?> gettokenFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
@@ -148,14 +146,7 @@ class _AddTeamMembersState extends State<AddTeamMembers> {
         final parsed = jsonDecode(response.body);
         final List data = parsed["data"] ?? [];
 
-        final filteredTeams = data.where((item) {
-          final dynamic rawLeaderId = item["team_leader"];
-          final int? leaderId = rawLeaderId is int
-              ? rawLeaderId
-              : int.tryParse(rawLeaderId?.toString() ?? '');
-
-          return leaderId == loggedInUserId;
-        }).map<Map<String, dynamic>>((item) {
+        final loadedTeams = data.map<Map<String, dynamic>>((item) {
           return {
             "id": item["id"],
             "name": item["name"]?.toString() ?? "",
@@ -172,7 +163,7 @@ class _AddTeamMembersState extends State<AddTeamMembers> {
         }).toList();
 
         setState(() {
-          teams = filteredTeams;
+          teams = loadedTeams;
 
           if (widget.memberId == null && teams.isNotEmpty) {
             selectedTeamMap = teams.first;
@@ -405,7 +396,6 @@ class _AddTeamMembersState extends State<AddTeamMembers> {
           "user": selectedStaffId,
         }),
       );
-
 
       final parsed = jsonDecode(response.body);
 
@@ -782,12 +772,12 @@ class _AddTeamMembersState extends State<AddTeamMembers> {
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.black87),
-            onPressed: () async {
-              await _navigateBack();
-            },
-          ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          onPressed: () async {
+            await _navigateBack();
+          },
+        ),
         elevation: 0,
         backgroundColor: Colors.white,
         centerTitle: true,
