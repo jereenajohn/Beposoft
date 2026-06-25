@@ -201,6 +201,8 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   int teamWiseTotalAbsent = 0;
   int teamWiseTotalHalfDay = 0;
 
+  List<Map<String, dynamic>> departmentAttendanceCards = [];
+
   // int getFamilyPresentCount(String familyName) {
   //   return familyAttendanceData.where((item) {
   //     final family =
@@ -314,7 +316,6 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   Future<void> fetchTeamWiseAttendanceCount() async {
     try {
       final token = await getTokenFromPrefs();
-
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
       final response = await http.get(
@@ -333,14 +334,50 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
         final summary = parsed['summary'] ?? {};
+        final List data = parsed['data'] ?? [];
 
+        int salesPresent = 0;
+        int salesAbsent = 0;
+        int salesHalfDay = 0;
+
+        final List<Map<String, dynamic>> cards = [];
+
+        for (final item in data) {
+          final teamName = (item['team_name'] ?? '').toString().trim();
+          final upperName = teamName.toUpperCase();
+
+          final present = _asInt(item['present_count']);
+          final absent = _asInt(item['absent_count']);
+          final halfDay = _asInt(item['half_day_count']);
+
+          if (upperName.startsWith('SALES DEPARTMENT')) {
+            salesPresent += present;
+            salesAbsent += absent;
+            salesHalfDay += halfDay;
+          } else {
+            cards.add({
+              'title': teamName,
+              'present': present,
+              'absent': absent,
+              'half_day': halfDay,
+            });
+          }
+        }
+
+        cards.insert(0, {
+          'title': 'SALES DEPARTMENT',
+          'present': salesPresent,
+          'absent': salesAbsent,
+          'half_day': salesHalfDay,
+        });
+
+        if (!mounted) return;
         setState(() {
           teamWiseTotalPresent = _asInt(summary['total_present']);
           teamWiseTotalAbsent = _asInt(summary['total_absent']);
           teamWiseTotalHalfDay = _asInt(summary['total_half_day']);
+          departmentAttendanceCards = cards;
         });
-
-        debugPrint("TODAY TOTAL PRESENT: $teamWiseTotalPresent");
       }
     } catch (e) {
       debugPrint("TEAM WISE ATTENDANCE COUNT ERROR: $e");
@@ -2614,6 +2651,72 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
             },
           ),
           _buildDashboardCard(
+            title: "Attendance",
+            value: "",
+            lines: const [],
+            bottom: departmentAttendanceCards.isEmpty
+                ? const Text(
+                    "Loading attendance...",
+                    style: TextStyle(color: Colors.white, fontSize: 12),
+                  )
+                  :Column(
+                        children: departmentAttendanceCards.map((item) {
+                          return _buildattendanceTeamContainer(
+                            teamName:
+                                _teamShortName(item['title'].toString()),
+                            present:
+                                item['present'],
+                                absent: item['absent']
+                          );
+                        }).toList(),
+                      ),
+                // : Column(
+                //     children: departmentAttendanceCards.map((item) {
+                //       return Padding(
+                //         padding: const EdgeInsets.only(bottom: 8),
+                //         child: Row(
+                //           children: [
+                //             Expanded(
+                //               flex: 2,
+                //               child: Text(
+                //                 item['title'].toString(),
+                //                 style: const TextStyle(
+                //                   color: Colors.white,
+                //                   fontSize: 10,
+                //                   fontWeight: FontWeight.w600,
+                //                 ),
+                //               ),
+                //             ),
+                //             Expanded(
+                //               child: Text(
+                //                 'P: ${item['present']}',
+                //                 style: const TextStyle(
+                //                   color: Colors.white,
+                //                   fontSize: 12,
+                //                 ),
+                //                 textAlign: TextAlign.center,
+                //               ),
+                //             ),
+                //             Expanded(
+                //               child: Text(
+                //                 'A: ${item['absent']}',
+                //                 style: const TextStyle(
+                //                   color: Colors.white,
+                //                   fontSize: 12,
+                //                 ),
+                //                 textAlign: TextAlign.center,
+                //               ),
+                //             ),
+                //           ],
+                //         ),
+                //       );
+                //     }).toList(),
+                //   ),
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context)=>HrTeamAttendanceScreen()));
+            },
+          ),
+          _buildDashboardCard(
             title: "Assets",
             value: _formatDashboardAmount(assetAmount),
             lines: [
@@ -2754,20 +2857,62 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
               );
             },
           ),
-          _buildDashboardCard(
-            title: "Campaigns",
-            value: "Overview",
-            // enableSeeMore: true,
-            lines: [
-              "Active campaigns",
-              "Campaign performance",
-            ],
-            onTap: () {},
+          
+        ],
+      ),
+    );
+  }
+
+   Widget _buildattendanceTeamContainer({
+    required String teamName,
+    required int present,
+    required int absent
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              teamName,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            "P: $present",
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          SizedBox(width: 20,),
+          Text(
+            "A: $absent",
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
     );
   }
+
 
   Widget _buildSalesTeamContainer({
     required String teamName,
