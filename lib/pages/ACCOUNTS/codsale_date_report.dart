@@ -1,17 +1,23 @@
 import 'dart:convert';
-import 'package:beposoft/pages/ACCOUNTS/dashboard.dart';
 import 'package:beposoft/pages/ACCOUNTS/order.review.dart';
-import 'package:beposoft/pages/ADMIN/admin_dashboard.dart';
-import 'package:beposoft/pages/BDM/bdm_dshboard.dart';
-import 'package:beposoft/pages/BDO/bdo_dashboard.dart';
 import 'package:beposoft/pages/api.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class codsalereport_datewise_view extends StatefulWidget {
-  final date;
-  const codsalereport_datewise_view({super.key, required this.date});
+  final String date;
+  final String? family;
+  final String? staff;
+  final String? state;
+
+  const codsalereport_datewise_view({
+    super.key,
+    required this.date,
+    this.family,
+    this.staff,
+    this.state,
+  });
 
   @override
   State<codsalereport_datewise_view> createState() =>
@@ -21,8 +27,7 @@ class codsalereport_datewise_view extends StatefulWidget {
 class _codsalereport_datewise_viewState
     extends State<codsalereport_datewise_view> {
   List<Map<String, dynamic>> codsalesreport = [];
-  List<Map<String, dynamic>> customer = [];
-  List<Map<String, dynamic>> sta = [];
+  bool isLoading = true;
 
   Future<String?> gettokenFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -32,241 +37,253 @@ class _codsalereport_datewise_viewState
   @override
   void initState() {
     super.initState();
-    
     getcoddatewisedetails();
-    getcustomer();
-    getstaff();
-  }
-
-  Future<void> getcustomer() async {
-    try {
-      final token = await gettokenFromPrefs();
-      var response = await http.get(
-        Uri.parse('$api/api/customers/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-        var productsData = parsed['data'];
-        List<Map<String, dynamic>> managerlist = [];
-
-        for (var productData in productsData) {
-          managerlist.add({
-            'id': productData['id'],
-            'name': productData['name'],
-          });
-        }
-
-        setState(() {
-          customer = managerlist;
-        });
-      }
-    } catch (error) {
-      
-    }
-  }
-
-  Future<void> getstaff() async {
-    try {
-      final token = await gettokenFromPrefs();
-
-      var response = await http.get(
-        Uri.parse('$api/api/staffs/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      List<Map<String, dynamic>> stafflist = [];
-
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-        var productsData = parsed['data'];
-
-        for (var productData in productsData) {
-          stafflist.add({
-            'id': productData['id'],
-            'name': productData['name'],
-          });
-        }
-        setState(() {
-          sta = stafflist;
-        });
-      }
-    } catch (error) {
-      
-    }
   }
 
   Future<void> getcoddatewisedetails() async {
-    final token = await gettokenFromPrefs();
+    setState(() {
+      isLoading = true;
+    });
+
     try {
+      final token = await gettokenFromPrefs();
+
+      final uri = Uri.parse('$api/api/COD/sales/').replace(
+        queryParameters: {
+          'start_date': widget.date,
+          'end_date': widget.date,
+          if (widget.family != null && widget.family!.isNotEmpty)
+            'family': widget.family!,
+          if (widget.staff != null && widget.staff!.isNotEmpty)
+            'staff': widget.staff!,
+          if (widget.state != null && widget.state!.isNotEmpty)
+            'state': widget.state!,
+        },
+      );
+
+      debugPrint('COD BREAKUP URL: $uri');
+
       final response = await http.get(
-        Uri.parse('$api/api/COD/bills/${widget.date}/'),
+        uri,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
       );
-      List<Map<String, dynamic>> codsaleslist = [];
+
+      debugPrint('COD BREAKUP STATUS: ${response.statusCode}');
+      debugPrint('COD BREAKUP BODY: ${response.body}');
+
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
-        var productsData = parsed['data'];
+        final data = parsed['data'] ?? [];
 
-        for (var productData in productsData) {
-          codsaleslist.add({
-            'id': productData['id'],
-            'invoice': productData['invoice'],
-            'order_date': productData['order_date'],
-            'payment_status': productData['payment_status'],
-            'status': productData['status'],
-            'manage_staff': productData['manage_staff'],
-            'customer': productData['customer'],
-            'total_paid': productData['total_paid'],
-          });
+        List<Map<String, dynamic>> codsaleslist = [];
+
+        if (data.isNotEmpty) {
+          final orders = data[0]['orders'] ?? [];
+
+          for (var order in orders) {
+            codsaleslist.add({
+              'id': order['id'],
+              'invoice': order['invoice'],
+              'order_date': order['order_date'],
+              'payment_status': order['payment_status'],
+              'status': order['status'],
+              'staff_name': order['staff_name'] ?? 'Unknown',
+              'customer_name': order['customer_name'] ?? 'Unknown',
+              'customer': order['customer'],
+              'total_paid': order['total_paid_amount'] ?? 0.0,
+              'balance_amount': order['balance_amount'] ?? 0.0,
+              'total_amount': order['total_amount'] ?? 0.0,
+            });
+          }
         }
+
         setState(() {
           codsalesreport = codsaleslist;
         });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to fetch breakup (${response.statusCode})'),
+          ),
+        );
       }
     } catch (e) {
-      
+      debugPrint('COD BREAKUP ERROR: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error fetching COD breakup')),
+      );
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
     }
   }
 
-  // Helper function to get customer name by id
-  String getCustomerNameById(int id) {
-    final customerData = customer.firstWhere((cust) => cust['id'] == id, orElse: () => {'name': 'Unknown'});
-    return customerData['name'];
+  String _amount(dynamic value) {
+    final parsed = double.tryParse(value.toString()) ?? 0.0;
+    return parsed.toStringAsFixed(2);
   }
 
-  // Helper function to get staff name by id
-  String getStaffNameById(int id) {
-    final staffData = sta.firstWhere((staff) => staff['id'] == id, orElse: () => {'name': 'Unknown'});
-    return staffData['name'];
-  }
-Future<String?> getdepFromPrefs() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    return prefs.getString('department');
-  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(
-          
-           title: Text(
-          "COD Sales Report",
-          style: TextStyle(fontSize: 14, color: Colors.grey),
+      backgroundColor: const Color(0xffF5F7FB),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          "COD Breakup - ${widget.date}",
+          style: const TextStyle(
+            fontSize: 15,
+            color: Color.fromARGB(255, 32, 43, 61),
+            fontWeight: FontWeight.w800,
+          ),
         ),
-       
-        actions: [
-          // Icon button to open start date picker
-          // IconButton(
-          //   icon: Icon(Icons.calendar_today),  // Calendar icon
-          //   onPressed: () => _selectSingleDate(context), // Call the method to select start date
-          // ),
-          // // Icon button to open date range picker
-          // IconButton(
-          //   icon: Icon(Icons.date_range),  // Date range icon
-          //   onPressed: () => _selectDateRange(context), // Call the method to select date range
-          // ),
-        ],
+        iconTheme: const IconThemeData(
+          color: Color.fromARGB(255, 32, 43, 61),
+        ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: codsalesreport.isEmpty
-            ? Center(child: CircularProgressIndicator())
-            : ListView.builder(
-                itemCount: codsalesreport.length,
-                itemBuilder: (context, index) {
-                  final salesData = codsalesreport[index];
-                  return Card(
-                    elevation: 4,
-                    margin: EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+      body: isLoading
+          ? const Center(
+              child: CircularProgressIndicator(
+                color: Color.fromARGB(255, 12, 80, 163),
+              ),
+            )
+          : codsalesreport.isEmpty
+              ? const Center(
+                  child: Text(
+                    'No breakup data found',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w600,
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Invoice: ${salesData['invoice']}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: Colors.blue
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          Divider(color: Colors.blue,),
-                          SizedBox(height: 8),
-                          Text(
-                            'Order Date: ${salesData['order_date']}',
-                            style: TextStyle(fontSize: 14),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Payment Status: ${salesData['payment_status']}',
-                            style: TextStyle(fontSize: 14),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Status: ${salesData['status']}',
-                            style: TextStyle(fontSize: 14),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Customer: ${getCustomerNameById(salesData['customer'])}',
-                            style: TextStyle(fontSize: 14),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Staff: ${getStaffNameById(salesData['manage_staff'])}',
-                            style: TextStyle(fontSize: 14),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Total Paid: ₹${salesData['total_paid']}',
-                            style: TextStyle(fontSize: 14),
-                          ),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(14),
+                  itemCount: codsalesreport.length,
+                  itemBuilder: (context, index) {
+                    final salesData = codsalesreport[index];
 
-                           SizedBox(height: 20),  // Adding space between the content and the button
-                          ElevatedButton(
-                            onPressed: () {
-                              Navigator.push(context, MaterialPageRoute(builder: (context)=>OrderReview(id:salesData['id'],customer: salesData['customer'],)));
-                              // Add your view action here
-                              
-                            },
-                            style: ElevatedButton.styleFrom(
-                              foregroundColor: Colors.white, backgroundColor: Colors.blue,  // White text color
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15),  // Curved corners
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 12),
-                            ),
-                            child: Text(
-                              'View',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.06),
+                            blurRadius: 14,
+                            offset: const Offset(0, 7),
                           ),
                         ],
                       ),
-                    ),
-                    
-                  );
-                },
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Invoice: ${salesData['invoice'] ?? ''}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                                color: Color.fromARGB(255, 12, 80, 163),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Divider(color: Colors.grey.shade300),
+                            _infoRow('Order Date', salesData['order_date']),
+                            _infoRow(
+                                'Payment Status', salesData['payment_status']),
+                            _infoRow('Status', salesData['status']),
+                            _infoRow('Customer', salesData['customer_name']),
+                            _infoRow('Staff', salesData['staff_name']),
+                            _infoRow(
+                              'Total Amount',
+                              '₹${_amount(salesData['total_amount'])}',
+                            ),
+                            _infoRow(
+                              'Paid Amount',
+                              '₹${_amount(salesData['total_paid'])}',
+                            ),
+                            _infoRow(
+                              'Balance',
+                              '₹${_amount(salesData['balance_amount'])}',
+                            ),
+                            const SizedBox(height: 14),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => OrderReview(
+                                        id: salesData['id'],
+                                        customer: salesData['customer'],
+                                      ),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.visibility, size: 17),
+                                label: const Text('View'),
+                                style: ElevatedButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  backgroundColor:
+                                      const Color.fromARGB(255, 12, 80, 163),
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 11,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+    );
+  }
+
+  Widget _infoRow(String label, dynamic value) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 9),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 115,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
               ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value?.toString() ?? '',
+              style: const TextStyle(
+                color: Color.fromARGB(255, 32, 43, 61),
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

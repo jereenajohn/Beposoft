@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:beposoft/Sales%20Directors/SD_dashboard.dart';
+import 'package:beposoft/pages/ACCOUNTS/csodashboard.dart';
 import 'package:beposoft/pages/ACCOUNTS/dashboard.dart';
 import 'package:beposoft/pages/BDM/bdm_dshboard.dart';
 import 'package:beposoft/pages/BDO/bdo_dashboard.dart';
@@ -83,6 +84,14 @@ class _AddTeamMembersState extends State<AddTeamMembers> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => bdm_dashbord()),
+      );
+    }
+    else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                cso_dashboard()), // Replace AnotherPage with your target page
       );
     } else if (dep == "warehouse") {
       Navigator.pushReplacement(
