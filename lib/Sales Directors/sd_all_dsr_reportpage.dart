@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:beposoft/Sales%20Directors/SD_dashboard.dart';
+import 'package:beposoft/pages/ACCOUNTS/csodashboard.dart';
 import 'package:beposoft/pages/ACCOUNTS/dashboard.dart';
 import 'package:beposoft/pages/BDM/bdm_dshboard.dart';
 import 'package:beposoft/pages/BDO/bdo_dashboard.dart';
@@ -151,7 +152,13 @@ class _SdAllDsrReportPageState extends State<SdAllDsrReportPage> {
     } else if (dep == 'SD') {
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (_) => SdDashboard()));
-    } else if (dep == 'BDM') {
+    } 
+     else if (dep == 'CSO') {
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (_) => cso_dashboard()));
+    } 
+    
+    else if (dep == 'BDM') {
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (_) => bdm_dashbord()));
     } else if (dep == 'warehouse') {

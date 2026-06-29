@@ -6,6 +6,10 @@ import 'package:beposoft/pages/ACCOUNTS/add_Expenses.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_Recipt.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_bank.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_credit_note.dart';
+import 'package:beposoft/pages/ACCOUNTS/cso_order_list.dart';
+import 'package:beposoft/pages/ACCOUNTS/cso_sales_report_summary.dart';
+import 'package:beposoft/pages/ACCOUNTS/cso_staff.dart';
+import 'package:beposoft/pages/ACCOUNTS/dailyproductcategorywisecyclingskating.dart';
 import 'package:beposoft/pages/ACCOUNTS/ordercomparison_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/staff_exit_form_list.dart';
 import 'package:beposoft/pages/ADMIN/add_staffwise_department.dart';
@@ -143,13 +147,24 @@ class drower {
           MaterialPageRoute(builder: (context) => addcustomertransfer()),
         );
         break;
+             case 'View Staff List':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => cso_staff_list()),
+        );
+        break;
       case 'customer Transfer list':
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => customertransferList()),
         );
         break;
-
+          case 'Family Wise Excel Report':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => CyclingskatingCategoryDailyProductwiseReport()),
+        );
+        break;
       case 'Add Department & Managers':
         Navigator.push(
           context,
@@ -522,6 +537,17 @@ class drower {
                   )),
         );
         break;
+
+            case 'View Orders List':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => CsoOrderList(
+                    status: null,
+                  )),
+        );
+        break;
+
       case 'Orders':
         Navigator.push(
           context,
@@ -610,6 +636,13 @@ class drower {
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => SalesReportExcel()),
+        );
+        break;
+
+           case 'Sales Report Summary':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => SalesReportExcelsummary()),
         );
         break;
       case 'Daily Product Sold Report':

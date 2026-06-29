@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:beposoft/pages/ACCOUNTS/codsale_date_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/csodashboard.dart' show cso_dashboard;
 import 'package:beposoft/pages/ACCOUNTS/dashboard.dart';
-import 'package:beposoft/pages/ADMIN/admin_dashboard.dart';
 import 'package:beposoft/pages/ADMIN/ceo_dashboard.dart';
 import 'package:beposoft/pages/BDM/bdm_dshboard.dart';
 import 'package:beposoft/pages/BDO/bdo_dashboard.dart';
@@ -11,6 +10,7 @@ import 'package:beposoft/pages/WAREHOUSE/warehouse_dashboard.dart';
 import 'package:beposoft/pages/api.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CodSales2 extends StatefulWidget {
@@ -23,26 +23,35 @@ class CodSales2 extends StatefulWidget {
 class _CodSales2State extends State<CodSales2> {
   List<Map<String, dynamic>> allCodReportList = [];
   List<Map<String, dynamic>> stat = [];
-  List<Map<String, dynamic>> allStaffList = []; // Store the full staff list
-  double grandTotalAmount = 0.0;
-  int grandTotalOrders = 0;
-  double grandTotalPaidAmount = 0.0;
-  double grandBalanceAmount = 0.0;
+  List<Map<String, dynamic>> allStaffList = [];
+  List<Map<String, dynamic>> fam = [];
+  List<Map<String, dynamic>> sta = [];
+  List<Map<String, dynamic>> filteredStates = [];
+
+  String? selectedFamily;
+  String? selectedStaff;
+  String? selectedState;
+
+  DateTime? selectedStartDate;
+  DateTime? selectedEndDate;
 
   double sumTotalAmount = 0.0;
   int sumTotalOrders = 0;
   double sumTotalPaidAmount = 0.0;
   double sumBalanceAmount = 0.0;
 
-  List<Map<String, dynamic>> fam = [];
-  String? selectedFamily;
-  String? selectedStaff;
-  String? selectedState;
-  List<Map<String, dynamic>> sta = [];
+  final DateFormat _apiDateFormat = DateFormat('yyyy-MM-dd');
+
+  bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
+
+    final today = DateTime.now();
+    selectedStartDate = today;
+    selectedEndDate = today;
+
     getCODsaleReport();
     getfamily();
     getstaff();
@@ -50,15 +59,56 @@ class _CodSales2State extends State<CodSales2> {
   }
 
   Future<String?> getTokenFromPrefs() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
     return prefs.getString('token');
+  }
+
+  Future<String?> getdepFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('department');
+  }
+
+  String _amount(dynamic value) {
+    final parsed = double.tryParse(value.toString()) ?? 0.0;
+    return parsed.toStringAsFixed(2);
+  }
+
+  Future<void> _selectDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDateRange: selectedStartDate != null && selectedEndDate != null
+          ? DateTimeRange(start: selectedStartDate!, end: selectedEndDate!)
+          : null,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color.fromARGB(255, 12, 80, 163),
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        selectedStartDate = picked.start;
+        selectedEndDate = picked.end;
+      });
+      getCODsaleReport();
+    }
   }
 
   Future<void> getstate() async {
     try {
       final token = await getTokenFromPrefs();
 
-      var response = await http.get(
+      final response = await http.get(
         Uri.parse('$api/api/states/'),
         headers: {
           'Authorization': 'Bearer $token',
@@ -66,31 +116,29 @@ class _CodSales2State extends State<CodSales2> {
         },
       );
 
-      List<Map<String, dynamic>> statelist = [];
-
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
-        var productsData = parsed['data'];
+        final productsData = parsed['data'] ?? [];
 
-        for (var productData in productsData) {
-          statelist.add({
-            'id': productData['id'],
-            'name': productData['name'],
-          });
-        }
+        final statelist = productsData.map<Map<String, dynamic>>((item) {
+          return {
+            'id': item['id'],
+            'name': item['name'],
+          };
+        }).toList();
+
         setState(() {
           stat = statelist;
         });
       }
-    } catch (error) {}
+    } catch (_) {}
   }
 
-  // Fetch staff list from the API
   Future<void> getstaff() async {
     try {
       final token = await getTokenFromPrefs();
 
-      var response = await http.get(
+      final response = await http.get(
         Uri.parse('$api/api/staffs/'),
         headers: {
           'Authorization': 'Bearer $token',
@@ -98,228 +146,206 @@ class _CodSales2State extends State<CodSales2> {
         },
       );
 
-      List<Map<String, dynamic>> stafflist = [];
-
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
-        var productsData = parsed['data'];
+        final productsData = parsed['data'] ?? [];
 
-        for (var productData in productsData) {
-          stafflist.add({
-            'id': productData['id'],
-            'name': productData['name'],
-            'family': productData['family_name'],
-            'allocated_states': productData['allocated_states'], // ✅ added here
-          });
-        }
+        final stafflist = productsData.map<Map<String, dynamic>>((item) {
+          return {
+            'id': item['id'],
+            'name': item['name'],
+            'family': item['family_name'],
+            'allocated_states': item['allocated_states'] ?? [],
+          };
+        }).toList();
 
         setState(() {
           allStaffList = stafflist;
-          sta = stafflist; // show all initially
+          sta = stafflist;
         });
       }
-    } catch (error) {
-      // Handle error
-    }
+    } catch (_) {}
   }
 
-  // Fetch family list from the API
   Future<void> getfamily() async {
     try {
       final token = await getTokenFromPrefs();
 
-      var response = await http.get(
+      final response = await http.get(
         Uri.parse('$api/api/familys/'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
-      List<Map<String, dynamic>> familylist = [];
 
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
-        var productsData = parsed['data'];
+        final productsData = parsed['data'] ?? [];
 
-        for (var productData in productsData) {
-          familylist.add({
-            'id': productData['id'],
-            'name': productData['name'],
-          });
-        }
+        final familylist = productsData.map<Map<String, dynamic>>((item) {
+          return {
+            'id': item['id'],
+            'name': item['name'],
+          };
+        }).toList();
+
         setState(() {
           fam = familylist;
         });
       }
-    } catch (error) {
-      // Handle error
-    }
+    } catch (_) {}
   }
 
-  List<Map<String, dynamic>> filteredStates = [];
-
   Future<void> getCODsaleReport() async {
-    setState(() {});
+    setState(() {
+      isLoading = true;
+    });
+
     try {
       final token = await getTokenFromPrefs();
 
-      var response = await http.get(
-        Uri.parse('$api/api/COD/sales/'),
+      final selectedFamilyData = fam.firstWhere(
+        (item) => item['name'] == selectedFamily,
+        orElse: () => <String, dynamic>{},
+      );
+
+      final selectedStaffData = allStaffList.firstWhere(
+        (item) => item['name'] == selectedStaff,
+        orElse: () => <String, dynamic>{},
+      );
+
+      final selectedStateData = stat.firstWhere(
+        (item) => item['name'] == selectedState,
+        orElse: () => <String, dynamic>{},
+      );
+
+      final uri = Uri.parse('$api/api/COD/sales/').replace(
+        queryParameters: {
+          if (selectedStartDate != null)
+            'start_date': _apiDateFormat.format(selectedStartDate!),
+          if (selectedEndDate != null)
+            'end_date': _apiDateFormat.format(selectedEndDate!),
+          if (selectedFamilyData.isNotEmpty)
+            'family': selectedFamilyData['id'].toString(),
+          if (selectedStaffData.isNotEmpty)
+            'staff': selectedStaffData['id'].toString(),
+          if (selectedStateData.isNotEmpty)
+            'state': selectedStateData['id'].toString(),
+        },
+      );
+
+      debugPrint('COD SALES URL: $uri');
+
+      final response = await http.get(
+        uri,
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
+
+      debugPrint('COD SALES STATUS: ${response.statusCode}');
+      debugPrint('COD SALES BODY: ${response.body}');
+
       if (response.statusCode == 200) {
-        final salesData = jsonDecode(response.body);
+        final parsed = jsonDecode(response.body);
 
-        List<Map<String, dynamic>> salesReportDataList = [];
+        final summary = parsed['summary'] ?? {};
+        final data = parsed['data'] ?? [];
 
-        for (var reportData in salesData) {
-          // Filter orders based on the selected family, staff name, and state
-          if (selectedFamily != null) {
-            reportData['orders'] = reportData['orders'].where((order) {
-              return order['family_name'] == selectedFamily;
-            }).toList();
-          }
+        final reportList = data.map<Map<String, dynamic>>((item) {
+          final itemSummary = item['summary'] ?? {};
 
-          if (selectedStaff != null) {
-            reportData['orders'] = reportData['orders'].where((order) {
-              return order['staff_name'] == selectedStaff;
-            }).toList();
-          }
-
-          if (selectedState != null) {
-            reportData['orders'] = reportData['orders'].where((order) {
-              return order['state'] == selectedState;
-            }).toList();
-          }
-
-          double totalAmount = 0.0;
-          int totalOrders = 0;
-          double totalPaidAmount = 0.0;
-          double balanceAmount = 0.0;
-
-          for (var order in reportData['orders']) {
-            totalAmount += order['total_amount'];
-          }
-
-          totalOrders = reportData['orders'].length;
-          totalPaidAmount = reportData['orders']
-              .fold(0.0, (sum, order) => sum + order['total_paid_amount']);
-          balanceAmount = reportData['orders']
-              .fold(0.0, (sum, order) => sum + order['balance_amount']);
-
-          salesReportDataList.add({
-            'date': reportData['date'],
-            'total_amount': totalAmount,
-            'total_orders': totalOrders,
-            'total_paid_amount': totalPaidAmount,
-            'balance_amount': balanceAmount,
-          });
-        }
+          return {
+            'date': item['date'],
+            'total_orders': itemSummary['total_orders'] ?? 0,
+            'total_amount': itemSummary['total_amount'] ?? 0.0,
+            'total_paid_amount': itemSummary['paid_amount'] ?? 0.0,
+            'balance_amount': itemSummary['balance_amount'] ?? 0.0,
+          };
+        }).toList();
 
         setState(() {
-          allCodReportList = salesReportDataList;
-        });
+          allCodReportList = reportList;
 
-        calculateSummaryTotals(salesReportDataList);
+          sumTotalOrders = summary['total_orders'] ?? 0;
+          sumTotalAmount =
+              double.tryParse((summary['total_amount'] ?? 0).toString()) ?? 0.0;
+          sumTotalPaidAmount =
+              double.tryParse((summary['paid_amount'] ?? 0).toString()) ?? 0.0;
+          sumBalanceAmount =
+              double.tryParse((summary['balance_amount'] ?? 0).toString()) ??
+                  0.0;
+        });
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to fetch sales report data'),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text(
+              'Failed to fetch sales report data (${response.statusCode})',
+            ),
           ),
         );
       }
     } catch (error) {
+      debugPrint('COD SALES ERROR: $error');
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Error fetching sales report data'),
-          duration: Duration(seconds: 2),
         ),
       );
     } finally {
-      setState(() {});
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
-  }
-
-  void calculateSummaryTotals(List<Map<String, dynamic>> salesReportDataList) {
-    // Reset all values before summing
-    grandTotalAmount = 0.0;
-    grandTotalOrders = 0;
-    grandTotalPaidAmount = 0.0;
-    grandBalanceAmount = 0.0;
-
-    for (var report in salesReportDataList) {
-      grandTotalAmount += (report['total_amount'] ?? 0.0) as double;
-      grandTotalOrders += (report['total_orders'] ?? 0) as int;
-      grandTotalPaidAmount += (report['total_paid_amount'] ?? 0.0) as double;
-      grandBalanceAmount += (report['balance_amount'] ?? 0.0) as double;
-    }
-    setState(() {
-      sumTotalOrders = grandTotalOrders;
-      sumTotalAmount = grandTotalAmount;
-      sumTotalPaidAmount = grandTotalPaidAmount;
-      sumBalanceAmount = grandBalanceAmount;
-    });
-  }
-
-  Future<String?> getdepFromPrefs() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    return prefs.getString('department');
   }
 
   Future<void> _navigateBack() async {
     final dep = await getdepFromPrefs();
+
     if (dep == "BDO") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                bdo_dashbord()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => bdo_dashbord()),
       );
     } else if (dep == "BDM") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                bdm_dashbord()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => bdm_dashbord()),
       );
     } else if (dep == "warehouse") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                WarehouseDashboard()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => WarehouseDashboard()),
       );
-    } else if (dep == "CEO") {
+    } else if (dep == "CEO" || dep == "COO") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                ceo_dashboard()), // Replace AnotherPage with your target page
-      );
-    } else if (dep == "COO") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) =>
-                ceo_dashboard()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
       );
     } else if (dep == "CSO") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                cso_dashboard()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => cso_dashboard()),
+      );
+    } else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
+      );
+    } else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => cso_dashboard()),
       );
     } else if (dep == "Warehouse Admin") {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-            builder: (context) =>
-                WarehouseAdmin()), // Replace AnotherPage with your target page
+        MaterialPageRoute(builder: (context) => WarehouseAdmin()),
       );
     } else {
       Navigator.pushReplacement(
@@ -329,326 +355,416 @@ class _CodSales2State extends State<CodSales2> {
     }
   }
 
+  void _resetFilters() {
+    final today = DateTime.now();
+
+    setState(() {
+      selectedFamily = null;
+      selectedStaff = null;
+      selectedState = null;
+      selectedStartDate = today;
+      selectedEndDate = today;
+      sta = allStaffList;
+      filteredStates = [];
+    });
+
+    getCODsaleReport();
+    getstaff();
+  }
+
+  Widget _buildFilterDropdown({
+    required String label,
+    required String hint,
+    required IconData icon,
+    required String? value,
+    required List<DropdownMenuItem<String>> items,
+    required void Function(String?) onChanged,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          isExpanded: true,
+          value: value,
+          hint: Row(
+            children: [
+              Icon(icon,
+                  size: 18, color: const Color.fromARGB(255, 12, 80, 163)),
+              const SizedBox(width: 8),
+              Text(hint),
+            ],
+          ),
+          items: items,
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDateRangeChip() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            Color.fromARGB(255, 12, 80, 163),
+            Color.fromARGB(255, 28, 119, 219),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.calendar_month, color: Colors.white, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              selectedStartDate != null && selectedEndDate != null
+                  ? '${_apiDateFormat.format(selectedStartDate!)}  to  ${_apiDateFormat.format(selectedEndDate!)}'
+                  : 'All dates',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: _selectDateRange,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.18),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'Change',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportCard(Map<String, dynamic> report) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.055),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  height: 42,
+                  width: 42,
+                  decoration: BoxDecoration(
+                    color: const Color.fromARGB(255, 12, 80, 163)
+                        .withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.receipt_long,
+                    color: Color.fromARGB(255, 12, 80, 163),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Date: ${report['date'] ?? ''}',
+                    style: const TextStyle(
+                      color: Color.fromARGB(255, 12, 80, 163),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Table(
+              columnWidths: const {
+                0: FlexColumnWidth(2),
+                1: FlexColumnWidth(3),
+              },
+              border: TableBorder.all(color: Colors.grey.shade200),
+              children: [
+                _buildRow("Total Orders", report['total_orders'].toString()),
+                _buildRow(
+                    "Total Amount", "₹${_amount(report['total_amount'])}"),
+                _buildRow(
+                  "Paid Amount",
+                  "₹${_amount(report['total_paid_amount'])}",
+                ),
+                _buildRow("Balance", "₹${_amount(report['balance_amount'])}"),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // if (selectedFamily == null &&
+            //     selectedStaff == null &&
+            //     selectedState == null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  final selectedFamilyData = fam.firstWhere(
+                    (item) => item['name'] == selectedFamily,
+                    orElse: () => <String, dynamic>{},
+                  );
+
+                  final selectedStaffData = allStaffList.firstWhere(
+                    (item) => item['name'] == selectedStaff,
+                    orElse: () => <String, dynamic>{},
+                  );
+
+                  final selectedStateData = stat.firstWhere(
+                    (item) => item['name'] == selectedState,
+                    orElse: () => <String, dynamic>{},
+                  );
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => codsalereport_datewise_view(
+                        date: report['date'].toString(),
+                        family: selectedFamilyData.isNotEmpty
+                            ? selectedFamilyData['id'].toString()
+                            : null,
+                        staff: selectedStaffData.isNotEmpty
+                            ? selectedStaffData['id'].toString()
+                            : null,
+                        state: selectedStateData.isNotEmpty
+                            ? selectedStateData['id'].toString()
+                            : null,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.visibility, size: 17),
+                label: const Text('View'),
+                style: ElevatedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: const Color.fromARGB(255, 12, 80, 163),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 11,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 120),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search_off, size: 58, color: Colors.grey.shade400),
+            const SizedBox(height: 10),
+            const Text(
+              'No COD sales data found',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Try changing date range or filters',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        // Prevent the swipe-back gesture (and back button)
         _navigateBack();
         return false;
       },
       child: Scaffold(
+        backgroundColor: const Color(0xffF5F7FB),
         appBar: AppBar(
-          title: Text(
+          elevation: 0,
+          backgroundColor: Colors.white,
+          title: const Text(
             "COD Sales Report",
-            style: TextStyle(fontSize: 14, color: Colors.grey),
+            style: TextStyle(
+              fontSize: 15,
+              color: Color.fromARGB(255, 32, 43, 61),
+              fontWeight: FontWeight.w800,
+            ),
           ),
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back), // Custom back arrow
-            onPressed: () async {
-              final dep = await getdepFromPrefs();
-              if (dep == "BDO") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          bdo_dashbord()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "BDM") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          bdm_dashbord()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "CEO") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          ceo_dashboard()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "COO") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          ceo_dashboard()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "CSO") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          cso_dashboard()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "warehouse") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          WarehouseDashboard()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "Warehouse Admin") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          WarehouseAdmin()), // Replace AnotherPage with your target page
-                );
-              } else {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          dashboard()), // Replace AnotherPage with your target page
-                );
-              }
-            },
+            icon: const Icon(Icons.arrow_back,
+                color: Color.fromARGB(255, 32, 43, 61)),
+            onPressed: _navigateBack,
           ),
           actions: [
             IconButton(
-              icon: Icon(Icons.refresh),
-              onPressed: () {
-                selectedFamily = null; // Reset family filter
-                selectedStaff = null; // Reset staff filter
-                selectedState = null;
-                getCODsaleReport();
-                getstaff();
-              },
+              icon: const Icon(Icons.date_range),
+              color: const Color.fromARGB(255, 12, 80, 163),
+              onPressed: _selectDateRange,
             ),
-
-            // IconButton(
-            //   icon: Icon(Icons.date_range),
-            //   onPressed: () => _selectDateRange(context),
-            // ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              color: const Color.fromARGB(255, 32, 43, 61),
+              onPressed: _resetFilters,
+            ),
           ],
         ),
-        body: Column(
+        body: Stack(
           children: [
-            Padding(
-              padding: const EdgeInsets.all(5.0),
-              child: InputDecorator(
-                decoration: InputDecoration(
-                  labelText: 'Select Family',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.blue, width: 1.5),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey, width: 1.5),
-                  ),
+            Column(
+              children: [
+                _buildDateRangeChip(),
+                _buildFilterDropdown(
+                  label: 'Family',
+                  hint: 'Select Family',
+                  icon: Icons.category_outlined,
+                  value: selectedFamily,
+                  items: fam.map((family) {
+                    return DropdownMenuItem<String>(
+                      value: family['name'],
+                      child: Text(family['name'].toString()),
+                    );
+                  }).toList(),
+                  onChanged: (newValue) {
+                    setState(() {
+                      selectedFamily = newValue;
+                      selectedStaff = null;
+                      selectedState = null;
+                      filteredStates = [];
+                      sta = allStaffList
+                          .where((staff) => staff['family'] == selectedFamily)
+                          .toList();
+                    });
+                    getCODsaleReport();
+                  },
                 ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    isExpanded: true,
-                    hint: Text("Select Family"),
-                    value: selectedFamily,
-                    onChanged: (String? newValue) {
-                      setState(() {
-                        selectedFamily = newValue;
-                        selectedStaff = null; // Reset selected staff
-                        sta = allStaffList
-                            .where((staff) => staff['family'] == selectedFamily)
+                _buildFilterDropdown(
+                  label: 'Staff',
+                  hint: 'Select Staff',
+                  icon: Icons.person_outline,
+                  value: selectedStaff,
+                  items: sta.map((staff) {
+                    return DropdownMenuItem<String>(
+                      value: staff['name'],
+                      child: Text(staff['name'].toString()),
+                    );
+                  }).toList(),
+                  onChanged: (newValue) {
+                    setState(() {
+                      selectedStaff = newValue;
+                      selectedState = null;
+
+                      final staff = sta.firstWhere(
+                        (s) => s['name'] == newValue,
+                        orElse: () => <String, dynamic>{},
+                      );
+
+                      if (staff.isNotEmpty &&
+                          staff['allocated_states'] != null) {
+                        final allocatedStateIds = staff['allocated_states'];
+                        filteredStates = stat
+                            .where((state) =>
+                                allocatedStateIds.contains(state['id']))
                             .toList();
-                      });
-                      getCODsaleReport();
-                    },
-                    items: fam.map((family) {
-                      return DropdownMenuItem<String>(
-                        value: family['name'],
-                        child: Text(family['name']),
-                      );
-                    }).toList(),
-                  ),
+                      } else {
+                        filteredStates = [];
+                      }
+                    });
+                    getCODsaleReport();
+                  },
                 ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(5.0),
-              child: InputDecorator(
-                decoration: InputDecoration(
-                  labelText: 'Select Staff',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.blue, width: 1.5),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey, width: 1.5),
-                  ),
+                _buildFilterDropdown(
+                  label: 'State',
+                  hint: 'Select State',
+                  icon: Icons.location_on_outlined,
+                  value: selectedState,
+                  items: filteredStates.map((state) {
+                    return DropdownMenuItem<String>(
+                      value: state['name'],
+                      child: Text(state['name'].toString()),
+                    );
+                  }).toList(),
+                  onChanged: (newValue) {
+                    setState(() {
+                      selectedState = newValue;
+                    });
+                    getCODsaleReport();
+                  },
                 ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    isExpanded: true,
-                    hint: Text("Select Staff"),
-                    value: selectedStaff,
-                    onChanged: (String? newValue) {
-                      setState(() {
-                        selectedStaff = newValue;
-                        selectedState = null; // Clear state when staff changes
-
-                        // Find the selected staff object
-                        final staff = sta.firstWhere(
-                            (s) => s['name'] == newValue,
-                            orElse: () => {});
-
-                        if (staff.isNotEmpty &&
-                            staff['allocated_states'] != null) {
-                          List allocatedStateIds =
-                              staff['allocated_states']; // e.g., [1, 2]
-
-                          // Filter states based on allocated state IDs
-                          filteredStates = stat
-                              .where((state) =>
-                                  allocatedStateIds.contains(state['id']))
-                              .toList();
-                        } else {
-                          filteredStates = [];
-                        }
-                      });
-
-                      getCODsaleReport();
-                    },
-                    items: sta.map((staff) {
-                      return DropdownMenuItem<String>(
-                        value: staff['name'],
-                        child: Text(staff['name']),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.all(5.0),
-              child: InputDecorator(
-                decoration: InputDecoration(
-                  labelText: 'Select State',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.blue, width: 1.5),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey, width: 1.5),
-                  ),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    isExpanded: true,
-                    hint: Text("Select State"),
-                    value: selectedState,
-                    onChanged: (String? newValue) {
-                      setState(() {
-                        selectedState = newValue;
-                      });
-                      getCODsaleReport(); // Filter report based on state
-                    },
-                    items: filteredStates.map((state) {
-                      return DropdownMenuItem<String>(
-                        value: state['name'],
-                        child: Text(state['name']),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-            ),
-
-            // Show the total orders and amounts for the selected family
-
-            allCodReportList.isEmpty
-                ? Center(
-                    child: CircularProgressIndicator()) // Loading indicator
-                : Expanded(
-                    child: ListView.builder(
-                      itemCount: allCodReportList.length,
-                      itemBuilder: (context, index) {
-                        final report = allCodReportList[index];
-                        return Card(
-                          color: Colors.white,
-                          margin: EdgeInsets.all(8.0),
-                          elevation: 5.0,
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Date: ${report['date']}',
-                                  style: TextStyle(
-                                    color: Colors.blue,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                Divider(color: Colors.grey),
-
-                                // Table Layout
-                                Table(
-                                  columnWidths: const {
-                                    0: FlexColumnWidth(2), // label small
-                                    1: FlexColumnWidth(3), // amount wider
-                                  },
-                                  border: TableBorder.all(
-                                      color: Colors.grey.shade300),
-                                  children: [
-                                    _buildRow("Total Orders",
-                                        report['total_orders'].toString()),
-                                    _buildRow("Total Amount",
-                                        "₹${report['total_amount']}"),
-                                    _buildRow("Paid Amount",
-                                        "₹${report['total_paid_amount']}"),
-                                    _buildRow("Balance",
-                                        "₹${report['balance_amount']}"),
-                                  ],
-                                ),
-
-                                const SizedBox(height: 12),
-
-                                if (selectedFamily == null &&
-                                    selectedStaff == null &&
-                                    selectedState == null)
-                                  ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              codsalereport_datewise_view(
-                                                  date: report['date']),
-                                        ),
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      backgroundColor: Colors.blue,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(15),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 20, vertical: 12),
-                                    ),
-                                    child: const Text(
-                                      'View',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
+                Expanded(
+                  child: isLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            color: Color.fromARGB(255, 12, 80, 163),
                           ),
-                        );
-                      },
-                    ),
-                  ),
+                        )
+                      : allCodReportList.isEmpty
+                          ? _buildEmptyState()
+                          : ListView.builder(
+                              padding: const EdgeInsets.only(bottom: 175),
+                              itemCount: allCodReportList.length,
+                              itemBuilder: (context, index) {
+                                return _buildReportCard(
+                                  allCodReportList[index],
+                                );
+                              },
+                            ),
+                ),
+              ],
+            ),
 
+            // Bottom summary design unchanged
             Positioned(
               bottom: 0,
               left: 0,
@@ -681,8 +797,6 @@ class _CodSales2State extends State<CodSales2> {
                         color: Colors.white.withOpacity(0.5),
                         thickness: 1,
                       ),
-
-                      /// Table with two rows
                       Table(
                         border: TableBorder.all(
                           color: Colors.white.withOpacity(0.3),
@@ -691,8 +805,6 @@ class _CodSales2State extends State<CodSales2> {
                         columnWidths: const {
                           0: FlexColumnWidth(),
                           1: FlexColumnWidth(),
-                          2: FlexColumnWidth(),
-                          3: FlexColumnWidth(),
                         },
                         children: [
                           _buildCardTableRow(
@@ -713,7 +825,6 @@ class _CodSales2State extends State<CodSales2> {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 12),
                     ],
                   ),
@@ -740,7 +851,7 @@ Widget _buildRowWithTwoColumns(
             children: [
               Text(
                 label1,
-                style: TextStyle(
+                style: const TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                   color: Colors.white,
@@ -748,7 +859,7 @@ Widget _buildRowWithTwoColumns(
               ),
               Text(
                 value1.toString(),
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: Colors.white,
@@ -763,7 +874,7 @@ Widget _buildRowWithTwoColumns(
             children: [
               Text(
                 label2,
-                style: TextStyle(
+                style: const TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                   color: Colors.white,
@@ -771,7 +882,7 @@ Widget _buildRowWithTwoColumns(
               ),
               Text(
                 value2.toString(),
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: Colors.white,
@@ -791,29 +902,39 @@ TableRow _buildTableRow(
     children: [
       Padding(
         padding: const EdgeInsets.all(8.0),
-        child: Text(label1,
-            style: const TextStyle(color: Colors.white, fontSize: 14)),
+        child: Text(
+          label1,
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+        ),
       ),
       Padding(
         padding: const EdgeInsets.all(8.0),
-        child: Text(value1,
-            style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 14)),
+        child: Text(
+          value1,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
       ),
       Padding(
         padding: const EdgeInsets.all(8.0),
-        child: Text(label2,
-            style: const TextStyle(color: Colors.white, fontSize: 14)),
+        child: Text(
+          label2,
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+        ),
       ),
       Padding(
         padding: const EdgeInsets.all(8.0),
-        child: Text(value2,
-            style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 14)),
+        child: Text(
+          value2,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
       ),
     ],
   );
@@ -829,7 +950,7 @@ TableRow _buildCardTableRow(String label, String value) {
           style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: Colors.white, // ✅ White text
+            color: Colors.white,
           ),
         ),
       ),
@@ -837,11 +958,11 @@ TableRow _buildCardTableRow(String label, String value) {
         padding: const EdgeInsets.all(8.0),
         child: Text(
           value,
-          textAlign: TextAlign.right, // right-align numbers
+          textAlign: TextAlign.right,
           style: const TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.bold,
-            color: Colors.white, // ✅ White value text
+            color: Colors.white,
           ),
         ),
       ),
@@ -849,7 +970,6 @@ TableRow _buildCardTableRow(String label, String value) {
   );
 }
 
-/// Helper function to build table rows
 TableRow _buildRow(String label, String value) {
   return TableRow(
     children: [
