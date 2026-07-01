@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:beposoft/loginpage.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_product_variant.dart';
+import 'package:beposoft/pages/ACCOUNTS/csodashboard.dart';
 import 'package:beposoft/pages/ACCOUNTS/dashboard.dart';
 import 'package:beposoft/pages/ACCOUNTS/dorwer.dart';
 import 'package:beposoft/pages/ADMIN/ceo_dashboard.dart';
@@ -41,6 +42,9 @@ class _Product_ListState extends State<Product_List>
     "All Type",
     "International",
     "Local",
+    "Damaged Stock",
+    "Partially Damaged Stock",
+    "Liquidation Stock",
   ];
 
   String selectpurchasetype = "All Type";
@@ -69,6 +73,7 @@ class _Product_ListState extends State<Product_List>
   String? previousPageUrl;
   String emptyMessage = "No products found";
   Map<String, dynamic> productSummary = <String, dynamic>{};
+  bool isSummaryExpanded = false;
 
   @override
   void initState() {
@@ -94,6 +99,41 @@ class _Product_ListState extends State<Product_List>
     _scrollController.dispose();
     searchController.dispose();
     super.dispose();
+  }
+
+  double _calculateVariantLiquidationStock(dynamic variantIDs) {
+    if (variantIDs is! List) return 0.0;
+
+    double total = 0.0;
+
+    for (final dynamic variant in variantIDs) {
+      if (variant is Map<String, dynamic>) {
+        total += _toDouble(variant['liquidation_stock']);
+      } else if (variant is Map) {
+        total += _toDouble(variant['liquidation_stock']);
+      }
+    }
+
+    return total;
+  }
+
+  double _getProductLiquidationStock(Map<String, dynamic> productData) {
+    if (productData['total_liquidation_stock'] != null) {
+      return _toDouble(productData['total_liquidation_stock']);
+    }
+
+    final dynamic variantIDs = productData['variantIDs'];
+
+    if (variantIDs is List && variantIDs.isNotEmpty) {
+      final double variantLiquidationStock =
+          _calculateVariantLiquidationStock(variantIDs);
+
+      if (variantLiquidationStock > 0) {
+        return variantLiquidationStock;
+      }
+    }
+
+    return _toDouble(productData['liquidation_stock']);
   }
 
   Widget _buildDropdownTile(
@@ -178,10 +218,10 @@ class _Product_ListState extends State<Product_List>
     return stockValue.toStringAsFixed(2);
   }
 
-String _formatAmount(dynamic value) {
-  final double amount = _toDouble(value);
-  return "₹${amount.toStringAsFixed(2)}";
-}
+  String _formatAmount(dynamic value) {
+    final double amount = _toDouble(value);
+    return "₹${amount.toStringAsFixed(2)}";
+  }
 
   String _formatNumber(dynamic value) {
     final double number = _toDouble(value);
@@ -211,6 +251,76 @@ String _formatAmount(dynamic value) {
     }
 
     return totalStock;
+  }
+
+  double _calculateVariantDamagedStock(dynamic variantIDs) {
+    if (variantIDs is! List) return 0.0;
+
+    double total = 0.0;
+
+    for (final dynamic variant in variantIDs) {
+      if (variant is Map<String, dynamic>) {
+        total += _toDouble(variant['damaged_stock']);
+      } else if (variant is Map) {
+        total += _toDouble(variant['damaged_stock']);
+      }
+    }
+
+    return total;
+  }
+
+  double _calculateVariantPartiallyDamagedStock(dynamic variantIDs) {
+    if (variantIDs is! List) return 0.0;
+
+    double total = 0.0;
+
+    for (final dynamic variant in variantIDs) {
+      if (variant is Map<String, dynamic>) {
+        total += _toDouble(variant['partially_damaged_stock']);
+      } else if (variant is Map) {
+        total += _toDouble(variant['partially_damaged_stock']);
+      }
+    }
+
+    return total;
+  }
+
+  double _getProductDamagedStock(Map<String, dynamic> productData) {
+    if (productData['total_damaged_stock'] != null) {
+      return _toDouble(productData['total_damaged_stock']);
+    }
+
+    final dynamic variantIDs = productData['variantIDs'];
+
+    if (variantIDs is List && variantIDs.isNotEmpty) {
+      final double variantDamagedStock =
+          _calculateVariantDamagedStock(variantIDs);
+
+      if (variantDamagedStock > 0) {
+        return variantDamagedStock;
+      }
+    }
+
+    return _toDouble(productData['damaged_stock']);
+  }
+
+  double _getProductPartiallyDamagedStock(Map<String, dynamic> productData) {
+    if (productData['total_partially_damaged_stock'] != null) {
+      return _toDouble(productData['total_partially_damaged_stock']);
+    }
+
+    final dynamic variantIDs = productData['variantIDs'];
+
+    if (variantIDs is List && variantIDs.isNotEmpty) {
+      final double variantPartiallyDamagedStock =
+          _calculateVariantPartiallyDamagedStock(variantIDs);
+
+      if (variantPartiallyDamagedStock > 0) {
+        return variantPartiallyDamagedStock;
+      }
+    }
+
+    return _toDouble(productData['partially_damaged_stock']);
   }
 
   double _getProductLoadedStock(Map<String, dynamic> productData) {
@@ -273,10 +383,28 @@ String _formatAmount(dynamic value) {
   void _applyLocalFilters() {
     final List<Map<String, dynamic>> result = products.where(
       (Map<String, dynamic> product) {
-        final bool matchesPurchaseType = selectpurchasetype == "All Type" ||
-            product['purchase_type']?.toString() == selectpurchasetype;
+        if (selectpurchasetype == "All Type") {
+          return true;
+        }
 
-        return matchesPurchaseType;
+        if (selectpurchasetype == "International" ||
+            selectpurchasetype == "Local") {
+          return product['purchase_type']?.toString() == selectpurchasetype;
+        }
+
+        if (selectpurchasetype == "Damaged Stock") {
+          return _getProductDamagedStock(product) > 0;
+        }
+
+        if (selectpurchasetype == "Partially Damaged Stock") {
+          return _getProductPartiallyDamagedStock(product) > 0;
+        }
+
+        if (selectpurchasetype == "Liquidation Stock") {
+          return _getProductLiquidationStock(product) > 0;
+        }
+
+        return true;
       },
     ).toList();
 
@@ -284,6 +412,16 @@ String _formatAmount(dynamic value) {
 
     setState(() {
       filteredProducts = result;
+
+      if (selectpurchasetype == "Damaged Stock") {
+        emptyMessage = "No damaged stock products found";
+      } else if (selectpurchasetype == "Partially Damaged Stock") {
+        emptyMessage = "No partially damaged stock products found";
+      } else if (selectpurchasetype == "Liquidation Stock") {
+        emptyMessage = "No liquidation stock products found";
+      } else {
+        emptyMessage = "No products found";
+      }
     });
   }
 
@@ -323,6 +461,47 @@ String _formatAmount(dynamic value) {
     });
 
     fetchProductList(refresh: true);
+  }
+
+  String _formatIndianNumber(dynamic value, {bool showDecimal = false}) {
+    final double number = _toDouble(value);
+
+    final String numberText =
+        showDecimal ? number.toStringAsFixed(2) : number.round().toString();
+
+    final List<String> parts = numberText.split('.');
+    String integerPart = parts[0];
+    final String decimalPart = parts.length > 1 ? ".${parts[1]}" : "";
+
+    final bool isNegative = integerPart.startsWith('-');
+
+    if (isNegative) {
+      integerPart = integerPart.substring(1);
+    }
+
+    if (integerPart.length <= 3) {
+      return "${isNegative ? '-' : ''}$integerPart$decimalPart";
+    }
+
+    final String lastThree = integerPart.substring(integerPart.length - 3);
+    String remaining = integerPart.substring(0, integerPart.length - 3);
+
+    final List<String> groups = <String>[];
+
+    while (remaining.length > 2) {
+      groups.insert(0, remaining.substring(remaining.length - 2));
+      remaining = remaining.substring(0, remaining.length - 2);
+    }
+
+    if (remaining.isNotEmpty) {
+      groups.insert(0, remaining);
+    }
+
+    return "${isNegative ? '-' : ''}${groups.join(',')},$lastThree$decimalPart";
+  }
+
+  String _formatIndianAmount(dynamic value, {bool showDecimal = false}) {
+    return "₹${_formatIndianNumber(value, showDecimal: showDecimal)}";
   }
 
   void _updateCategoryListFromProducts(List<Map<String, dynamic>> productList) {
@@ -571,7 +750,13 @@ String _formatAmount(dynamic value) {
               'rack_details': productData['rack_details'],
               'damaged_stock': productData['damaged_stock'],
               'partially_damaged_stock': productData['partially_damaged_stock'],
+              'total_damaged_stock': _getProductDamagedStock(productData),
+              'total_partially_damaged_stock':
+                  _getProductPartiallyDamagedStock(productData),
               'warehouse': productData['warehouse'],
+              'liquidation_stock': productData['liquidation_stock'],
+              'total_liquidation_stock':
+                  _getProductLiquidationStock(productData),
             },
           );
         }
@@ -719,6 +904,62 @@ String _formatAmount(dynamic value) {
     await fetchProductList(refresh: true);
   }
 
+  Widget _buildEmptyStateContent() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 80, 22, 24),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Container(
+                height: 68,
+                width: 68,
+                decoration: BoxDecoration(
+                  color: primaryBlue.withOpacity(0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.search_off_rounded,
+                  color: primaryBlue,
+                  size: 34,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                emptyMessage,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: darkText,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                "Try changing the search text, purchase type, or category filter.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 12.5,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _navigateBack() async {
     final String? dep = await getdepFromPrefs();
 
@@ -726,6 +967,16 @@ String _formatAmount(dynamic value) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (BuildContext context) => bdo_dashbord()),
+      );
+    } else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
+      );
+    } else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => cso_dashboard()),
       );
     } else if (dep == "BDM") {
       Navigator.pushReplacement(
@@ -792,7 +1043,7 @@ String _formatAmount(dynamic value) {
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.white,
-          surfaceTintColor: Colors.white, 
+          surfaceTintColor: Colors.white,
           leading: IconButton(
             icon: const Icon(
               Icons.arrow_back_ios_new_rounded,
@@ -823,286 +1074,463 @@ String _formatAmount(dynamic value) {
             const SizedBox(width: 4),
           ],
         ),
-        body: Column(
-          children: <Widget>[
-            // _buildSummaryCard(),
-            _buildSearchAndFilters(),
-            Expanded(
-              child: RefreshIndicator(
-                color: primaryBlue,
-                onRefresh: refreshEntirePageToInitialState,
-                child: isLoading
-                    ? _buildLoadingList()
-                    : filteredProducts.isEmpty
-                        ? _buildEmptyList()
-                        : ListView.builder(
-                            controller: _scrollController,
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
-                            itemCount: filteredProducts.length +
-                                (isPageLoading ? 1 : 0),
-                            itemBuilder: (
-                              BuildContext context,
-                              int index,
-                            ) {
-                              if (index >= filteredProducts.length) {
-                                return _buildPaginationLoader();
-                              }
-
-                              final Map<String, dynamic> product =
-                                  filteredProducts[index];
-
-                              return _buildProductCard(product);
-                            },
-                          ),
+        body: RefreshIndicator(
+          color: primaryBlue,
+          onRefresh: refreshEntirePageToInitialState,
+          child: CustomScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: <Widget>[
+              SliverToBoxAdapter(
+                child: _buildSummaryCard(),
               ),
-            ),
-          ],
+              SliverToBoxAdapter(
+                child: _buildSearchAndFilters(),
+              ),
+              if (isLoading)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (BuildContext context, int index) {
+                        return _buildShimmerProductCard();
+                      },
+                      childCount: 8,
+                    ),
+                  ),
+                )
+              else if (filteredProducts.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _buildEmptyStateContent(),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (BuildContext context, int index) {
+                        if (index >= filteredProducts.length) {
+                          return isPageLoading
+                              ? _buildPaginationLoader()
+                              : const SizedBox.shrink();
+                        }
+
+                        final Map<String, dynamic> product =
+                            filteredProducts[index];
+
+                        return _buildProductCard(product);
+                      },
+                      childCount:
+                          filteredProducts.length + (isPageLoading ? 1 : 0),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-Widget _buildSummaryCard() {
-  if (productSummary.isEmpty) {
-    return const SizedBox.shrink();
+  Widget _buildSummaryCard() {
+    if (productSummary.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final Map<String, dynamic> damagedSummary =
+        productSummary['damaged_stock_summary'] is Map
+            ? Map<String, dynamic>.from(productSummary['damaged_stock_summary'])
+            : <String, dynamic>{};
+
+    final Map<String, dynamic> partiallyDamagedSummary =
+        productSummary['partially_damaged_stock_summary'] is Map
+            ? Map<String, dynamic>.from(
+                productSummary['partially_damaged_stock_summary'],
+              )
+            : <String, dynamic>{};
+
+    final List<_SummaryInfo> summaryCards = <_SummaryInfo>[
+      _SummaryInfo(
+        title: "Total Products",
+        value: _formatIndianNumber(
+          productSummary['total_products'] ?? totalProducts,
+        ),
+        subtitle:
+            "Single ${_formatIndianNumber(productSummary['single_product_count'])} | Variant ${_formatIndianNumber(productSummary['variant_product_count'])}",
+        icon: Icons.grid_view_rounded,
+        iconBgColor: const Color(0xFFEEF2FF),
+        iconColor: const Color(0xFF4F46E5),
+      ),
+      _SummaryInfo(
+        title: "Total Stock",
+        value: _formatIndianNumber(productSummary['total_stock']),
+        subtitle:
+            "Single ${_formatIndianNumber(productSummary['single_stock'])} | Variant ${_formatIndianNumber(productSummary['variant_stock'])}",
+        icon: Icons.inventory_2_rounded,
+        iconBgColor: const Color(0xFFECFDF5),
+        iconColor: const Color(0xFF10B981),
+      ),
+      _SummaryInfo(
+        title: "Locked Stock",
+        value: _formatIndianNumber(productSummary['total_locked_stock']),
+        subtitle:
+            "Single ${_formatIndianNumber(productSummary['single_locked_stock'])} | Variant ${_formatIndianNumber(productSummary['variant_locked_stock'])}",
+        icon: Icons.lock_outline_rounded,
+        iconBgColor: const Color(0xFFFFF7ED),
+        iconColor: const Color(0xFFF97316),
+      ),
+      _SummaryInfo(
+        title: "Retail Amount",
+        value: _formatIndianAmount(
+          productSummary['total_retail_amount'],
+          showDecimal: true,
+        ),
+        subtitle:
+            "Single ${_formatIndianAmount(productSummary['single_retail_amount'], showDecimal: true)} | Variant ${_formatIndianAmount(productSummary['variant_retail_amount'], showDecimal: true)}",
+        icon: Icons.currency_rupee_rounded,
+        iconBgColor: const Color(0xFFFDF2F8),
+        iconColor: const Color(0xFFDB2777),
+      ),
+      _SummaryInfo(
+        title: "Selling Amount",
+        value: _formatIndianAmount(productSummary['total_selling_amount']),
+        subtitle:
+            "Single ${_formatIndianAmount(productSummary['single_selling_amount'])} | Variant ${_formatIndianAmount(productSummary['variant_selling_amount'])}",
+        icon: Icons.payments_outlined,
+        iconBgColor: const Color(0xFFDCFCE7),
+        iconColor: const Color(0xFF16A34A),
+      ),
+      _SummaryInfo(
+        title: "Landing Cost",
+        value: _formatIndianAmount(
+          productSummary['total_landing_cost_amount'],
+          showDecimal: true,
+        ),
+        subtitle:
+            "Single ${_formatIndianAmount(productSummary['single_landing_cost_amount'], showDecimal: true)} | Variant ${_formatIndianAmount(productSummary['variant_landing_cost_amount'], showDecimal: true)}",
+        icon: Icons.sell_outlined,
+        iconBgColor: const Color(0xFFEFF6FF),
+        iconColor: const Color(0xFF2563EB),
+      ),
+      _SummaryInfo(
+        title: "Exclude Amount",
+        value:
+            _formatIndianAmount(productSummary['total_exclude_price_amount']),
+        subtitle:
+            "Single ${_formatIndianAmount(productSummary['single_exclude_price_amount'])} | Variant ${_formatIndianAmount(productSummary['variant_exclude_price_amount'])}",
+        icon: Icons.remove_circle_outline_rounded,
+        iconBgColor: const Color(0xFFFEFCE8),
+        iconColor: const Color(0xFFCA8A04),
+      ),
+      _SummaryInfo(
+        title: "Damaged Stock",
+        value: _formatIndianNumber(damagedSummary['total_damaged_stock']),
+        subtitle:
+            "Single ${_formatIndianNumber(damagedSummary['single_damaged_stock'])} | Variant ${_formatIndianNumber(damagedSummary['variant_damaged_stock'])}",
+        icon: Icons.warning_amber_rounded,
+        iconBgColor: const Color(0xFFFEF2F2),
+        iconColor: const Color(0xFFEF4444),
+      ),
+      _SummaryInfo(
+        title: "Damaged Retail Amount",
+        value: _formatIndianAmount(
+          damagedSummary['total_damaged_retail_amount'],
+        ),
+        subtitle:
+            "Selling ${_formatIndianAmount(damagedSummary['total_damaged_selling_amount'])} | Landing ${_formatIndianAmount(damagedSummary['total_damaged_landing_cost_amount'])}",
+        icon: Icons.currency_rupee_rounded,
+        iconBgColor: const Color(0xFFFFF1F2),
+        iconColor: const Color(0xFFE11D48),
+      ),
+      _SummaryInfo(
+        title: "Partial Damaged Stock",
+        value: _formatIndianNumber(
+          partiallyDamagedSummary['total_partially_damaged_stock'],
+        ),
+        subtitle:
+            "Single ${_formatIndianNumber(partiallyDamagedSummary['single_partially_damaged_stock'])} | Variant ${_formatIndianNumber(partiallyDamagedSummary['variant_partially_damaged_stock'])}",
+        icon: Icons.report_problem_outlined,
+        iconBgColor: const Color(0xFFFFF7ED),
+        iconColor: const Color(0xFFF97316),
+      ),
+      _SummaryInfo(
+        title: "Partial Damage Retail",
+        value: _formatIndianAmount(
+          partiallyDamagedSummary['total_partially_damaged_retail_amount'],
+        ),
+        subtitle:
+            "Selling ${_formatIndianAmount(partiallyDamagedSummary['total_partially_damaged_selling_amount'])}",
+        icon: Icons.currency_rupee_rounded,
+        iconBgColor: const Color(0xFFFEFCE8),
+        iconColor: const Color(0xFFCA8A04),
+      ),
+      _SummaryInfo(
+        title: "Partial Damage Landing",
+        value: _formatIndianAmount(
+          partiallyDamagedSummary[
+              'total_partially_damaged_landing_cost_amount'],
+        ),
+        subtitle:
+            "Exclude ${_formatIndianAmount(partiallyDamagedSummary['total_partially_damaged_exclude_price_amount'])}",
+        icon: Icons.receipt_long_outlined,
+        iconBgColor: const Color(0xFFF8FAFC),
+        iconColor: const Color(0xFF475569),
+      ),
+    ];
+
+    final int visibleCount = isSummaryExpanded ? summaryCards.length : 4;
+
+    final List<_SummaryInfo> visibleCards =
+        summaryCards.take(visibleCount).toList();
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeInOut,
+      margin: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final double width = constraints.maxWidth;
+
+              final int crossAxisCount = width >= 900
+                  ? 4
+                  : width >= 600
+                      ? 3
+                      : 2;
+              final double cardHeight = width >= 900
+                  ? 104
+                  : width >= 600
+                      ? 112
+                      : 124;
+              return AnimatedSize(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeInOut,
+                alignment: Alignment.topCenter,
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: visibleCards.length,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    mainAxisSpacing: 8,
+                    crossAxisSpacing: 8,
+                    mainAxisExtent: cardHeight,
+                  ),
+                  itemBuilder: (BuildContext context, int index) {
+                    final _SummaryInfo item = visibleCards[index];
+
+                    return _buildProfessionalSummaryTile(item);
+                  },
+                ),
+              );
+            },
+          ),
+          if (summaryCards.length > 4) ...<Widget>[
+            const SizedBox(height: 4),
+            InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () {
+                setState(() {
+                  isSummaryExpanded = !isSummaryExpanded;
+                });
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.035),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Text(
+                      isSummaryExpanded ? "See less" : "See more",
+                      style: const TextStyle(
+                        color: primaryBlue,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Icon(
+                      isSummaryExpanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      color: primaryBlue,
+                      size: 19,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
-  final Map<String, dynamic> damagedSummary =
-      productSummary['damaged_stock_summary'] is Map
-          ? Map<String, dynamic>.from(productSummary['damaged_stock_summary'])
-          : <String, dynamic>{};
-
-  final Map<String, dynamic> partiallyDamagedSummary =
-      productSummary['partially_damaged_stock_summary'] is Map
-          ? Map<String, dynamic>.from(
-              productSummary['partially_damaged_stock_summary'],
-            )
-          : <String, dynamic>{};
-
-  return Container(
-    margin: const EdgeInsets.fromLTRB(12, 8, 12, 3),
-    padding: const EdgeInsets.all(10),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: const Color(0xFFE5E7EB)),
-      boxShadow: <BoxShadow>[
-        BoxShadow(
-          color: Colors.black.withOpacity(0.035),
-          blurRadius: 10,
-          offset: const Offset(0, 4),
-        ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Container(
-              height: 30,
-              width: 30,
-              decoration: BoxDecoration(
-                color: primaryBlue.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: const Icon(
-                Icons.summarize_rounded,
-                color: primaryBlue,
-                size: 17,
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    "Warehouse Summary",
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: darkText,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                    ),
+  Widget _buildProfessionalSummaryTile(_SummaryInfo item) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFEFF2F7)),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withOpacity(0.028),
+            blurRadius: 9,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  item.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.visible,
+                  softWrap: true,
+                  style: const TextStyle(
+                    color: Color(0xFF747B90),
+                    fontSize: 10.2,
+                    height: 1.05,
+                    fontWeight: FontWeight.w900,
                   ),
-                  SizedBox(height: 1),
-                  Text(
-                    "Full stock and amount summary",
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Color(0xFF6B7280),
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 9),
-
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Expanded(
-              child: _buildSummaryTile(
-                title: "Total Stock",
-                value: _formatNumber(productSummary['total_stock']),
-                icon: Icons.warehouse_rounded,
-                bgColor: const Color(0xFFECFDF5),
-                iconColor: const Color(0xFF059669),
-              ),
-            ),
-            const SizedBox(width: 7),
-            Expanded(
-              child: _buildSummaryTile(
-                title: "Selling Amount",
-                value: _formatAmount(productSummary['total_selling_amount']),
-                icon: Icons.sell_rounded,
-                bgColor: const Color(0xFFFDF2F8),
-                iconColor: const Color(0xFFDB2777),
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 7),
-
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Expanded(
-              child: _buildSummaryTile(
-                title: "Landing Cost",
-                value: _formatAmount(
-                  productSummary['total_landing_cost_amount'],
                 ),
-                icon: Icons.local_shipping_rounded,
-                bgColor: const Color(0xFFF8FAFC),
-                iconColor: const Color(0xFF475569),
               ),
-            ),
-            const SizedBox(width: 7),
-            Expanded(
-              child: _buildSummaryTile(
-                title: "Retail Amount",
-                value: _formatAmount(productSummary['total_retail_amount']),
-                icon: Icons.currency_rupee_rounded,
-                bgColor: const Color(0xFFF0FDFA),
-                iconColor: const Color(0xFF0D9488),
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 7),
-
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Expanded(
-              child: _buildSummaryTile(
-                title: "Damaged Stock",
-                value: _formatNumber(
-                  damagedSummary['total_damaged_stock'],
+              const SizedBox(width: 5),
+              Container(
+                height: 31,
+                width: 31,
+                decoration: BoxDecoration(
+                  color: item.iconBgColor,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                icon: Icons.warning_rounded,
-                bgColor: const Color(0xFFFEF2F2),
-                iconColor: const Color(0xFFDC2626),
-              ),
-            ),
-            const SizedBox(width: 7),
-            Expanded(
-              child: _buildSummaryTile(
-                title: "Partial Damage",
-                value: _formatNumber(
-                  partiallyDamagedSummary[
-                      'total_partially_damaged_stock'],
+                child: Icon(
+                  item.icon,
+                  color: item.iconColor,
+                  size: 17,
                 ),
-                icon: Icons.report_problem_rounded,
-                bgColor: const Color(0xFFFFFBEB),
-                iconColor: const Color(0xFFF59E0B),
               ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-}
-
- Widget _buildSummaryTile({
-  required String title,
-  required String value,
-  required IconData icon,
-  required Color bgColor,
-  required Color iconColor,
-}) {
-  return Container(
-    constraints: const BoxConstraints(
-      minHeight: 68,
-    ),
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
-    decoration: BoxDecoration(
-      color: bgColor,
-      borderRadius: BorderRadius.circular(13),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Icon(
-              icon,
-              size: 14,
-              color: iconColor,
-            ),
-            const SizedBox(width: 5),
-            Expanded(
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
               child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                item.value,
+                softWrap: false,
                 style: const TextStyle(
-                  color: Color(0xFF6B7280),
-                  fontSize: 9.2,
-                  height: 1.1,
-                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF334155),
+                  fontSize: 20,
+                  height: 1,
+                  fontWeight: FontWeight.w900,
                 ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 7),
-
-        SizedBox(
-          width: double.infinity,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Text(
-              value,
-              softWrap: false,
-              style: const TextStyle(
-                color: darkText,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w900,
               ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+          const SizedBox(height: 5),
+          Text(
+            item.subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.visible,
+            softWrap: true,
+            style: const TextStyle(
+              color: Color(0xFF475569),
+              fontSize: 9.4,
+              height: 1.08,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryTile({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color bgColor,
+    required Color iconColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(17),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(
+                icon,
+                size: 16,
+                color: iconColor,
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF6B7280),
+                    fontSize: 11,
+                    height: 1.1,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Text(
+                value,
+                softWrap: false,
+                style: const TextStyle(
+                  color: darkText,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMiniSummaryRow({
     required String title,
     required String value,
@@ -1485,6 +1913,12 @@ Widget _buildSummaryCard() {
       product['total_variant_stock'] ?? product['stock'],
     );
 
+    final double damagedStock = _getProductDamagedStock(product);
+    final double partiallyDamagedStock =
+        _getProductPartiallyDamagedStock(product);
+
+    final double liquidationStock = _getProductLiquidationStock(product);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -1551,6 +1985,30 @@ Widget _buildSummaryCard() {
                             stock: stock,
                             isOutOfStock: isOutOfStock,
                           ),
+                          if (damagedStock > 0)
+                            _buildDamageChip(
+                              label: "Damaged",
+                              stock: _formatStock(damagedStock),
+                              color: const Color(0xFFDC2626),
+                              bgColor: const Color(0xFFFEF2F2),
+                              borderColor: const Color(0xFFFECACA),
+                            ),
+                          if (partiallyDamagedStock > 0)
+                            _buildDamageChip(
+                              label: "Partial Damage",
+                              stock: _formatStock(partiallyDamagedStock),
+                              color: const Color(0xFFD97706),
+                              bgColor: const Color(0xFFFFFBEB),
+                              borderColor: const Color(0xFFFEF3C7),
+                            ),
+                          if (liquidationStock > 0)
+                            _buildDamageChip(
+                              label: "Liquidation",
+                              stock: _formatStock(liquidationStock),
+                              color: const Color(0xFF7C3AED),
+                              bgColor: const Color(0xFFF5F3FF),
+                              borderColor: const Color(0xFFDDD6FE),
+                            ),
                         ],
                       ),
                     ],
@@ -1688,6 +2146,45 @@ Widget _buildSummaryCard() {
               color: isOutOfStock
                   ? const Color(0xFFDC2626)
                   : const Color(0xFF2563EB),
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDamageChip({
+    required String label,
+    required String stock,
+    required Color color,
+    required Color bgColor,
+    required Color borderColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(
+            Icons.warning_amber_rounded,
+            color: color,
+            size: 13,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            "$label: $stock",
+            maxLines: 1,
+            overflow: TextOverflow.visible,
+            softWrap: false,
+            style: TextStyle(
+              color: color,
               fontSize: 11,
               fontWeight: FontWeight.w900,
             ),
@@ -1882,4 +2379,22 @@ Widget _buildSummaryCard() {
       ],
     );
   }
+}
+
+class _SummaryInfo {
+  final String title;
+  final String value;
+  final String subtitle;
+  final IconData icon;
+  final Color iconBgColor;
+  final Color iconColor;
+
+  const _SummaryInfo({
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.icon,
+    required this.iconBgColor,
+    required this.iconColor,
+  });
 }

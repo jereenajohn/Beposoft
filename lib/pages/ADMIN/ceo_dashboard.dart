@@ -20,6 +20,7 @@ import 'package:beposoft/pages/ACCOUNTS/assetmanagement.dart';
 import 'package:beposoft/pages/ADMIN/add_staffwise_department.dart';
 import 'package:beposoft/pages/ADMIN/admin_add_attendance.dart';
 import 'package:beposoft/pages/ADMIN/admin_add_team_staff.dart';
+import 'package:beposoft/pages/ADMIN/grv_sales_return_summary.dart';
 import 'package:beposoft/pages/auth_status_checker.dart';
 import 'package:beposoft/pages/ACCOUNTS/assetmanegment2.dart';
 import 'package:beposoft/pages/ACCOUNTS/bulk_customer_upload.dart';
@@ -105,6 +106,8 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   List<Map<String, dynamic>> shippedOrders = [];
   List<Map<String, dynamic>> Finance = [];
   List<dynamic> internalTransfers = [];
+  Map<String, dynamic> salesReturnGrandTotal = {};
+bool salesReturnLoading = false;
   double todayCredit = 0.0;
   double todayDebit = 0.0;
   double openingBalance = 0.0;
@@ -267,6 +270,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     getGrvList();
     fetchproformaData();
     getSalesReport();
+    fetchGrvSummary();
     fetchOrderData();
     fetchshippedorders();
     getexpenselist();
@@ -439,6 +443,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
       Future(() => getCategoryWiseProducts()),
       Future(() => fetchBdmOverallFamilyReport()),
       Future(() => getstaff()),
+      Future(() => fetchGrvSummary()),
       Future(() => fetchOrdersSummaryFamilyData()),
       Future(() => getdgm()),
       Future(() => fetchFamilySummaryTeamCards()),
@@ -487,6 +492,53 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     }
   }
 
+Future<void> fetchGrvSummary() async {
+  try {
+    final token = await getTokenFromPrefs();
+
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    final uri = Uri.parse('$api/api/grv/family/payment/summary/').replace(
+      queryParameters: {
+        'start_date': today,
+        'end_date': today,
+      },
+    );
+
+    final response = await http.get(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+
+      if (!mounted) return;
+
+      setState(() {
+        salesReturnGrandTotal = Map<String, dynamic>.from(
+          decoded['grand_total'] ?? {},
+        );
+        salesReturnLoading = false;
+      });
+    } else {
+      if (!mounted) return;
+      setState(() {
+        salesReturnGrandTotal = {};
+        salesReturnLoading = false;
+      });
+    }
+  } catch (e) {
+    if (!mounted) return;
+    setState(() {
+      salesReturnGrandTotal = {};
+      salesReturnLoading = false;
+    });
+  }
+}
   String _formatDashboardAmount(dynamic value) {
     final double amount = _asDouble(value);
     final double absAmount = amount.abs();
@@ -2448,6 +2500,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     final totalStaffs = _asInt(staffSummary['total_staffs']);
     final activeStaffs = _asInt(staffSummary['active_staffs']);
     final deactiveStaffs = _asInt(staffSummary['deactive_staffs']);
+    
 
     final totalFamilyPresentCount = familySummaryTeamCards.fold<int>(
       0,
@@ -2460,6 +2513,15 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     final salesAnalysisDisplayList = salesAnalysisExpanded
         ? salesTeamCdTeamTotals
         : salesTeamCdTeamTotals.take(1).toList();
+
+        final salesReturnPaid = _asMap(salesReturnGrandTotal['paid']);
+final salesReturnCod = _asMap(salesReturnGrandTotal['COD']);
+
+final todayCodReturnCount = _asInt(salesReturnCod['grv_count']);
+final todayCodReturnAmount = _asDouble(salesReturnCod['order_amount']);
+
+final todayCashReturnCount = _asInt(salesReturnPaid['grv_count']);
+final todayCashReturnAmount = _asDouble(salesReturnPaid['order_amount']);
 
     // final withInternalTransfer = _asMap(todayData['with_internal_transfer']);
     // final financeOpeningBalance =
@@ -2482,6 +2544,8 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     final monthCredit = _asDouble(currentMonthBank['credit']);
     final monthDebit = _asDouble(currentMonthBank['debit']);
     final monthClosingBalance = _asDouble(currentMonthBank['closing_balance']);
+    final dac = todayCredit - todayDebit;
+    final mac = monthCredit - monthDebit;
     final grvReturnSummary = _asMap(productsData?['grv_return_summary']);
 
     final grvToday = _asMap(grvReturnSummary['today']);
@@ -2493,11 +2557,11 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     final monthCodReturn = _asMap(grvMonth['cod_return']);
     final monthCashReturn = _asMap(grvMonth['cash_return']);
 
-    final todayCodReturnCount = _asInt(todayCodReturn['invoice_count']);
-    final todayCodReturnAmount = _asDouble(todayCodReturn['total']);
+    // final todayCodReturnCount = _asInt(todayCodReturn['invoice_count']);
+    // final todayCodReturnAmount = _asDouble(todayCodReturn['total']);
 
-    final todayCashReturnCount = _asInt(todayCashReturn['invoice_count']);
-    final todayCashReturnAmount = _asDouble(todayCashReturn['total']);
+    // final todayCashReturnCount = _asInt(todayCashReturn['invoice_count']);
+    // final todayCashReturnAmount = _asDouble(todayCashReturn['total']);
 
     final monthCodReturnCount = _asInt(monthCodReturn['invoice_count']);
     final monthCodReturnAmount = _asDouble(monthCodReturn['total']);
@@ -2537,7 +2601,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
         physics: const NeverScrollableScrollPhysics(),
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: 0.75,
+        childAspectRatio: 0.72,
         children: [
           _buildDashboardCard(
             title: "Sales",
@@ -2560,13 +2624,41 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
             title: "Finance",
             valueLabel: "TCB",
             value: _formatDashboardAmount(todayClosingBalance),
-            lines: [
-              "TCT: ${_formatDashboardAmount(todayCredit)}",
-              "TDT: ${_formatDashboardAmount(todayDebit)}",
-              // "MCB: ${_formatDashboardAmount(monthClosingBalance)}",
-              "MCT: ${_formatDashboardAmount(monthCredit)}",
-              "MDT: ${_formatDashboardAmount(monthDebit)}",
-            ],
+            lines: const [],
+            bottomTopSpacing: 0,
+            bottom: Column(
+              children: [
+                _buildDashboardLineItem(
+                  title: "TCT",
+                  value: _formatDashboardAmount(todayCredit),
+                ),
+                const SizedBox(height: 6),
+                _buildDashboardLineItem(
+                  title: "TDT",
+                  value: _formatDashboardAmount(todayDebit),
+                ),
+                const SizedBox(height: 6),
+                _buildDashboardLineItem(
+                  title: "DAC",
+                  value: _formatDashboardAmount(dac),
+                ),
+                const SizedBox(height: 6),
+                _buildDashboardLineItem(
+                  title: "MCT",
+                  value: _formatDashboardAmount(monthCredit),
+                ),
+                const SizedBox(height: 6),
+                _buildDashboardLineItem(
+                  title: "MDT",
+                  value: _formatDashboardAmount(monthDebit),
+                ),
+                const SizedBox(height: 6),
+                _buildDashboardLineItem(
+                  title: "MAC",
+                  value: _formatDashboardAmount(mac),
+                ),
+              ],
+            ),
             onTap: () {
               Navigator.push(
                 context,
@@ -2659,61 +2751,61 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                     "Loading attendance...",
                     style: TextStyle(color: Colors.white, fontSize: 12),
                   )
-                  :Column(
-                        children: departmentAttendanceCards.map((item) {
-                          return _buildattendanceTeamContainer(
-                            teamName:
-                                _teamShortName(item['title'].toString()),
-                            present:
-                                item['present'],
-                                absent: item['absent']
-                          );
-                        }).toList(),
-                      ),
-                // : Column(
-                //     children: departmentAttendanceCards.map((item) {
-                //       return Padding(
-                //         padding: const EdgeInsets.only(bottom: 8),
-                //         child: Row(
-                //           children: [
-                //             Expanded(
-                //               flex: 2,
-                //               child: Text(
-                //                 item['title'].toString(),
-                //                 style: const TextStyle(
-                //                   color: Colors.white,
-                //                   fontSize: 10,
-                //                   fontWeight: FontWeight.w600,
-                //                 ),
-                //               ),
-                //             ),
-                //             Expanded(
-                //               child: Text(
-                //                 'P: ${item['present']}',
-                //                 style: const TextStyle(
-                //                   color: Colors.white,
-                //                   fontSize: 12,
-                //                 ),
-                //                 textAlign: TextAlign.center,
-                //               ),
-                //             ),
-                //             Expanded(
-                //               child: Text(
-                //                 'A: ${item['absent']}',
-                //                 style: const TextStyle(
-                //                   color: Colors.white,
-                //                   fontSize: 12,
-                //                 ),
-                //                 textAlign: TextAlign.center,
-                //               ),
-                //             ),
-                //           ],
-                //         ),
-                //       );
-                //     }).toList(),
-                //   ),
+                : Column(
+                    children: departmentAttendanceCards.map((item) {
+                      return _buildattendanceTeamContainer(
+                          teamName: _teamShortName(item['title'].toString()),
+                          present: item['present'],
+                          absent: item['absent']);
+                    }).toList(),
+                  ),
+            // : Column(
+            //     children: departmentAttendanceCards.map((item) {
+            //       return Padding(
+            //         padding: const EdgeInsets.only(bottom: 8),
+            //         child: Row(
+            //           children: [
+            //             Expanded(
+            //               flex: 2,
+            //               child: Text(
+            //                 item['title'].toString(),
+            //                 style: const TextStyle(
+            //                   color: Colors.white,
+            //                   fontSize: 10,
+            //                   fontWeight: FontWeight.w600,
+            //                 ),
+            //               ),
+            //             ),
+            //             Expanded(
+            //               child: Text(
+            //                 'P: ${item['present']}',
+            //                 style: const TextStyle(
+            //                   color: Colors.white,
+            //                   fontSize: 12,
+            //                 ),
+            //                 textAlign: TextAlign.center,
+            //               ),
+            //             ),
+            //             Expanded(
+            //               child: Text(
+            //                 'A: ${item['absent']}',
+            //                 style: const TextStyle(
+            //                   color: Colors.white,
+            //                   fontSize: 12,
+            //                 ),
+            //                 textAlign: TextAlign.center,
+            //               ),
+            //             ),
+            //           ],
+            //         ),
+            //       );
+            //     }).toList(),
+            //   ),
             onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context)=>HrTeamAttendanceScreen()));
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => HrTeamAttendanceScreen()));
             },
           ),
           _buildDashboardCard(
@@ -2731,19 +2823,17 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
             },
           ),
           _buildDashboardCard(
-            title: "Purchase",
-            value: _formatDashboardAmount(purchaseAmount),
-            lines: [
-              "Invoices: $purchaseCount",
-            ],
-            bottomTopSpacing: 0,
+            title: "Sales Return",
+            value: "",
+            lines: const [],
+            bottomTopSpacing: 10,
             bottom: Column(
               children: [
                 _buildDashboardLineItem(
                   title: "Today COD SR INV",
                   value: "$todayCodReturnCount",
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 _buildDashboardLineItem(
                   title: "Amount",
                   value: _formatDashboardAmount(todayCodReturnAmount),
@@ -2753,7 +2843,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                   title: "Today Cash SR INV",
                   value: "$todayCashReturnCount",
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 _buildDashboardLineItem(
                   title: "Amount",
                   value: _formatDashboardAmount(todayCashReturnAmount),
@@ -2784,7 +2874,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => SellerInvoiceListPage(),
+                  builder: (context) => GrvFamilyPaymentSummaryPage(),
                 ),
               );
             },
@@ -2857,17 +2947,13 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
               );
             },
           ),
-          
         ],
       ),
     );
   }
 
-   Widget _buildattendanceTeamContainer({
-    required String teamName,
-    required int present,
-    required int absent
-  }) {
+  Widget _buildattendanceTeamContainer(
+      {required String teamName, required int present, required int absent}) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 8),
@@ -2899,7 +2985,9 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
               fontWeight: FontWeight.w700,
             ),
           ),
-          SizedBox(width: 20,),
+          SizedBox(
+            width: 20,
+          ),
           Text(
             "A: $absent",
             style: const TextStyle(
@@ -2912,7 +3000,6 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
       ),
     );
   }
-
 
   Widget _buildSalesTeamContainer({
     required String teamName,
@@ -2985,8 +3072,8 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
 
     final bool hasMore = enableSeeMore && lines.length > 1;
 
-    final visibleLines =
-        hasMore && !isExpanded ? lines.take(1).toList() : lines;
+    final visibleLines = lines.length > 5 ? lines.take(5).toList() : lines;
+    final hiddenLines = lines.length > 5 ? lines.skip(5).toList() : [];
 
     return Material(
       color: Colors.transparent,
@@ -3135,6 +3222,34 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
                     ),
                   );
                 }).toList(),
+                if (hiddenLines.isNotEmpty)
+                  Flexible(
+                    child: SingleChildScrollView(
+                      physics: const ClampingScrollPhysics(),
+                      child: Column(
+                        children: hiddenLines.map((line) {
+                          final text = line?.toString() ?? '';
+                          final parts = text.split(':');
+
+                          final String titleText = parts.length > 1
+                              ? parts.first.trim()
+                              : text.trim();
+
+                          final String valueText = parts.length > 1
+                              ? parts.sublist(1).join(':').trim()
+                              : "";
+
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 5),
+                            child: _buildDashboardLineItem(
+                              title: titleText,
+                              value: valueText,
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
                 if (bottom != null) ...[
                   if (bottomTopSpacing > 0) SizedBox(height: bottomTopSpacing),
                   Flexible(
