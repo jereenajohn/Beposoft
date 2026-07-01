@@ -14,6 +14,7 @@ import 'package:beposoft/pages/ACCOUNTS/assetmanegment2.dart';
 import 'package:beposoft/pages/ACCOUNTS/bulk_customer_upload.dart';
 import 'package:beposoft/pages/ACCOUNTS/cso_order_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/cso_todays_bills.dart';
+import 'package:beposoft/pages/ACCOUNTS/cso_waiting_for_approval_orderlist.dart';
 import 'package:beposoft/pages/ACCOUNTS/dailyproductcategorywisecyclingskating.dart';
 import 'package:beposoft/pages/ACCOUNTS/graph.dart';
 import 'package:beposoft/pages/ACCOUNTS/grv_list.dart';
@@ -299,10 +300,12 @@ class _cso_dashboardState extends State<cso_dashboard> {
         final Map<String, dynamic> responseData = jsonDecode(response.body);
         final List ordersData = responseData['results'] ?? [];
 
-        final filteredOrders = ordersData.where((orderData) {
-          return orderData['status'] == 'Invoice Created' &&
-              orderData['status'] != 'Order Request by Warehouse';
-        }).toList();
+       final filteredOrders = ordersData.where((orderData) {
+  final status = (orderData['status'] ?? '').toString();
+  final family = (orderData['family'] ?? '').toString().toLowerCase();
+
+  return status == 'Invoice Created' && family != 'bepocart';
+}).toList();
 
         setState(() {
           invoiceCreatedCount = filteredOrders.length;
@@ -1739,7 +1742,7 @@ class _cso_dashboardState extends State<cso_dashboard> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => OrderList2(
+                                    builder: (context) => csoOrderList2(
                                       status: 'Invoice Created',
                                     ),
                                   ),
