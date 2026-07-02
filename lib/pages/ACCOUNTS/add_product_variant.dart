@@ -40,7 +40,7 @@ class _add_product_variantState extends State<add_product_variant> {
     );
   }
 
- Widget buildProductTable() {
+Widget buildProductTable() {
   String formatStock(dynamic value) {
     if (value == null) return "0";
 
@@ -55,168 +55,304 @@ class _add_product_variantState extends State<add_product_variant> {
     return stockValue.toStringAsFixed(2);
   }
 
-  Widget stockBadge(dynamic stockValue) {
+  Widget stockBadge(
+    dynamic stockValue, {
+    Color activeBg = const Color(0xFFEFF6FF),
+    Color activeBorder = const Color(0xFFBFDBFE),
+    Color activeText = const Color(0xFF1D4ED8),
+    Color zeroBg = const Color(0xFFF3F4F6),
+    Color zeroBorder = const Color(0xFFE5E7EB),
+    Color zeroText = const Color(0xFF6B7280),
+    bool showOutText = false,
+  }) {
     final double stock = double.tryParse(stockValue?.toString() ?? "0") ?? 0;
-    final bool isOutOfStock = stock <= 0;
+    final bool isZero = stock <= 0;
 
     return Container(
+      constraints: const BoxConstraints(minWidth: 48),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: isOutOfStock
-            ? const Color(0xFFFFEBEE)
-            : const Color(0xFFEFF6FF),
+        color: isZero ? zeroBg : activeBg,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isOutOfStock
-              ? const Color(0xFFFFCDD2)
-              : const Color(0xFFBFDBFE),
+          color: isZero ? zeroBorder : activeBorder,
         ),
       ),
       child: Text(
-        isOutOfStock ? "Out" : formatStock(stockValue),
+        isZero && showOutText ? "Out" : formatStock(stockValue),
+        textAlign: TextAlign.center,
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w800,
-          color: isOutOfStock
-              ? const Color(0xFFD32F2F)
-              : const Color(0xFF1D4ED8),
+          color: isZero ? zeroText : activeText,
         ),
       ),
     );
   }
 
-  if (widget.type == 'single') {
-    if (singleProducts.isNotEmpty) {
-      final product = singleProducts.first;
+  Widget normalStockBadge(dynamic value) {
+    final double stock = double.tryParse(value?.toString() ?? "0") ?? 0;
 
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columnSpacing: 35,
-          headingRowHeight: 40,
-          dataRowMinHeight: 58,
-          dataRowMaxHeight: 68,
-          columns: const <DataColumn>[
-            DataColumn(
-              label: Text(
-                'Name',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'Image',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'Stock',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'Actions',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ],
-          rows: [
-            DataRow(
-              cells: <DataCell>[
-                DataCell(
-                  SizedBox(
-                    width: 150,
-                    child: Text(
-                      product['name']?.toString() ?? '',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-                ),
-                DataCell(
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      '$api${product['image']}',
-                      width: 45,
-                      height: 45,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          width: 45,
-                          height: 45,
-                          color: Colors.grey.shade200,
-                          child: const Icon(
-                            Icons.image_not_supported,
-                            size: 20,
-                            color: Colors.grey,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                DataCell(
-                  stockBadge(product['stock']),
-                ),
-                DataCell(
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => update_product(
-                            id: product['id'],
-                            type: widget.type,
-                          ),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      backgroundColor: Colors.blue,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      minimumSize: const Size(55, 28),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                      ),
-                    ),
-                    child: const Text(
-                      'Edit',
-                      style: TextStyle(fontSize: 10),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+    return stockBadge(
+      value,
+      showOutText: stock <= 0,
+      activeBg: const Color(0xFFEFF6FF),
+      activeBorder: const Color(0xFFBFDBFE),
+      activeText: const Color(0xFF1D4ED8),
+      zeroBg: const Color(0xFFFFEBEE),
+      zeroBorder: const Color(0xFFFFCDD2),
+      zeroText: const Color(0xFFD32F2F),
+    );
+  }
+
+  Widget damagedStockBadge(dynamic value) {
+    return stockBadge(
+      value,
+      activeBg: const Color(0xFFFEF2F2),
+      activeBorder: const Color(0xFFFECACA),
+      activeText: const Color(0xFFDC2626),
+      zeroBg: const Color(0xFFF9FAFB),
+      zeroBorder: const Color(0xFFE5E7EB),
+      zeroText: const Color(0xFF6B7280),
+    );
+  }
+
+  Widget partiallyDamagedStockBadge(dynamic value) {
+    return stockBadge(
+      value,
+      activeBg: const Color(0xFFFFFBEB),
+      activeBorder: const Color(0xFFFDE68A),
+      activeText: const Color(0xFFD97706),
+      zeroBg: const Color(0xFFF9FAFB),
+      zeroBorder: const Color(0xFFE5E7EB),
+      zeroText: const Color(0xFF6B7280),
+    );
+  }
+
+  Widget liquidationStockBadge(dynamic value) {
+    return stockBadge(
+      value,
+      activeBg: const Color(0xFFF5F3FF),
+      activeBorder: const Color(0xFFDDD6FE),
+      activeText: const Color(0xFF7C3AED),
+      zeroBg: const Color(0xFFF9FAFB),
+      zeroBorder: const Color(0xFFE5E7EB),
+      zeroText: const Color(0xFF6B7280),
+    );
+  }
+
+  Widget productImage(dynamic imageValue) {
+    final String imagePath = imageValue?.toString() ?? "";
+
+    String imageUrl = "";
+
+    if (imagePath.isNotEmpty) {
+      if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+        imageUrl = imagePath;
+      } else {
+        imageUrl = "$api$imagePath";
+      }
+    }
+
+    if (imageUrl.isEmpty) {
+      return Container(
+        width: 45,
+        height: 45,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Icon(
+          Icons.image_not_supported,
+          size: 20,
+          color: Colors.grey,
         ),
       );
-    } else {
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.network(
+        imageUrl,
+        width: 45,
+        height: 45,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            width: 45,
+            height: 45,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.image_not_supported,
+              size: 20,
+              color: Colors.grey,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget editButton(Map<String, dynamic> item) {
+    return ElevatedButton(
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => update_product(
+              id: item['id'],
+              type: widget.type,
+            ),
+          ),
+        );
+      },
+      style: ElevatedButton.styleFrom(
+        foregroundColor: Colors.white,
+        backgroundColor: Colors.blue,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 7,
+        ),
+        minimumSize: const Size(60, 32),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
+        ),
+      ),
+      child: const Text(
+        'Edit',
+        style: TextStyle(fontSize: 11),
+      ),
+    );
+  }
+
+  List<DataColumn> tableColumns() {
+    return const <DataColumn>[
+      DataColumn(
+        label: Text(
+          'Name',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+      ),
+      DataColumn(
+        label: Text(
+          'Image',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+      ),
+      DataColumn(
+        label: Text(
+          'Stock',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+      ),
+      DataColumn(
+        label: Text(
+          'Damaged\nStock',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            height: 1.1,
+          ),
+        ),
+      ),
+      DataColumn(
+        label: Text(
+          'Partial\nDamage',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            height: 1.1,
+          ),
+        ),
+      ),
+      DataColumn(
+        label: Text(
+          'Liquidation\nStock',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            height: 1.1,
+          ),
+        ),
+      ),
+      DataColumn(
+        label: Text(
+          'Actions',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    ];
+  }
+
+  DataRow productRow(Map<String, dynamic> item) {
+    return DataRow(
+      cells: <DataCell>[
+        DataCell(
+          SizedBox(
+            width: 170,
+            child: Text(
+              item['name']?.toString() ?? '',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+        DataCell(productImage(item['image'])),
+        DataCell(normalStockBadge(item['stock'])),
+        DataCell(damagedStockBadge(item['damaged_stock'])),
+        DataCell(partiallyDamagedStockBadge(item['partially_damaged_stock'])),
+        DataCell(liquidationStockBadge(item['liquidation_stock'])),
+        DataCell(editButton(item)),
+      ],
+    );
+  }
+
+  if (widget.type == 'single') {
+    if (singleProducts.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(16),
         child: Text('No products available'),
       );
     }
-  } else if (widget.type == 'variant') {
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columnSpacing: 24,
+        headingRowHeight: 48,
+        dataRowMinHeight: 62,
+        dataRowMaxHeight: 74,
+        columns: tableColumns(),
+        rows: <DataRow>[
+          productRow(singleProducts.first),
+        ],
+      ),
+    );
+  }
+
+  if (widget.type == 'variant') {
     if (variantProducts.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(16),
@@ -227,132 +363,23 @@ class _add_product_variantState extends State<add_product_variant> {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
-        columnSpacing: 35,
-        headingRowHeight: 40,
-        dataRowMinHeight: 58,
-        dataRowMaxHeight: 68,
-        columns: const <DataColumn>[
-          DataColumn(
-            label: Text(
-              'Name',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-          ),
-          DataColumn(
-            label: Text(
-              'Image',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-          ),
-          DataColumn(
-            label: Text(
-              'Stock',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-          ),
-          DataColumn(
-            label: Text(
-              'Actions',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-          ),
-        ],
-        rows: variantProducts.map((variant) {
-          return DataRow(
-            cells: <DataCell>[
-              DataCell(
-                SizedBox(
-                  width: 150,
-                  child: Text(
-                    variant['name']?.toString() ?? '',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-              ),
-              DataCell(
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    '${api}${variant['image']}',
-                    width: 45,
-                    height: 45,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        width: 45,
-                        height: 45,
-                        color: Colors.grey.shade200,
-                        child: const Icon(
-                          Icons.image_not_supported,
-                          size: 20,
-                          color: Colors.grey,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              DataCell(
-                stockBadge(variant['stock']),
-              ),
-              DataCell(
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => update_product(
-                          id: variant['id'],
-                          type: widget.type,
-                        ),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    backgroundColor: Colors.blue,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    minimumSize: const Size(55, 28),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8.0),
-                    ),
-                  ),
-                  child: const Text(
-                    'Edit',
-                    style: TextStyle(fontSize: 10),
-                  ),
-                ),
-              ),
-            ],
-          );
+        columnSpacing: 24,
+        headingRowHeight: 48,
+        dataRowMinHeight: 62,
+        dataRowMaxHeight: 74,
+        columns: tableColumns(),
+        rows: variantProducts.map((Map<String, dynamic> variant) {
+          return productRow(variant);
         }).toList(),
       ),
     );
-  } else {
-    return const Padding(
-      padding: EdgeInsets.all(16),
-      child: Text('No products available'),
-    );
   }
-}
 
+  return const Padding(
+    padding: EdgeInsets.all(16),
+    child: Text('No products available'),
+  );
+}
 // Method to handle editing a product
   void _editProduct(Map<String, dynamic> product) {
     // Add your edit functionality here
@@ -758,7 +785,7 @@ var groupid;
       Uri.parse('$api/api/add/product/variant/'),
       headers: {
         "Content-Type": "application/json",
-        'Authorization': 'Bearer $token',
+        'Authorization': 'Bearer $token', 
       },
       body: jsonString,
     );

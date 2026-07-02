@@ -9,6 +9,7 @@ import 'package:beposoft/pages/ACCOUNTS/add_family.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_state.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_supervisor.dart';
+import 'package:beposoft/pages/ACCOUNTS/csodashboard.dart';
 import 'package:beposoft/pages/ACCOUNTS/dashboard.dart';
 import 'package:beposoft/pages/ACCOUNTS/dorwer.dart';
 import 'package:beposoft/pages/ACCOUNTS/product_list.dart';
@@ -78,8 +79,12 @@ class _new_productState extends State<new_product> {
   }
 
   String? selectedUsability;
-  List<String> usabilityOptions = ["usable", "damaged", "partially_damaged"];
-
+List<String> usabilityOptions = [
+  "usable",
+  "damaged",
+  "partially_damaged",
+  "liquidation_stock",
+];
   List<String> type = ["single", 'variant'];
   List<String> purchasetype = ["International", 'Local'];
   List<Map<String, dynamic>> allRacks = []; // Holds full rack list from API
@@ -602,6 +607,17 @@ class _new_productState extends State<new_product> {
             builder: (context) =>
                 bdm_dashbord()), // Replace AnotherPage with your target page
       );
+    }else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
+      );
+    }
+    else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => cso_dashboard()),
+      );
     } else if (dep == "warehouse") {
       Navigator.pushReplacement(
         context,
@@ -667,7 +683,18 @@ class _new_productState extends State<new_product> {
                       builder: (context) =>
                           bdm_dashbord()), // Replace AnotherPage with your target page
                 );
-              } else if (dep == "warehouse") {
+              } else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
+      );
+    }
+    else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => cso_dashboard()),
+      );
+    }else if (dep == "warehouse") {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
