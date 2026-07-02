@@ -101,40 +101,57 @@ class _Product_ListState extends State<Product_List>
     super.dispose();
   }
 
-  double _calculateVariantLiquidationStock(dynamic variantIDs) {
-    if (variantIDs is! List) return 0.0;
+double _calculateRackLiquidationStock(dynamic rackDetails) {
+  if (rackDetails is! List) return 0.0;
 
-    double total = 0.0;
+  double total = 0.0;
 
-    for (final dynamic variant in variantIDs) {
-      if (variant is Map<String, dynamic>) {
-        total += _toDouble(variant['liquidation_stock']);
-      } else if (variant is Map) {
-        total += _toDouble(variant['liquidation_stock']);
+  for (final dynamic rack in rackDetails) {
+    if (rack is Map) {
+      final String usability =
+          rack['usability']?.toString().trim().toLowerCase() ?? '';
+
+      if (usability == 'liquidation_stock' ||
+          usability == 'liquidation' ||
+          usability == 'liquidation stock') {
+        total += _toDouble(rack['rack_stock']);
       }
     }
-
-    return total;
   }
 
-  double _getProductLiquidationStock(Map<String, dynamic> productData) {
-    if (productData['total_liquidation_stock'] != null) {
-      return _toDouble(productData['total_liquidation_stock']);
+  return total;
+}
+
+double _calculateVariantLiquidationStock(dynamic variantIDs) {
+  if (variantIDs is! List) return 0.0;
+
+  double total = 0.0;
+
+  for (final dynamic variant in variantIDs) {
+    if (variant is Map) {
+      total += _toDouble(variant['liquidation_stock']);
+      total += _calculateRackLiquidationStock(variant['rack_details']);
     }
-
-    final dynamic variantIDs = productData['variantIDs'];
-
-    if (variantIDs is List && variantIDs.isNotEmpty) {
-      final double variantLiquidationStock =
-          _calculateVariantLiquidationStock(variantIDs);
-
-      if (variantLiquidationStock > 0) {
-        return variantLiquidationStock;
-      }
-    }
-
-    return _toDouble(productData['liquidation_stock']);
   }
+
+  return total;
+}
+
+double _getProductLiquidationStock(Map<String, dynamic> productData) {
+  final double cachedTotal = _toDouble(productData['total_liquidation_stock']);
+
+  if (cachedTotal > 0) {
+    return cachedTotal;
+  }
+
+  double total = 0.0;
+
+  total += _toDouble(productData['liquidation_stock']);
+  total += _calculateVariantLiquidationStock(productData['variantIDs']);
+  total += _calculateRackLiquidationStock(productData['rack_details']);
+
+  return total;
+}
 
   Widget _buildDropdownTile(
     BuildContext context,
@@ -380,58 +397,53 @@ class _Product_ListState extends State<Product_List>
     return familyNames;
   }
 
-  void _applyLocalFilters() {
-    final List<Map<String, dynamic>> result = products.where(
-      (Map<String, dynamic> product) {
-        if (selectpurchasetype == "All Type") {
-          return true;
-        }
-
-        if (selectpurchasetype == "International" ||
-            selectpurchasetype == "Local") {
-          return product['purchase_type']?.toString() == selectpurchasetype;
-        }
-
-        if (selectpurchasetype == "Damaged Stock") {
-          return _getProductDamagedStock(product) > 0;
-        }
-
-        if (selectpurchasetype == "Partially Damaged Stock") {
-          return _getProductPartiallyDamagedStock(product) > 0;
-        }
-
-        if (selectpurchasetype == "Liquidation Stock") {
-          return _getProductLiquidationStock(product) > 0;
-        }
-
+ void _applyLocalFilters() {
+  final List<Map<String, dynamic>> result = products.where(
+    (Map<String, dynamic> product) {
+      if (selectpurchasetype == "All Type") {
         return true;
-      },
-    ).toList();
-
-    if (!mounted) return;
-
-    setState(() {
-      filteredProducts = result;
-
-      if (selectpurchasetype == "Damaged Stock") {
-        emptyMessage = "No damaged stock products found";
-      } else if (selectpurchasetype == "Partially Damaged Stock") {
-        emptyMessage = "No partially damaged stock products found";
-      } else if (selectpurchasetype == "Liquidation Stock") {
-        emptyMessage = "No liquidation stock products found";
-      } else {
-        emptyMessage = "No products found";
       }
-    });
-  }
 
-  void _filterProductsByPurchaseType(String purchaseType) {
-    setState(() {
-      selectpurchasetype = purchaseType;
-    });
+      if (selectpurchasetype == "International" ||
+          selectpurchasetype == "Local") {
+        return product['purchase_type']?.toString() == selectpurchasetype;
+      }
 
-    _applyLocalFilters();
-  }
+      if (selectpurchasetype == "Damaged Stock" ||
+          selectpurchasetype == "Partially Damaged Stock" ||
+          selectpurchasetype == "Liquidation Stock") {
+        return true;
+      }
+
+      return true;
+    },
+  ).toList();
+
+  if (!mounted) return;
+
+  setState(() {
+    filteredProducts = result;
+
+    if (selectpurchasetype == "Damaged Stock") {
+      emptyMessage = "No damaged stock products found";
+    } else if (selectpurchasetype == "Partially Damaged Stock") {
+      emptyMessage = "No partially damaged stock products found";
+    } else if (selectpurchasetype == "Liquidation Stock") {
+      emptyMessage = "No liquidation stock products found";
+    } else {
+      emptyMessage = "No products found";
+    }
+  });
+}
+void _filterProductsByPurchaseType(String purchaseType) {
+  if (!mounted) return;
+
+  setState(() {
+    selectpurchasetype = purchaseType;
+  });
+
+  fetchProductList(refresh: true);
+}
 
   void _onSearchChanged(String query) {
     _searchDebounce?.cancel();
@@ -557,30 +569,43 @@ class _Product_ListState extends State<Product_List>
     }
   }
 
-  Uri _buildProductListUri({
-    required String warehouseId,
-    required bool refresh,
-  }) {
-    if (!refresh && nextPageUrl != null && nextPageUrl!.isNotEmpty) {
-      return Uri.parse(nextPageUrl!);
-    }
-
-    final Map<String, String> queryParameters = <String, String>{};
-
-    final String searchText = searchController.text.trim();
-
-    if (searchText.isNotEmpty) {
-      queryParameters["search"] = searchText;
-    }
-
-    if (selectedCategoryId.isNotEmpty) {
-      queryParameters["category_id"] = selectedCategoryId;
-    }
-
-    return Uri.parse("$api/api/warehouse/products/gets/$warehouseId/").replace(
-      queryParameters: queryParameters.isEmpty ? null : queryParameters,
-    );
+Uri _buildProductListUri({
+  required String warehouseId,
+  required bool refresh,
+}) {
+  if (!refresh && nextPageUrl != null && nextPageUrl!.isNotEmpty) {
+    return Uri.parse(nextPageUrl!);
   }
+
+  final Map<String, String> queryParameters = <String, String>{};
+
+  final String searchText = searchController.text.trim();
+
+  if (searchText.isNotEmpty) {
+    queryParameters["search"] = searchText;
+  }
+
+  if (selectedCategoryId.isNotEmpty) {
+    queryParameters["category_id"] = selectedCategoryId;
+  }
+
+  if (selectpurchasetype == "International" ||
+      selectpurchasetype == "Local") {
+    queryParameters["purchase_type"] = selectpurchasetype;
+  }
+
+  if (selectpurchasetype == "Damaged Stock") {
+    queryParameters["stock_type"] = "damaged_stock";
+  } else if (selectpurchasetype == "Partially Damaged Stock") {
+    queryParameters["stock_type"] = "partially_damaged_stock";
+  } else if (selectpurchasetype == "Liquidation Stock") {
+    queryParameters["stock_type"] = "liquidation_stock";
+  }
+
+  return Uri.parse("$api/api/warehouse/products/gets/$warehouseId/").replace(
+    queryParameters: queryParameters.isEmpty ? null : queryParameters,
+  );
+}
 
   Future<void> getFamily() async {
     try {
@@ -668,6 +693,7 @@ class _Product_ListState extends State<Product_List>
         warehouseId: warehouse,
         refresh: refresh,
       );
+      debugPrint("PRODUCT LIST URL: $uri");
 
       final http.Response response = await http.get(
         uri,
@@ -750,13 +776,13 @@ class _Product_ListState extends State<Product_List>
               'rack_details': productData['rack_details'],
               'damaged_stock': productData['damaged_stock'],
               'partially_damaged_stock': productData['partially_damaged_stock'],
+              'liquidation_stock': productData['liquidation_stock'],
+'total_liquidation_stock': _getProductLiquidationStock(productData),
               'total_damaged_stock': _getProductDamagedStock(productData),
               'total_partially_damaged_stock':
                   _getProductPartiallyDamagedStock(productData),
               'warehouse': productData['warehouse'],
-              'liquidation_stock': productData['liquidation_stock'],
-              'total_liquidation_stock':
-                  _getProductLiquidationStock(productData),
+              
             },
           );
         }

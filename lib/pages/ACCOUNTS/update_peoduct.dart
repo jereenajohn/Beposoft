@@ -85,6 +85,9 @@ class _update_productState extends State<update_product> {
   TextEditingController sellingprice = TextEditingController();
   TextEditingController excludedprice = TextEditingController();
   TextEditingController stock = TextEditingController();
+  TextEditingController damagedStock = TextEditingController();
+  TextEditingController partiallyDamagedStock = TextEditingController();
+  TextEditingController liquidationStock = TextEditingController();
   TextEditingController color = TextEditingController();
   TextEditingController size = TextEditingController();
   TextEditingController retailprice = TextEditingController();
@@ -113,7 +116,12 @@ class _update_productState extends State<update_product> {
   List<String> columnNames = []; // For storing selected rack's columns
   String? selectedColumn; // For selected column
   String? selectedUsability;
-  List<String> usabilityOptions = ["usable", "damaged", "partially_damaged"];
+  List<String> usabilityOptions = [
+    "usable",
+    "damaged",
+    "partially_damaged",
+    "liquidation_stock",
+  ];
 
   var selecttype;
   @override
@@ -126,6 +134,7 @@ class _update_productState extends State<update_product> {
     getwarehouse();
     getproductcategory();
     getrack();
+    print("widget.id: ${widget.id}");
   }
 
   void initdata() {
@@ -303,15 +312,15 @@ class _update_productState extends State<update_product> {
     } catch (e) {}
   }
 
-void calculateLandingPrice() {
-  double purchaseRate = double.tryParse(purchaserate.text) ?? 0.0;
-  double dutyChargePercent = double.tryParse(dutycharge.text) ?? 0.0;
+  void calculateLandingPrice() {
+    double purchaseRate = double.tryParse(purchaserate.text) ?? 0.0;
+    double dutyChargePercent = double.tryParse(dutycharge.text) ?? 0.0;
 
-  double dutyChargeAmount = (purchaseRate * dutyChargePercent) / 100;
-  double landingPrice = purchaseRate + dutyChargeAmount;
+    double dutyChargeAmount = (purchaseRate * dutyChargePercent) / 100;
+    double landingPrice = purchaseRate + dutyChargeAmount;
 
-  landingprice.text = landingPrice.toStringAsFixed(2);
-}
+    landingprice.text = landingPrice.toStringAsFixed(2);
+  }
 
   var image;
   final ImagePicker _picker = ImagePicker();
@@ -382,79 +391,145 @@ void calculateLandingPrice() {
           'Content-Type': 'application/json',
         },
       );
-// print('response.bodyyyyyyyyyyyyy: ${response.body}');
+
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
-        var productData = parsed['products']; // Map of the product
-        var variantIDs = productData['variantIDs']; // List of variants
+
+        var productData = parsed['products'];
+        var variantIDs = productData['variantIDs'];
         var rackDetails = productData['rack_details'] ?? [];
-        var warehouseId =
-            productData['warehouse']; // Set the warehouse ID from the response
+        var warehouseId = productData['warehouse'];
+
         if (variantIDs is List) {
           setState(() {
             selectedwarehouseId = warehouseId;
-
             selectedwarehouseName = productData['warehouse_name'];
-            ;
-            // Handle response based on widget.type
+
             if (widget.type == 'single') {
-              singleProducts = [productData]; // Single prduct as a list
+              singleProducts = [productData];
 
               if (singleProducts.isNotEmpty) {
                 name.text = singleProducts[0]['name']?.toString() ?? '';
                 globalProductName = singleProducts[0]['name']?.toString() ?? '';
                 hsncode.text = singleProducts[0]['hsn_code']?.toString() ?? '';
+
+                selectpurchasetype =
+                    singleProducts[0]['purchase_type']?.toString() ??
+                        'International';
+
+                selectunit = singleProducts[0]['unit']?.toString() ?? 'BOX';
+
                 sellingprice.text =
                     singleProducts[0]['selling_price']?.toString() ?? '';
+
                 purchaserate.text =
                     singleProducts[0]['purchase_rate']?.toString() ?? '';
-                stock.text = singleProducts[0]['stock']?.toString() ?? '';
+
+                stock.text = singleProducts[0]['stock']?.toString() ?? '0';
+
+                damagedStock.text =
+                    singleProducts[0]['damaged_stock']?.toString() ?? '0';
+
+                partiallyDamagedStock.text =
+                    singleProducts[0]['partially_damaged_stock']?.toString() ??
+                        '0';
+
+                liquidationStock.text =
+                    singleProducts[0]['liquidation_stock']?.toString() ?? '0';
+
                 color.text = singleProducts[0]['color']?.toString() ?? '';
                 size.text = singleProducts[0]['size']?.toString() ?? '';
+
                 taxx.text = singleProducts[0]['tax']?.toString() ?? '';
+
                 landingprice.text =
                     singleProducts[0]['landing_cost']?.toString() ?? '';
+
                 retailprice.text =
                     singleProducts[0]['retail_price']?.toString() ?? '';
+
                 dutycharge.text =
                     singleProducts[0]['duty_charge']?.toString() ?? '';
+
                 finalprice.text =
                     singleProducts[0]['final_price']?.toString() ?? '';
-                fami = singleProducts[0]['family'];
+
+                selectedcategoryId = singleProducts[0]['product_category'];
+
+                image = singleProducts[0]['image'];
+
+                fami = singleProducts[0]['family'] ?? [];
+
                 rackDetailsList = List<Map<String, dynamic>>.from(rackDetails);
               }
             } else if (widget.type == 'variant') {
-              variantProducts = List<Map<String, dynamic>>.from(
-                  variantIDs); // List of variants
-              singleProducts = [productData]; // Single product as a list
-              // Handle response based on widget.type
-              ;
+              variantProducts = List<Map<String, dynamic>>.from(variantIDs);
+              singleProducts = [productData];
+
               if (singleProducts.isNotEmpty) {
                 name.text = singleProducts[0]['name']?.toString() ?? '';
                 globalProductName = singleProducts[0]['name']?.toString() ?? '';
                 hsncode.text = singleProducts[0]['hsn_code']?.toString() ?? '';
+
+                selectpurchasetype =
+                    singleProducts[0]['purchase_type']?.toString() ??
+                        'International';
+
+                selectunit = singleProducts[0]['unit']?.toString() ?? 'BOX';
+
                 sellingprice.text =
                     singleProducts[0]['selling_price']?.toString() ?? '';
+
                 purchaserate.text =
                     singleProducts[0]['purchase_rate']?.toString() ?? '';
-                stock.text = singleProducts[0]['stock']?.toString() ?? '';
+
+                stock.text = singleProducts[0]['stock']?.toString() ?? '0';
+
+                damagedStock.text =
+                    singleProducts[0]['damaged_stock']?.toString() ?? '0';
+
+                partiallyDamagedStock.text =
+                    singleProducts[0]['partially_damaged_stock']?.toString() ??
+                        '0';
+
+                liquidationStock.text =
+                    singleProducts[0]['liquidation_stock']?.toString() ?? '0';
+
                 color.text = singleProducts[0]['color']?.toString() ?? '';
                 size.text = singleProducts[0]['size']?.toString() ?? '';
+
                 taxx.text = singleProducts[0]['tax']?.toString() ?? '';
+
                 landingprice.text =
                     singleProducts[0]['landing_cost']?.toString() ?? '';
+
                 retailprice.text =
                     singleProducts[0]['retail_price']?.toString() ?? '';
-                fami = singleProducts[0]['family'];
-                rackDetailsList = List<Map<String, dynamic>>.from(rackDetails);
 
-                ;
+                dutycharge.text =
+                    singleProducts[0]['duty_charge']?.toString() ?? '';
+
+                finalprice.text =
+                    singleProducts[0]['final_price']?.toString() ?? '';
+
+                selectedcategoryId = singleProducts[0]['product_category'];
+
+                image = singleProducts[0]['image'];
+
+                fami = singleProducts[0]['family'] ?? [];
+
+                rackDetailsList = List<Map<String, dynamic>>.from(rackDetails);
               }
             }
           });
-        } else {}
-      } else {}
-    } catch (error) {}
+        }
+      } else {
+        debugPrint('getvariant failed: ${response.statusCode}');
+        debugPrint('getvariant body: ${response.body}');
+      }
+    } catch (error) {
+      debugPrint('getvariant error: $error');
+    }
   }
 
   Future<void> updateProduct(BuildContext scaffoldContext) async {
@@ -498,7 +573,15 @@ void calculateLandingPrice() {
         'retail_price': retailprice.text,
         'landing_cost': landingPriceValue,
         'warehouse': selectedwarehouseId,
-        'stock': stock.text,
+        'stock': stock.text.trim().isEmpty ? '0' : stock.text.trim(),
+        'damaged_stock':
+            damagedStock.text.trim().isEmpty ? '0' : damagedStock.text.trim(),
+        'partially_damaged_stock': partiallyDamagedStock.text.trim().isEmpty
+            ? '0'
+            : partiallyDamagedStock.text.trim(),
+        'liquidation_stock': liquidationStock.text.trim().isEmpty
+            ? '0'
+            : liquidationStock.text.trim(),
         'duty_charge': dutycharge.text,
         'final_price': finalprice.text,
         'approval_status':
@@ -695,6 +778,32 @@ void calculateLandingPrice() {
         });
       }
     } catch (error) {}
+  }
+
+  @override
+  void dispose() {
+    name.dispose();
+    hsncode.dispose();
+    price.dispose();
+    family.dispose();
+    types.dispose();
+    units.dispose();
+    purchaserate.dispose();
+    taxx.dispose();
+    sellingprice.dispose();
+    excludedprice.dispose();
+    stock.dispose();
+    damagedStock.dispose();
+    partiallyDamagedStock.dispose();
+    liquidationStock.dispose();
+    color.dispose();
+    size.dispose();
+    retailprice.dispose();
+    landingprice.dispose();
+    dutycharge.dispose();
+    finalprice.dispose();
+    rackStockController.dispose();
+    super.dispose();
   }
 
   @override
@@ -1540,15 +1649,73 @@ void calculateLandingPrice() {
 // Conditionally show the TextField if `selecttype` is "single"
 
                             SizedBox(height: 10),
-                            Text("Stock for Single Product *",
+                            Text("Stock *",
                                 style: TextStyle(
                                     fontSize: 15, fontWeight: FontWeight.bold)),
                             SizedBox(height: 10),
                             TextField(
                               controller: stock,
-                              keyboardType: TextInputType.number,
+                              keyboardType: TextInputType.numberWithOptions(
+                                  decimal: true),
                               decoration: InputDecoration(
                                 labelText: 'Enter stock quantity',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10.0),
+                                  borderSide: BorderSide(color: Colors.grey),
+                                ),
+                                contentPadding:
+                                    EdgeInsets.symmetric(vertical: 8.0),
+                              ),
+                            ),
+                            SizedBox(height: 10),
+                            Text("Damaged Stock",
+                                style: TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.bold)),
+                            SizedBox(height: 10),
+                            TextField(
+                              controller: damagedStock,
+                              keyboardType: TextInputType.numberWithOptions(
+                                  decimal: true),
+                              decoration: InputDecoration(
+                                labelText: 'Enter damaged stock',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10.0),
+                                  borderSide: BorderSide(color: Colors.grey),
+                                ),
+                                contentPadding:
+                                    EdgeInsets.symmetric(vertical: 8.0),
+                              ),
+                            ),
+                            SizedBox(height: 10),
+                            Text("Partially Damaged Stock",
+                                style: TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.bold)),
+                            SizedBox(height: 10),
+                            TextField(
+                              controller: partiallyDamagedStock,
+                              keyboardType: TextInputType.numberWithOptions(
+                                  decimal: true),
+                              decoration: InputDecoration(
+                                labelText: 'Enter partially damaged stock',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10.0),
+                                  borderSide: BorderSide(color: Colors.grey),
+                                ),
+                                contentPadding:
+                                    EdgeInsets.symmetric(vertical: 8.0),
+                              ),
+                            ),
+                            SizedBox(height: 10),
+                            Text("Liquidation Stock",
+                                style: TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.bold)),
+                            SizedBox(height: 10),
+                            TextField(
+                              controller: liquidationStock,
+                              keyboardType: TextInputType.numberWithOptions(
+                                  decimal: true),
+                              decoration: InputDecoration(
+                                labelText: 'Enter liquidation stock',
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10.0),
                                   borderSide: BorderSide(color: Colors.grey),
@@ -1833,18 +2000,29 @@ void calculateLandingPrice() {
                               ),
                             ),
                             SizedBox(height: 10),
-                            if (image != null)
+                            if (image != null && image.toString().isNotEmpty)
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Image.file(
-                                    File(image
-                                        .path), // Use the file path obtained from the picked image
-                                    width: 100, // Set the desired width
-                                    height: 100, // Set the desired height
-                                    fit: BoxFit.cover, // Set the fit style
-                                  ),
-                                  SizedBox(height: 10),
+                                  image is File
+                                      ? Image.file(
+                                          image,
+                                          width: 100,
+                                          height: 100,
+                                          fit: BoxFit.cover,
+                                        )
+                                      : Image.network(
+                                          '$api$image',
+                                          width: 100,
+                                          height: 100,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) {
+                                            return const Text(
+                                                'Image not available');
+                                          },
+                                        ),
+                                  const SizedBox(height: 10),
                                 ],
                               ),
 
@@ -2024,7 +2202,10 @@ void calculateLandingPrice() {
 
                           // If validation passes, proceed with submission
                           await updateProduct(context);
-                          updateProductImage(context, image);
+
+                          if (image is File) {
+                            await updateProductImage(context, image);
+                          }
                         },
                         style: ButtonStyle(
                           backgroundColor: MaterialStateProperty.all<Color>(
