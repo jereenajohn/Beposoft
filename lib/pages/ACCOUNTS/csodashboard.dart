@@ -24,6 +24,7 @@ import 'package:beposoft/pages/ACCOUNTS/status_wise_orders_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/todays_orders_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/uploadbulkorders.dart';
 import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
+import 'package:beposoft/pages/HR/staff_attendance.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_order_view.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_product_approval.dart';
 import 'package:intl/intl.dart';
@@ -65,6 +66,7 @@ class _cso_dashboardState extends State<cso_dashboard> {
   List<Map<String, dynamic>> shippedOrders = [];
   List<Map<String, dynamic>> Finance = [];
   int invoiceCreatedCount = 0;
+  
 
   List<Map<String, dynamic>> csoFamilySummaryCards = [];
 
@@ -1543,7 +1545,7 @@ class _cso_dashboardState extends State<cso_dashboard> {
             'Add Team',
             'Add Team Members',
           ]),
-          if (isManager)
+          // if (isManager)
             ListTile(
               leading: const Icon(Icons.people),
               title: const Text('Add Attendance Team'),
@@ -1556,7 +1558,7 @@ class _cso_dashboardState extends State<cso_dashboard> {
                 );
               },
             ),
-          if (isManager)
+          // if (isManager)
             ListTile(
               leading: const Icon(Icons.fact_check_outlined),
               title: const Text('Add Attendance'),
@@ -1569,7 +1571,20 @@ class _cso_dashboardState extends State<cso_dashboard> {
                 );
               },
             ),
-          if (isManager)
+            ListTile(
+              leading: const Icon(Icons.fact_check_outlined),
+              title: const Text( 'View Attendance'),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const HrTeamAttendanceScreen(),
+                  ),
+                );
+              },
+            ),
+           
+          // if (isManager)
             ListTile(
               leading: const Icon(Icons.fact_check_outlined),
               title: const Text('Approve BDO Call Duration'),
