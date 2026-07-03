@@ -127,7 +127,7 @@ bool salesReturnLoading = false;
   bool bdmOverallLoading = false;
   String selectedBdmReportDate = "";
   bool dbrLoading = true;
-
+int waitingForConfirmationCount = 0;
   bool isBankReportLoading = true;
   String monthlyExpenseFrom = "";
   String monthlyExpenseTo = "";
@@ -273,8 +273,10 @@ bool salesReturnLoading = false;
     fetchGrvSummary();
     fetchOrderData();
     fetchshippedorders();
+
     getexpenselist();
     getFinancialReport();
+    fetchWaitingForConfirmationCount();
     getFinance_without_transfer();
     getTodayODReportTotals();
     getCategoryWiseProducts();
@@ -315,6 +317,39 @@ bool salesReturnLoading = false;
     await getsalescount();
     // fetchorders();
     await fetchReport();
+  }
+
+  Future<void> fetchWaitingForConfirmationCount() async {
+    try {
+      final token = await getTokenFromPrefs();
+      if (token == null || token.isEmpty) return;
+
+      final uri = Uri.parse('$api/api/orders/').replace(
+        queryParameters: {
+          'status': 'Waiting For Confirmation',
+        },
+      );
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+
+        if (!mounted) return;
+
+        setState(() {
+          waitingForConfirmationCount = _asInt(parsed['count']);
+        });
+      }
+    } catch (e) {
+      debugPrint("WAITING FOR CONFIRMATION COUNT ERROR: $e");
+    }
   }
 
   Future<void> fetchTeamWiseAttendanceCount() async {
@@ -452,6 +487,7 @@ bool salesReturnLoading = false;
       Future(() => getFilteredCategoryWiseProducts()),
       Future(() => fetchBeposoftSummary()),
       Future(() => fetchDashboardInventorySummary()),
+      Future(() => fetchWaitingForConfirmationCount()),
       Future(() => fetchSalesTeamCdTotalsForCeo()),
       Future(() => fetchBdoStatewiseReport(
             startDate: DateTime(now.year, now.month, now.day),
@@ -2742,7 +2778,7 @@ final todayCashReturnAmount = _asDouble(salesReturnPaid['order_amount']);
               );
             },
           ),
-          _buildDashboardCard(
+         _buildDashboardCard(
             title: "Attendance",
             value: "",
             lines: const [],
@@ -2752,11 +2788,27 @@ final todayCashReturnAmount = _asDouble(salesReturnPaid['order_amount']);
                     style: TextStyle(color: Colors.white, fontSize: 12),
                   )
                 : Column(
-                    children: departmentAttendanceCards.map((item) {
+                    children:
+                        departmentAttendanceCards.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final item = entry.value;
+
+                      final originalName = item['title'].toString();
+                      final displayName = index == 1
+                          ? originalName
+                              .substring(
+                                  0,
+                                  originalName.length >= 3
+                                      ? 3
+                                      : originalName.length)
+                              .toUpperCase()
+                          : _teamShortName(originalName);
+
                       return _buildattendanceTeamContainer(
-                          teamName: _teamShortName(item['title'].toString()),
-                          present: item['present'],
-                          absent: item['absent']);
+                        teamName: displayName,
+                        present: item['present'],
+                        absent: item['absent'],
+                      );
                     }).toList(),
                   ),
             // : Column(
@@ -7203,13 +7255,12 @@ final todayCashReturnAmount = _asDouble(salesReturnPaid['order_amount']);
                                       const Color.fromARGB(255, 255, 255, 255),
                                   size: 28),
                               SizedBox(width: 7),
-                              Text(
-                                "$confirmcount - Waiting for Approval",
-                                style: TextStyle(
+                                Text(
+                                "$waitingForConfirmationCount - Waiting for Confirmation",
+                                style: const TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
-                                  color:
-                                      const Color.fromARGB(255, 255, 255, 255),
+                                  color: Colors.white,
                                 ),
                               ),
                             ],
