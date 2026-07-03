@@ -1602,6 +1602,8 @@ class _cso_dashboardState extends State<cso_dashboard> {
             'Product Stock Report',
             'Family Wise Excel Report',
             'Product Sale Report',
+            'Order Comparison Report',
+
           ]),
           _buildDropdownTile(
               context, 'Staff', ['Add Staff', 'View Staff List']),
