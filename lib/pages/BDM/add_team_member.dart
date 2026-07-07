@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:beposoft/Sales%20Directors/SD_dashboard.dart';
 import 'package:beposoft/pages/ACCOUNTS/csodashboard.dart';
 import 'package:beposoft/pages/ACCOUNTS/dashboard.dart';
+import 'package:beposoft/pages/ADMIN/admin_dashboard.dart';
+import 'package:beposoft/pages/ADMIN/ceo_dashboard.dart';
 import 'package:beposoft/pages/BDM/bdm_dshboard.dart';
 import 'package:beposoft/pages/BDO/bdo_dashboard.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_admin.dart';
@@ -80,18 +82,30 @@ class _AddTeamMembersState extends State<AddTeamMembers> {
         context,
         MaterialPageRoute(builder: (context) => SdDashboard()),
       );
+    } else if (dep == "CEO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
+      );
+    } else if (dep == "ADMIN") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => admin_dashboard()),
+      );
+    } else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
+      );
+    } else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => cso_dashboard()),
+      );
     } else if (dep == "BDM") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => bdm_dashbord()),
-      );
-    }
-    else if (dep == "CSO") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) =>
-                cso_dashboard()), // Replace AnotherPage with your target page
       );
     } else if (dep == "warehouse") {
       Navigator.pushReplacement(
@@ -155,7 +169,14 @@ class _AddTeamMembersState extends State<AddTeamMembers> {
         final parsed = jsonDecode(response.body);
         final List data = parsed["data"] ?? [];
 
-        final loadedTeams = data.map<Map<String, dynamic>>((item) {
+        final filteredTeams = data.where((item) {
+          final dynamic rawLeaderId = item["team_leader"];
+          final int? leaderId = rawLeaderId is int
+              ? rawLeaderId
+              : int.tryParse(rawLeaderId?.toString() ?? '');
+
+          return leaderId == loggedInUserId;
+        }).map<Map<String, dynamic>>((item) {
           return {
             "id": item["id"],
             "name": item["name"]?.toString() ?? "",
@@ -172,7 +193,7 @@ class _AddTeamMembersState extends State<AddTeamMembers> {
         }).toList();
 
         setState(() {
-          teams = loadedTeams;
+          teams = filteredTeams;
 
           if (widget.memberId == null && teams.isNotEmpty) {
             selectedTeamMap = teams.first;
@@ -459,6 +480,60 @@ class _AddTeamMembersState extends State<AddTeamMembers> {
     }
   }
 
+  Future<void> deleteMember(int memberId) async {
+    try {
+      final token = await gettokenFromPrefs();
+      if (token == null) {
+        throw Exception("Token not found");
+      }
+
+      final response = await http.delete(
+        Uri.parse('$api/api/sales/team/members/edit/$memberId/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      final parsed = response.body.isNotEmpty ? jsonDecode(response.body) : {};
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        await getMembers();
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text(parsed["message"] ?? "Team member deleted successfully"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              parsed["message"] ??
+                  parsed["detail"] ??
+                  parsed["error"] ??
+                  "Failed to delete team member",
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Delete member error: $e");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Something went wrong"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   Future<void> updateMember(int memberId) async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -728,7 +803,7 @@ class _AddTeamMembersState extends State<AddTeamMembers> {
                       Icons.more_vert,
                       color: Color(0xFF0F172A),
                     ),
-                    onSelected: (value) {
+                    onSelected: (value) async {
                       if (value == "edit") {
                         Future.delayed(const Duration(milliseconds: 100),
                             () async {
@@ -746,6 +821,8 @@ class _AddTeamMembersState extends State<AddTeamMembers> {
                             await getMembers();
                           }
                         });
+                      } else if (value == "delete") {
+                        await deleteMember(member["id"]);
                       }
                     },
                     itemBuilder: (context) => const [
@@ -756,6 +833,20 @@ class _AddTeamMembersState extends State<AddTeamMembers> {
                             Icon(Icons.edit_outlined, size: 20),
                             SizedBox(width: 10),
                             Text("Edit"),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem<String>(
+                        value: "delete",
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline,
+                                size: 20, color: Colors.red),
+                            SizedBox(width: 10),
+                            Text(
+                              "Delete",
+                              style: TextStyle(color: Colors.red),
+                            ),
                           ],
                         ),
                       ),

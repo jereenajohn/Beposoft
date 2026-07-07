@@ -38,6 +38,7 @@ class _loginState extends State<login> {
   TextEditingController password = TextEditingController();
 
   bool isLoading = false;
+  bool isPasswordVisible = false;
 
   final LocalAuthentication auth = LocalAuthentication();
 
@@ -505,13 +506,27 @@ color: Colors.black.withOpacity(0.12),      blurRadius: 12,
                     ),
                   ),
                   const SizedBox(height: 20),
-                  TextField(
+                 TextField(
                     controller: password,
                     cursorColor: logoCyan,
-                    obscureText: true,
+                    obscureText: !isPasswordVisible,
                     decoration: _inputDecoration(
                       label: 'Password',
                       icon: Icons.lock,
+                    ).copyWith(
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          isPasswordVisible
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          color: logoCyan,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            isPasswordVisible = !isPasswordVisible;
+                          });
+                        },
+                      ),
                     ),
                   ),
                   const SizedBox(height: 30),

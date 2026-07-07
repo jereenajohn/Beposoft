@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'package:beposoft/pages/ACCOUNTS/add_attendence_self.dart';
+import 'dart:io';
 import 'package:beposoft/pages/ACCOUNTS/add_district.dart';
+import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 // import 'package:beposoft/pages/ACCOUNTS/call_log.dart';
 import 'package:beposoft/pages/ACCOUNTS/customer.dart';
@@ -14,6 +15,7 @@ import 'package:beposoft/pages/WAREHOUSE/warehouse_order_view.dart';
 import 'package:beposoft/pages/logout_hekper.dart';
 import 'package:intl/intl.dart';
 import 'package:beposoft/pages/auth_status_checker.dart';
+
 import 'package:beposoft/loginpage.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_attribute.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_bank.dart';
@@ -53,7 +55,7 @@ class _bdo_dashbordState extends State<bdo_dashbord> {
   @override
   void initState() {
     super.initState();
-    _getUsername(); 
+    _getUsername(); // Get the username when the page loads
     getGrvList();
     fetchproformaData();
     getSalesReport();
@@ -73,91 +75,153 @@ class _bdo_dashbordState extends State<bdo_dashbord> {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('department');
   }
+bool _isUpdateAvailable(String currentVersion, String storeVersion) {
+    List<int> currentParts =
+        currentVersion.split('.').map((e) => int.tryParse(e) ?? 0).toList();
 
-  Future<bool> checkAppUpdate(BuildContext context) async {
+    List<int> storeParts =
+        storeVersion.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+
+    int maxLength = currentParts.length > storeParts.length
+        ? currentParts.length
+        : storeParts.length;
+
+    while (currentParts.length < maxLength) {
+      currentParts.add(0);
+    }
+    while (storeParts.length < maxLength) {
+      storeParts.add(0);
+    }
+
+    for (int i = 0; i < maxLength; i++) {
+      if (storeParts[i] > currentParts[i]) {
+        return true;
+      } else if (storeParts[i] < currentParts[i]) {
+        return false;
+      }
+    }
+
+    return false;
+  }
+ 
+   Future<bool> checkAppUpdate(BuildContext context) async {
     final packageInfo = await PackageInfo.fromPlatform();
     final currentVersion = packageInfo.version;
 
     try {
-      final response = await http.get(Uri.parse(
-        'https://play.google.com/store/apps/details?id=com.bepositive.beposoft&hl=en',
-      ));
+      String? storeVersion;
+      Uri? storeUrl;
 
-      if (response.statusCode == 200) {
-        final content = response.body;
-        final versionRegex = RegExp(r'\[\[\["([0-9.]+)"\]\]');
-        final match = versionRegex.firstMatch(content);
+      if (Platform.isAndroid) {
+        final response = await http.get(Uri.parse(
+          'https://play.google.com/store/apps/details?id=com.bepositive.beposoft&hl=en',
+        ));
 
-        if (match != null) {
-          final storeVersion = match.group(1);
-          if (storeVersion != null && storeVersion != currentVersion) {
-            final result = await showDialog<bool>(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) => AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                titlePadding: const EdgeInsets.only(top: 20),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                title: Column(
-                  children: [
-                    Icon(Icons.system_update, size: 48, color: Colors.green),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Update Available',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                content: Text(
-                  'A new version ($storeVersion) is available.\n\nYou are using $currentVersion.\n\nPlease update the app to continue enjoying the latest features and improvements.',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                actionsAlignment: MainAxisAlignment.spaceEvenly,
-                actions: [
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.open_in_new, size: 18),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    label: const Text("Update Now"),
-                    onPressed: () async {
-                      final playStoreUrl = Uri.parse(
-                          'https://play.google.com/store/apps/details?id=com.bepositive.beposoft');
-                      if (await canLaunchUrl(playStoreUrl)) {
-                        await launchUrl(playStoreUrl,
-                            mode: LaunchMode.externalApplication);
-                      }
-                      Navigator.of(context)
-                          .pop(false); // Prevent app from loading
-                    },
-                  ),
-                  TextButton(
-                    child: const Text("Maybe Later"),
-                    onPressed: () =>
-                        Navigator.of(context).pop(true), // Continue with app
-                  ),
-                ],
-              ),
+        if (response.statusCode == 200) {
+          final content = response.body;
+          final versionRegex = RegExp(r'\[\[\["([0-9.]+)"\]\]');
+          final match = versionRegex.firstMatch(content);
+
+          if (match != null) {
+            storeVersion = match.group(1);
+            storeUrl = Uri.parse(
+              'https://play.google.com/store/apps/details?id=com.bepositive.beposoft',
             );
-            return result == true;
+          }
+        }
+      } else if (Platform.isIOS) {
+        final response = await http.get(
+          Uri.parse('https://itunes.apple.com/lookup?id=6748010646&country=in'),
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+
+          if (data['resultCount'] != null &&
+              data['resultCount'] > 0 &&
+              data['results'] != null &&
+              data['results'] is List &&
+              data['results'].isNotEmpty) {
+            final appData = data['results'][0];
+            storeVersion = appData['version']?.toString();
+            storeUrl = Uri.parse(
+              'https://apps.apple.com/in/app/beposoft/id6748010646',
+            );
           }
         }
       }
+
+      if (storeVersion != null &&
+          _isUpdateAvailable(currentVersion, storeVersion)) {
+        final result = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            titlePadding: const EdgeInsets.only(top: 20),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            title: Column(
+              children: [
+                Icon(
+                  Icons.system_update,
+                  size: 48,
+                  color: Colors.green,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Update Available',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              'A new version ($storeVersion) is available.\n\nYou are using $currentVersion.\n\nPlease update the app to continue enjoying the latest features and improvements.',
+              style: const TextStyle(fontSize: 16),
+            ),
+            actionsAlignment: MainAxisAlignment.spaceEvenly,
+            actions: [
+              ElevatedButton.icon(
+                icon: const Icon(Icons.open_in_new, size: 18),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                label: const Text("Update Now"),
+                onPressed: () async {
+                  if (storeUrl != null && await canLaunchUrl(storeUrl)) {
+                    await launchUrl(
+                      storeUrl,
+                      mode: LaunchMode.externalApplication,
+                    );
+                  }
+                  Navigator.of(context).pop(false);
+                },
+              ),
+              TextButton(
+                child: const Text("Maybe Later"),
+                onPressed: () => Navigator.of(context).pop(true),
+              ),
+            ],
+          ),
+        );
+
+        return result == true;
+      }
     } catch (e) {
-      // Optionally log error
+      // Optional: print(e);
     }
 
-    return true; // Proceed normally if no update
+    return true;
   }
-
   Future<void> getcustomer() async {
     try {
       // final dep = await getdepFromPrefs();
@@ -569,12 +633,24 @@ class _bdo_dashbordState extends State<bdo_dashbord> {
               ),
               // ListTile(
               //   leading: Icon(Icons.dashboard),
-              //   title: Text('Add Attendence'),
+              //   title: Text('Call Report'),
               //   onTap: () {
               //     Navigator.push(context,
-              //         MaterialPageRoute(builder: (context) => AttendanceAddPage()));
+              //         MaterialPageRoute(builder: (context) => CallLog()));
               //   },
               // ),
+    ListTile(
+                  leading: Icon(Icons.person),
+                  title: Text('Add Attendance'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => StaffSelfAttendanceScreen()));
+                    // Navigate to the Settings page or perform any other action
+                  },
+                ),
+
 
               Divider(),
               _buildDropdownTile(context, 'Customers', [

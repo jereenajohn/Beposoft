@@ -141,16 +141,16 @@ else if(dep=="BDM" ){
               MaterialPageRoute(builder: (context) => bdm_dashbord()), // Replace AnotherPage with your target page
             );
 }
+else if(dep=="HR" ){
+   Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => HrDashboard()), // Replace AnotherPage with your target page
+            );
+}
 else if(dep=="warehouse" ){
    Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => WarehouseDashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="CSO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => cso_dashboard()), // Replace AnotherPage with your target page
             );
 }
 else if(dep=="CEO" ){
@@ -159,18 +159,19 @@ else if(dep=="CEO" ){
               MaterialPageRoute(builder: (context) => ceo_dashboard()), // Replace AnotherPage with your target page
             );
 }
+else if(dep=="CSO" ){
+   Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => cso_dashboard()), // Replace AnotherPage with your target page
+            );
+}
 else if(dep=="COO" ){
    Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => ceo_dashboard()), // Replace AnotherPage with your target page
             );
 }
-else if(dep=="HR" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => HrDashboard()), // Replace AnotherPage with your target page
-            );
-}
+
 
 else if(dep=="Warehouse Admin" ){
    Navigator.pushReplacement(
@@ -261,6 +262,31 @@ else if(dep=="Warehouse Admin" ){
     return count;
   }
 
+String getApprovalLabel(String status) {
+  switch (status) {
+    case 'approved':
+      return 'Approved';
+    case 'rejected':
+      return 'Rejected';
+    case 'pending':
+      return 'Pending';
+    default:
+      return status;
+  }
+}
+
+Color getApprovalColor(String status) {
+  switch (status) {
+    case 'approved':
+      return const Color(0xff16a34a);
+    case 'rejected':
+      return const Color(0xffdc2626);
+    case 'pending':
+      return const Color(0xfff59e0b);
+    default:
+      return const Color(0xff64748b);
+  }
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -271,8 +297,8 @@ else if(dep=="Warehouse Admin" ){
     tooltip: 'Back',
     icon: const Icon(Icons.arrow_back_ios_new_rounded),
     onPressed: _navigateBack,
-  ),
-  elevation: 0,
+  ),  
+  elevation: 0, 
   backgroundColor: Colors.white,
   foregroundColor: Colors.black,
   title: const Text(
@@ -605,6 +631,7 @@ else if(dep=="Warehouse Admin" ){
 
   Widget _buildMemberAttendanceTile(Map<String, dynamic> attendance) {
     final status = attendance['status'] ?? '';
+    final approvalStatus = attendance['approval_status'] ?? 'pending';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -650,21 +677,45 @@ else if(dep=="Warehouse Admin" ){
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-            decoration: BoxDecoration(
-              color: getStatusColor(status).withOpacity(0.10),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              getStatusLabel(status),
-              style: TextStyle(
-                color: getStatusColor(status),
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
+         Column(
+  crossAxisAlignment: CrossAxisAlignment.end,
+  children: [
+    Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: getStatusColor(status).withOpacity(0.10),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        getStatusLabel(status),
+        style: TextStyle(
+          color: getStatusColor(status),
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    ),
+    const SizedBox(height: 6),
+    Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: getApprovalColor(approvalStatus).withOpacity(0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: getApprovalColor(approvalStatus).withOpacity(0.35),
+        ),
+      ),
+      child: Text(
+        getApprovalLabel(approvalStatus),
+        style: TextStyle(
+          color: getApprovalColor(approvalStatus),
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    ),
+  ],
+),
         ],
       ),
     );

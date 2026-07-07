@@ -7,6 +7,7 @@ import 'package:beposoft/Sales%20Directors/sd_all_dsr_reportpage.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_EMI.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_category.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_purpose_of_payment.dart';
+import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_warehouse.dart';
 import 'package:beposoft/pages/ACCOUNTS/assetmanagement.dart';
@@ -1524,6 +1525,19 @@ class _cso_dashboardState extends State<cso_dashboard> {
               ],
             ),
           ),
+              ListTile(
+                  leading: Icon(Icons.person),
+                  title: Text('Add Attendance'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => StaffSelfAttendanceScreen()));
+                    // Navigate to the Settings page or perform any other action
+                  },
+                ),
+
+
           _buildDropdownTile(context, 'Customers', [
             'Add Customer',
             'Customers',
@@ -1544,6 +1558,7 @@ class _cso_dashboardState extends State<cso_dashboard> {
           _buildDropdownTile(context, 'BDO DSR', [
             'Add Team',
             'Add Team Members',
+            'View All Team Members',
           ]),
           // if (isManager)
             ListTile(
@@ -1561,7 +1576,7 @@ class _cso_dashboardState extends State<cso_dashboard> {
           // if (isManager)
             ListTile(
               leading: const Icon(Icons.fact_check_outlined),
-              title: const Text('Add Attendance'),
+              title: const Text('Add & Approve Attendance'),
               onTap: () {
                 Navigator.push(
                   context,
