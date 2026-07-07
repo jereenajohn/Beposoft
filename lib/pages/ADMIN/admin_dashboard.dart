@@ -12,6 +12,7 @@ import 'package:beposoft/pages/ACCOUNTS/add_currency.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_daily_sales_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_district.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_purpose_of_payment.dart';
+import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_supplier.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_team.dart';
@@ -122,7 +123,7 @@ class _admin_dashboardState extends State<admin_dashboard> {
 
         setState(() {
           isManager = parsed['data']['is_manager'] ?? false;
-        }); 
+        });
 
         debugPrint("IS MANAGER : $isManager");
       }
@@ -720,6 +721,85 @@ class _admin_dashboardState extends State<admin_dashboard> {
                     // Navigate to the Settings page or perform any other action
                   },
                 ),
+                ListTile(
+                  leading: Icon(Icons.person),
+                  title: Text('Add Attendance'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => StaffSelfAttendanceScreen()));
+                    // Navigate to the Settings page or perform any other action
+                  },
+                ),
+
+                if (isManager)
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Add Attendance Dept'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => AttendanceDepartmentPage(
+                                    baseUrl: api,
+                                  )));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
+
+                if (isManager)
+                  ListTile(
+                    leading: const Icon(Icons.group_add),
+                    title: const Text('Add Team Staff'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              StaffAttendanceTeamMemberScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                if (isManager)
+                  ListTile(
+                    leading: const Icon(Icons.person),
+                    title: const Text('Add & Approve Attendance'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              const StaffMarkAttendanceScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                if (isManager)
+                  ListTile(
+                    leading: const Icon(Icons.fact_check_outlined),
+                    title: const Text('Approve Leave Request'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              const ManagerLeaveRequestsPage(),
+                        ),
+                      );
+                    },
+                  ),
+
+                ListTile(
+                  title: Text('Employee Leave Form'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => EmployeeLeaveFormPage()));
+                  },
+                ),
 
                 _buildDropdownTile(context, 'Customers', [
                   'Add Customer',
@@ -767,6 +847,7 @@ class _admin_dashboardState extends State<admin_dashboard> {
                   'Orders List',
                   'Invoice Created',
                   'Invoice Approved',
+                  'Pre Booked',
                   'Waiting For Confirmation',
                   'To Print',
                   'Packing Under Progress',
@@ -800,73 +881,6 @@ class _admin_dashboardState extends State<admin_dashboard> {
 
                 _buildDropdownTile(context, 'Daily Sales Reports',
                     ['Add Team', 'Team wise Report']),
-
-                       if (isManager)
-                  ListTile(
-                    title: Text('Add Attendance Department'),
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => AttendanceDepartmentPage( baseUrl: api,)));
-                      // Navigate to the Settings page or perform any other action
-                    },
-                  ),
-             
-                if (isManager)
-                  ListTile(
-                    leading: const Icon(Icons.group_add),
-                    title: const Text('Add Team Staff'),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              StaffAttendanceTeamMemberScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                if (isManager)
-                  ListTile(
-                    leading: const Icon(Icons.fact_check_outlined),
-                    title: const Text('Add Attendance'),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              const StaffMarkAttendanceScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                if (isManager)
-                  ListTile(
-                    leading: const Icon(Icons.fact_check_outlined),
-                    title: const Text('Approve Leave Request'),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              const ManagerLeaveRequestsPage(),
-                        ),
-                      );
-                    },
-                  ),
-
-                     ListTile(
-                  title: Text('Employee Leave Form'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => EmployeeLeaveFormPage()));
-                  },
-                ),
-
-               
 
                 ListTile(
                   leading: Icon(Icons.person),
@@ -1121,7 +1135,6 @@ class _admin_dashboardState extends State<admin_dashboard> {
                   },
                 ),
 
-                
                 ListTile(
                   leading: Icon(Icons.person),
                   title: Text('Supervisors'),
@@ -1204,10 +1217,7 @@ class _admin_dashboardState extends State<admin_dashboard> {
                     // Navigate to the Settings page or perform any other action
                   },
                 ),
-                
 
-               
-                
                 //  ListTile(
                 //   leading: Icon(Icons.person),
                 //   title: Text('Delivery Notes'),
@@ -1292,8 +1302,7 @@ class _admin_dashboardState extends State<admin_dashboard> {
                   'Damaged Stock',
                   'Finance Report',
                   'Actual Delivery Report',
-                                      'Order Comparison Report',
-
+                  'Order Comparison Report',
                 ]),
 
                 _buildDropdownTile(context, 'Staff', [

@@ -125,6 +125,7 @@ class _OrderReviewState extends State<OrderReview> {
   List<String> statuses2 = [
     'Invoice Created',
     'Invoice Approved',
+    'Pre Booked',
     'Waiting For Confirmation',
     'To Print',
     'Packing under progress',
@@ -207,85 +208,114 @@ class _OrderReviewState extends State<OrderReview> {
     'Invoice Rejected',
   ];
 
-  final Map<String, List<String>> statusFlow = {
-    'Invoice Created': [
-      'Invoice Created',
-      'Invoice Approved',
-      'Invoice Rejected',
-    ],
-    'Invoice Approved': [
-      'Invoice Approved',
-      'Waiting For Confirmation',
-      'Invoice Rejected',
-    ],
-    'Waiting For Confirmation': [
-      'Waiting For Confirmation',
-      'To Print',
-      'Invoice Rejected',
-    ],
-    'To Print': [
-      'To Print',
-      'Packing under progress',
-      'Invoice Rejected',
-    ],
-    'Packing under progress': [
-      'Packing under progress',
-      'Packed',
-      'Invoice Rejected',
-    ],
-    'Packed': [
-      'Packed',
-      'Ready to ship',
-      'Invoice Rejected',
-    ],
-    'Ready to ship': [
-      'Ready to ship',
-      'Shipped',
-      'Invoice Rejected',
-    ],
-    'Shipped': [
-      'Shipped',
-    ],
-    'Invoice Rejected': [
-      'Invoice Rejected',
-    ],
-  };
+ final Map<String, List<String>> statusFlow = {
+  'Invoice Created': [
+    'Invoice Created',
+    'Invoice Approved',
+    'Invoice Rejected',
+  ],
+  'Invoice Approved': [
+    'Invoice Approved',
+    'Pre Booked',
+    'Waiting For Confirmation',
+    'Invoice Rejected',
+  ],
+  'Pre Booked': [
+    'Pre Booked',
+    'Waiting For Confirmation',
+    'Invoice Rejected',
+  ],
+  'Waiting For Confirmation': [
+    'Waiting For Confirmation',
+    'To Print',
+    'Invoice Rejected',
+  ],
+  'To Print': [
+    'To Print',
+    'Packing under progress',
+    'Invoice Rejected',
+  ],
+  'Packing under progress': [
+    'Packing under progress',
+    'Packed',
+    'Invoice Rejected',
+  ],
+  'Packed': [
+    'Packed',
+    'Ready to ship',
+    'Invoice Rejected',
+  ],
+  'Ready to ship': [
+    'Ready to ship',
+    'Shipped',
+    'Invoice Rejected',
+  ],
+  'Shipped': [
+    'Shipped',
+  ],
+  'Invoice Rejected': [
+    'Invoice Rejected',
+  ],
+};
 
-  List<String> getFilteredStatuses() {
-    // 🔥 CEO / COO → ALL statuses
-    if (isTopManagement()) {
-      return statuses2;
-    }
-
-    // 🔹 ADMIN / ACCOUNTS
-    if (isAdminOrAccounts()) {
-      if (currentOrderStatus == null) return [];
-
-      final currentIndex = statuses2.indexOf(currentOrderStatus!);
-      final List<String> result = [];
-
-      // Always add current (before submit only)
-      if (!statusSubmitted) {
-        result.add(currentOrderStatus!);
-      }
-
-      // Add next status if exists
-      if (currentIndex != -1 && currentIndex + 1 < statuses2.length) {
-        result.add(statuses2[currentIndex + 1]);
-      }
-
-      // 🔥 ALWAYS add Invoice Rejected (once)
-      if (!result.contains('Invoice Rejected')) {
-        result.add('Invoice Rejected');
-      }
-
-      return result;
-    }
-
-    // 🔹 Other departments → unchanged
-    return statusFlow[selectedStatus] ?? [selectedStatus ?? statuses2.first];
+List<String> getFilteredStatuses() {
+  if (isTopManagement()) {
+    return statuses2;
   }
 
+  final dept = department?.toString().trim();
+
+  // ✅ BDM old flow: Invoice Approved -> Waiting For Confirmation
+if (dept == "BDM" || dept == "SD" || dept =="CSO") {
+      final baseStatus = (selectedStatus ?? currentOrderStatus)?.trim();
+
+    if (baseStatus == null || baseStatus.isEmpty) return [];
+
+    return statusFlow[baseStatus]
+            ?.where((status) => status != 'Pre Booked')
+            .toSet()
+            .toList() ??
+        [baseStatus];
+  }
+
+  // ✅ ADMIN / Accounts new flow with Pre Booked
+  if (isAdminOrAccounts()) {
+    final baseStatus = (selectedStatus ?? currentOrderStatus)?.trim();
+
+    if (baseStatus == null || baseStatus.isEmpty) return [];
+
+    final List<String> result = [];
+
+    if (!statusSubmitted) {
+      result.add(baseStatus);
+    }
+
+    if (baseStatus == 'Invoice Approved') {
+      result.add('Pre Booked');
+      result.add('Waiting For Confirmation');
+    } else if (baseStatus == 'Pre Booked') {
+      result.add('Waiting For Confirmation');
+    } else {
+      final currentIndex = statuses2.indexOf(baseStatus);
+
+      if (currentIndex != -1 && currentIndex + 1 < statuses2.length) {
+        final nextStatus = statuses2[currentIndex + 1];
+
+        if (nextStatus != 'Invoice Rejected') {
+          result.add(nextStatus);
+        }
+      }
+    }
+
+    if (baseStatus != 'Shipped' && !result.contains('Invoice Rejected')) {
+      result.add('Invoice Rejected');
+    }
+
+    return result.toSet().toList();
+  }
+
+  return statusFlow[selectedStatus] ?? [selectedStatus ?? statuses2.first];
+}
   var customerledgertotal;
   var customerledgerreceived;
   var difference;

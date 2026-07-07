@@ -10,6 +10,7 @@ import 'package:beposoft/pages/ACCOUNTS/add_country_code.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_currency.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_daily_sales_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_purpose_of_payment.dart';
+import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_supplier.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_team.dart';
@@ -107,7 +108,7 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   List<Map<String, dynamic>> Finance = [];
   List<dynamic> internalTransfers = [];
   Map<String, dynamic> salesReturnGrandTotal = {};
-bool salesReturnLoading = false;
+  bool salesReturnLoading = false;
   double todayCredit = 0.0;
   double todayDebit = 0.0;
   double openingBalance = 0.0;
@@ -127,7 +128,8 @@ bool salesReturnLoading = false;
   bool bdmOverallLoading = false;
   String selectedBdmReportDate = "";
   bool dbrLoading = true;
-int waitingForConfirmationCount = 0;
+  int waitingForConfirmationCount = 0;
+
   bool isBankReportLoading = true;
   String monthlyExpenseFrom = "";
   String monthlyExpenseTo = "";
@@ -273,10 +275,8 @@ int waitingForConfirmationCount = 0;
     fetchGrvSummary();
     fetchOrderData();
     fetchshippedorders();
-
     getexpenselist();
     getFinancialReport();
-    fetchWaitingForConfirmationCount();
     getFinance_without_transfer();
     getTodayODReportTotals();
     getCategoryWiseProducts();
@@ -286,6 +286,7 @@ int waitingForConfirmationCount = 0;
     fetchBeposoftSummary();
     fetchDashboardInventorySummary();
     fetchSalesTeamCdTotalsForCeo();
+    fetchWaitingForConfirmationCount();
 
     //   fetchInternalTransfersData(
     // getdgnvd);
@@ -479,6 +480,7 @@ int waitingForConfirmationCount = 0;
       Future(() => fetchBdmOverallFamilyReport()),
       Future(() => getstaff()),
       Future(() => fetchGrvSummary()),
+      Future(() => fetchWaitingForConfirmationCount()),
       Future(() => fetchOrdersSummaryFamilyData()),
       Future(() => getdgm()),
       Future(() => fetchFamilySummaryTeamCards()),
@@ -487,7 +489,6 @@ int waitingForConfirmationCount = 0;
       Future(() => getFilteredCategoryWiseProducts()),
       Future(() => fetchBeposoftSummary()),
       Future(() => fetchDashboardInventorySummary()),
-      Future(() => fetchWaitingForConfirmationCount()),
       Future(() => fetchSalesTeamCdTotalsForCeo()),
       Future(() => fetchBdoStatewiseReport(
             startDate: DateTime(now.year, now.month, now.day),
@@ -528,53 +529,54 @@ int waitingForConfirmationCount = 0;
     }
   }
 
-Future<void> fetchGrvSummary() async {
-  try {
-    final token = await getTokenFromPrefs();
+  Future<void> fetchGrvSummary() async {
+    try {
+      final token = await getTokenFromPrefs();
 
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-    final uri = Uri.parse('$api/api/grv/family/payment/summary/').replace(
-      queryParameters: {
-        'start_date': today,
-        'end_date': today,
-      },
-    );
+      final uri = Uri.parse('$api/api/grv/family/payment/summary/').replace(
+        queryParameters: {
+          'start_date': today,
+          'end_date': today,
+        },
+      );
 
-    final response = await http.get(
-      uri,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-    if (response.statusCode == 200) {
-      final decoded = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      setState(() {
-        salesReturnGrandTotal = Map<String, dynamic>.from(
-          decoded['grand_total'] ?? {},
-        );
-        salesReturnLoading = false;
-      });
-    } else {
+        setState(() {
+          salesReturnGrandTotal = Map<String, dynamic>.from(
+            decoded['grand_total'] ?? {},
+          );
+          salesReturnLoading = false;
+        });
+      } else {
+        if (!mounted) return;
+        setState(() {
+          salesReturnGrandTotal = {};
+          salesReturnLoading = false;
+        });
+      }
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         salesReturnGrandTotal = {};
         salesReturnLoading = false;
       });
     }
-  } catch (e) {
-    if (!mounted) return;
-    setState(() {
-      salesReturnGrandTotal = {};
-      salesReturnLoading = false;
-    });
   }
-}
+
   String _formatDashboardAmount(dynamic value) {
     final double amount = _asDouble(value);
     final double absAmount = amount.abs();
@@ -2536,7 +2538,6 @@ Future<void> fetchGrvSummary() async {
     final totalStaffs = _asInt(staffSummary['total_staffs']);
     final activeStaffs = _asInt(staffSummary['active_staffs']);
     final deactiveStaffs = _asInt(staffSummary['deactive_staffs']);
-    
 
     final totalFamilyPresentCount = familySummaryTeamCards.fold<int>(
       0,
@@ -2550,14 +2551,14 @@ Future<void> fetchGrvSummary() async {
         ? salesTeamCdTeamTotals
         : salesTeamCdTeamTotals.take(1).toList();
 
-        final salesReturnPaid = _asMap(salesReturnGrandTotal['paid']);
-final salesReturnCod = _asMap(salesReturnGrandTotal['COD']);
+    final salesReturnPaid = _asMap(salesReturnGrandTotal['paid']);
+    final salesReturnCod = _asMap(salesReturnGrandTotal['COD']);
 
-final todayCodReturnCount = _asInt(salesReturnCod['grv_count']);
-final todayCodReturnAmount = _asDouble(salesReturnCod['order_amount']);
+    final todayCodReturnCount = _asInt(salesReturnCod['grv_count']);
+    final todayCodReturnAmount = _asDouble(salesReturnCod['order_amount']);
 
-final todayCashReturnCount = _asInt(salesReturnPaid['grv_count']);
-final todayCashReturnAmount = _asDouble(salesReturnPaid['order_amount']);
+    final todayCashReturnCount = _asInt(salesReturnPaid['grv_count']);
+    final todayCashReturnAmount = _asDouble(salesReturnPaid['order_amount']);
 
     // final withInternalTransfer = _asMap(todayData['with_internal_transfer']);
     // final financeOpeningBalance =
@@ -2629,6 +2630,17 @@ final todayCashReturnAmount = _asDouble(salesReturnPaid['order_amount']);
     final dgmWeightFieldKg =
         _asDouble(dgmCurrentMonthSummary['total_weight_field_kg']);
 
+        final paymentSummary = _asMap(productsData?['payment_status_summary']);
+
+final todayPayment = _asMap(paymentSummary['today']);
+final monthPayment = _asMap(paymentSummary['month']);
+
+final todayPaid = _asMap(todayPayment['paid']);
+final todayCod = _asMap(todayPayment['COD']);
+
+final monthPaid = _asMap(monthPayment['paid']);
+final monthCod = _asMap(monthPayment['COD']);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
       child: GridView.count(
@@ -2639,23 +2651,23 @@ final todayCashReturnAmount = _asDouble(salesReturnPaid['order_amount']);
         mainAxisSpacing: 10,
         childAspectRatio: 0.72,
         children: [
-          _buildDashboardCard(
-            title: "Sales",
-            value: _formatDashboardAmount(
-              productsData?['month_total_amount'],
-            ),
-            lines: [
-              "Today's Invoices: ${_asInt(productsData?['today_count'])}",
-              "Volume: ${_formatDashboardAmount(productsData?['today_total_amount'])}",
-              "Total Invoices: ${_asInt(productsData?['month_count'])}",
-            ],
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => SalesReportExcel()),
-              );
-            },
-          ),
+_buildDashboardCard(
+  title: "Sales",
+value: "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}",
+  lines: [
+    "MT. Invoices: ${_asInt(productsData?['month_count'])}",
+    "T Paid: ${_asInt(todayPaid['count'])} | ${_formatDashboardAmount(todayPaid['total'])}",
+    "T. COD: ${_asInt(todayCod['count'])} | ${_formatDashboardAmount(todayCod['total'])}",
+    "M. Paid: ${_asInt(monthPaid['count'])} | ${_formatDashboardAmount(monthPaid['total'])}",
+    "M. COD: ${_asInt(monthCod['count'])} | ${_formatDashboardAmount(monthCod['total'])}",
+  ],
+  onTap: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => SalesReportExcel()),
+    );
+  },
+),
           _buildDashboardCard(
             title: "Finance",
             valueLabel: "TCB",
@@ -2778,7 +2790,7 @@ final todayCashReturnAmount = _asDouble(salesReturnPaid['order_amount']);
               );
             },
           ),
-         _buildDashboardCard(
+          _buildDashboardCard(
             title: "Attendance",
             value: "",
             lines: const [],
@@ -6335,7 +6347,18 @@ final todayCashReturnAmount = _asDouble(salesReturnPaid['order_amount']);
                   //                 Navigator.push(context,
                   //                     MaterialPageRoute(builder: (context) => AttendanceAddPage()));
                   //               },
-                  //             ),
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text('Add Attendance'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  StaffSelfAttendanceScreen()));
+                      // Navigate to the Settings page or perform any other action
+                    },
+                  ),
                   _buildDropdownTile(context, 'Customers', [
                     'Add Customer',
                     'Customers',
@@ -6378,6 +6401,7 @@ final todayCashReturnAmount = _asDouble(salesReturnPaid['order_amount']);
                     'Orders List',
                     'Invoice Created',
                     'Invoice Approved',
+                    'Pre Booked',
                     'Waiting For Confirmation',
                     'To Print',
                     'Packing Under Progress',
@@ -6405,7 +6429,7 @@ final todayCashReturnAmount = _asDouble(salesReturnPaid['order_amount']);
                       ['Add Transfer', 'Transfer List']),
 
                   _buildDropdownTile(context, 'Daily Sales Reports',
-                      ['Add Team', 'Team wise Report']),
+                      ['Add Team', 'Team wise Report', 'View All Team Members']),
 
                   _buildDropdownTile(context, 'Attendance', [
                     'Add Department & Managers',
@@ -7255,7 +7279,7 @@ final todayCashReturnAmount = _asDouble(salesReturnPaid['order_amount']);
                                       const Color.fromARGB(255, 255, 255, 255),
                                   size: 28),
                               SizedBox(width: 7),
-                                Text(
+                              Text(
                                 "$waitingForConfirmationCount - Waiting for Confirmation",
                                 style: const TextStyle(
                                   fontSize: 15,

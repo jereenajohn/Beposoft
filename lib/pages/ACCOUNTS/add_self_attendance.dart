@@ -1,32 +1,29 @@
 import 'dart:convert';
 import 'package:beposoft/pages/api.dart';
-import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-class StaffMarkAttendanceScreen extends StatefulWidget {
-  const StaffMarkAttendanceScreen({super.key});
+class StaffSelfAttendanceScreen extends StatefulWidget {
+  const StaffSelfAttendanceScreen({super.key});
 
   @override
-  State<StaffMarkAttendanceScreen> createState() =>
-      _StaffMarkAttendanceScreenState();
+  State<StaffSelfAttendanceScreen> createState() =>
+      _StaffSelfAttendanceScreenState();
 }
 
-class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
-  List<Map<String, dynamic>> teamMembers = [];
+class _StaffSelfAttendanceScreenState extends State<StaffSelfAttendanceScreen> {
   List<Map<String, dynamic>> selectedDateAttendance = [];
 
-  Map<String, dynamic>? selectedMember;
+  String? currentStaffId;
+  String currentStaffName = '';
+  String currentTeamName = '';
+  String currentTeamLeaderName = '';
 
   String selectedStatus = 'present';
-
   int? editingAttendanceId;
-  int? loggedInUserId;
-  bool isManager = false;
 
   bool isLoading = false;
-  bool isMemberLoading = false;
   bool isSaving = false;
   bool isProfileLoading = false;
 
@@ -40,7 +37,7 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
   String get formattedAttendanceViewDate =>
       attendanceViewDate.toIso8601String().split('T').first;
 
-  Future<String?> gettokenFromPrefs() async {
+  Future<String?> getTokenFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('token');
   }
@@ -48,7 +45,6 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
   @override
   void initState() {
     super.initState();
-    attendanceTimeController.clear();
     refreshAll();
   }
 
@@ -60,15 +56,14 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
 
   Future<void> refreshAll() async {
     await getProfile();
-    await getMembersForDropdown();
-    await getMyTeamAttendance();
+    await getMyAttendance();
   }
 
   Future<void> getProfile() async {
     try {
       setState(() => isProfileLoading = true);
 
-      final token = await gettokenFromPrefs();
+      final token = await getTokenFromPrefs();
 
       final response = await http.get(
         Uri.parse('$api/api/profile/'),
@@ -85,13 +80,26 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
         final parsed = jsonDecode(response.body);
         final data = parsed['data'] ?? {};
 
+        final rawStaffId = data['id'];
+
+        if (rawStaffId == null || int.tryParse(rawStaffId.toString()) == null) {
+          showMsg("Valid staff id not found in profile");
+          return;
+        }
+
         setState(() {
-          loggedInUserId = int.tryParse('${data['id']}');
-          isManager = data['is_manager'] ?? false;
+          currentStaffId = rawStaffId.toString();
+
+          currentStaffName = data['name']?.toString() ??
+              data['staff_name']?.toString() ??
+              data['username']?.toString() ??
+              '';
+
+          currentTeamName = data['team_name']?.toString() ?? '';
+          currentTeamLeaderName = data['team_leader_name']?.toString() ?? '';
         });
 
-        debugPrint("LOGGED USER ID: $loggedInUserId");
-        debugPrint("IS MANAGER: $isManager");
+        debugPrint("CURRENT STAFF ID: $currentStaffId");
       } else {
         showMsg("Failed to fetch profile");
       }
@@ -105,121 +113,65 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
     }
   }
 
-  Future<void> getMembersForDropdown() async {
+  Future<void> getMyAttendance() async {
     try {
-      setState(() => isMemberLoading = true);
+      setState(() => isLoading = true);
 
-      final token = await gettokenFromPrefs();
+      final token = await getTokenFromPrefs();
 
       final response = await http.get(
-        Uri.parse('$api/api/staff/attendance/my/team/details/'),
+        Uri.parse('$api/api/staff/attendance/my/details/'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
 
+      debugPrint("MY ATTENDANCE STATUS: ${response.statusCode}");
+      debugPrint("MY ATTENDANCE RESPONSE: ${response.body}");
+
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
+
         final List data = List.from(parsed['data'] ?? []);
 
-        final List<Map<String, dynamic>> membersList = [];
+        final List<Map<String, dynamic>> attendanceList = [];
 
-        for (var team in data) {
-          final List members = List.from(team['members'] ?? []);
-
-          for (var member in members) {
-            membersList.add({
-              'id': member['id'],
-              'member': member['member'],
-              'member_name': member['member_name'] ?? '',
-              'team_id': team['team_id'],
-              'team_name': team['team_name'] ?? '',
-              'team_leader_name': team['team_leader_name'] ?? '',
+        for (final attendance in data) {
+          if (attendance['attendance_date'] == formattedAttendanceViewDate) {
+            attendanceList.add({
+              'id': attendance['id'],
+              'staff': attendance['staff'],
+              'staff_name': attendance['staff_name'] ?? '',
+              'attendance_date': attendance['attendance_date'],
+              'attendance_time': attendance['attendance_time'],
+              'status': attendance['status'],
+              'approval_status': attendance['approval_status'],
+              'submitted_by': attendance['submitted_by'],
+              'submitted_by_name': attendance['submitted_by_name'],
+              'approved_by': attendance['approved_by'],
+              'approved_by_name': attendance['approved_by_name'],
+              'manager_note': attendance['manager_note'],
+              'team_id': null,
+              'team_name': '',
+              'team_leader_name': '',
             });
           }
         }
 
         setState(() {
-          teamMembers = membersList;
-        });
+          selectedDateAttendance = attendanceList;
 
-        debugPrint("DROPDOWN MEMBERS COUNT: ${teamMembers.length}");
-      }
-    } catch (e) {
-      debugPrint("Fetch members dropdown error: $e");
-      showMsg("Failed to fetch members");
-    } finally {
-      if (mounted) {
-        setState(() => isMemberLoading = false);
-      }
-    }
-  }
-
-  Future<void> getMyTeamAttendance() async {
-    try {
-      setState(() => isLoading = true);
-
-      final token = await gettokenFromPrefs();
-
-      final response = await http.get(
-        Uri.parse('$api/api/staff/attendance/my/team/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      debugPrint("TEAM ATTENDANCE STATUS: ${response.statusCode}");
-      debugPrint("TEAM ATTENDANCE RESPONSE: ${response.body}");
-
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-        final results = parsed['results'];
-        final List data =
-            results != null ? List.from(results['data'] ?? []) : [];
-
-        final List<Map<String, dynamic>> dateAttendanceList = [];
-
-        for (var team in data) {
-          final List dateWiseAttendance =
-              List.from(team['date_wise_attendance'] ?? []);
-
-          for (var dateItem in dateWiseAttendance) {
-            if (dateItem['attendance_date'] == formattedAttendanceViewDate) {
-              final List attendanceList =
-                  List.from(dateItem['attendance'] ?? []);
-
-              for (var attendance in attendanceList) {
-                dateAttendanceList.add({
-                  'id': attendance['id'],
-                  'staff': attendance['staff'],
-                  'staff_name': attendance['staff_name'] ?? '',
-                  'attendance_date': attendance['attendance_date'],
-                  'status': attendance['status'],
-                  'team_id': team['team_id'],
-                  'team_name': team['team_name'] ?? '',
-                  'team_leader_name': team['team_leader_name'] ?? '',
-                  'attendance_time': attendance['attendance_time'],
-                  'approval_status':
-                      attendance['approval_status'] ?? 'pending',
-                  'approved_by': attendance['approved_by'],
-                  'approved_by_name': attendance['approved_by_name'],
-                  'approved_at': attendance['approved_at'],
-                });
-              }
-            }
+          if (selectedDateAttendance.isNotEmpty) {
+            currentStaffName =
+                selectedDateAttendance.first['staff_name']?.toString() ?? '';
           }
-        }
-
-        setState(() {
-          selectedDateAttendance = dateAttendanceList;
         });
       } else {
         showMsg("Failed to fetch attendance");
       }
     } catch (e) {
-      debugPrint("Fetch team attendance error: $e");
+      debugPrint("Fetch self attendance error: $e");
       showMsg("Failed to fetch attendance");
     } finally {
       if (mounted) {
@@ -229,8 +181,8 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
   }
 
   Future<void> markAttendance() async {
-    if (selectedMember == null) {
-      showMsg("Select member");
+    if (currentStaffId == null) {
+      showMsg("Profile staff id not found");
       return;
     }
 
@@ -241,24 +193,22 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
 
     final alreadyMarked = selectedDateAttendance.any(
       (attendance) =>
-          attendance['staff'] == selectedMember!['member'] &&
+          attendance['staff'].toString() == currentStaffId &&
           attendance['attendance_date'] == todayDate,
     );
 
     if (alreadyMarked) {
-      showMsg(
-        "${selectedMember!['member_name']} attendance is already marked for today",
-      );
+      showMsg("Your attendance is already marked for today");
       return;
     }
 
     try {
       setState(() => isSaving = true);
 
-      final token = await gettokenFromPrefs();
+      final token = await getTokenFromPrefs();
 
       final body = {
-        "staff": selectedMember!['member'],
+        "staff": currentStaffId,
         "attendance_date": todayDate,
         "attendance_time": attendanceTimeController.text.trim(),
         "status": selectedStatus,
@@ -280,21 +230,20 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
         showMsg("Attendance marked successfully");
 
         setState(() {
-          selectedMember = null;
           selectedStatus = 'present';
           editingAttendanceId = null;
           attendanceViewDate = DateTime.now();
           attendanceTimeController.clear();
         });
 
-        await refreshAll();
+        await getMyAttendance();
       } else if (response.statusCode == 400) {
         final parsed = jsonDecode(response.body);
 
         showMsg(
           parsed['message']?.toString() ??
               parsed['errors']?.toString() ??
-              "Attendance already marked for this member",
+              "Attendance already marked",
         );
       } else {
         showMsg("Failed: ${response.body}");
@@ -315,8 +264,8 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
       return;
     }
 
-    if (selectedMember == null) {
-      showMsg("Select member");
+    if (currentStaffId == null) {
+      showMsg("Profile staff id not found");
       return;
     }
 
@@ -328,10 +277,10 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
     try {
       setState(() => isSaving = true);
 
-      final token = await gettokenFromPrefs();
+      final token = await getTokenFromPrefs();
 
       final body = {
-        "staff": selectedMember!['member'],
+        "staff": currentStaffId,
         "attendance_date": todayDate,
         "attendance_time": attendanceTimeController.text.trim(),
         "status": selectedStatus,
@@ -353,77 +302,19 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
         showMsg("Attendance updated successfully");
 
         setState(() {
-          selectedMember = null;
           selectedStatus = 'present';
           editingAttendanceId = null;
           attendanceViewDate = DateTime.now();
           attendanceTimeController.clear();
         });
 
-        await refreshAll();
+        await getMyAttendance();
       } else {
         showMsg("Failed: ${response.body}");
       }
     } catch (e) {
       debugPrint("Update attendance error: $e");
       showMsg("Failed to update attendance");
-    } finally {
-      if (mounted) {
-        setState(() => isSaving = false);
-      }
-    }
-  }
-
-  Future<void> updateApprovalStatus(
-    Map<String, dynamic> item,
-    String approvalStatus,
-  ) async {
-    if (loggedInUserId == null) {
-      showMsg("Logged-in user id not found");
-      return;
-    }
-
-    if (item['id'] == null) {
-      showMsg("Attendance id not found");
-      return;
-    }
-
-    try {
-      setState(() => isSaving = true);
-
-      final token = await gettokenFromPrefs();
-
-      final body = {
-        "staff": item['staff'],
-        "attendance_date": item['attendance_date'],
-        "attendance_time": item['attendance_time'],
-        "status": item['status'],
-        "approval_status": approvalStatus,
-        "approved_by": loggedInUserId,
-        "approved_at": DateTime.now().toIso8601String(),
-      };
-
-      final response = await http.put(
-        Uri.parse('$api/api/staff/attendance/edit/${item['id']}/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(body),
-      );
-
-      debugPrint("APPROVAL UPDATE STATUS: ${response.statusCode}");
-      debugPrint("APPROVAL UPDATE RESPONSE: ${response.body}");
-
-      if (response.statusCode == 200) {
-        showMsg("Attendance $approvalStatus successfully");
-        await refreshAll();
-      } else {
-        showMsg("Failed: ${response.body}");
-      }
-    } catch (e) {
-      debugPrint("Approval update error: $e");
-      showMsg("Failed to update approval status");
     } finally {
       if (mounted) {
         setState(() => isSaving = false);
@@ -444,13 +335,26 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
         attendanceViewDate = pickedDate;
       });
 
-      await getMyTeamAttendance();
+      await getMyAttendance();
+    }
+  }
+
+  Future<void> pickAttendanceTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+
+    if (picked != null) {
+      setState(() {
+        attendanceTimeController.text =
+            "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
+      });
     }
   }
 
   void cancelEdit() {
     setState(() {
-      selectedMember = null;
       selectedStatus = 'present';
       editingAttendanceId = null;
       attendanceTimeController.clear();
@@ -458,19 +362,15 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
   }
 
   void startEditAttendance(Map<String, dynamic> item) {
-    final member = teamMembers.firstWhere(
-      (member) => member['member'] == item['staff'],
-      orElse: () => {},
-    );
+    final approvalStatus = item['approval_status']?.toString() ?? 'pending';
 
-    if (member.isEmpty) {
-      showMsg("Member not found in dropdown list");
+    if (approvalStatus == 'approved') {
+      showMsg("Approved attendance cannot be edited");
       return;
     }
 
     setState(() {
       editingAttendanceId = item['id'];
-      selectedMember = member;
       selectedStatus = item['status'] ?? 'present';
       attendanceTimeController.text = item['attendance_time']?.toString() ?? '';
     });
@@ -510,59 +410,6 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
     }
   }
 
-  String getApprovalLabel(String status) {
-    switch (status) {
-      case 'approved':
-        return 'Approved';
-      case 'rejected':
-        return 'Rejected';
-      case 'pending':
-        return 'Pending';
-      default:
-        return 'Pending';
-    }
-  }
-
-  Color getApprovalColor(String status) {
-    switch (status) {
-      case 'approved':
-        return const Color.fromARGB(255, 44, 168, 235);
-      case 'rejected':
-        return const Color(0xffdc2626);
-      case 'pending':
-        return const Color(0xfff59e0b);
-      default:
-        return const Color(0xfff59e0b);
-    }
-  }
-
-  IconData getApprovalIcon(String status) {
-    switch (status) {
-      case 'approved':
-        return Icons.verified;
-      case 'rejected':
-        return Icons.cancel;
-      case 'pending':
-        return Icons.hourglass_top_rounded;
-      default:
-        return Icons.hourglass_top_rounded;
-    }
-  }
-
-  Future<void> pickAttendanceTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
-
-    if (picked != null) {
-      setState(() {
-        attendanceTimeController.text =
-            "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -572,7 +419,7 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         title: const Text(
-          "Mark Attendance",
+          "My Attendance",
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
@@ -621,7 +468,7 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
       child: isProfileLoading
           ? const Center(
               child: Padding(
-                padding: EdgeInsets.all(20),
+                padding: EdgeInsets.all(22),
                 child: CircularProgressIndicator(),
               ),
             )
@@ -630,8 +477,8 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
               children: [
                 Text(
                   editingAttendanceId == null
-                      ? "Mark Team Attendance"
-                      : "Update Team Attendance",
+                      ? "Mark My Attendance"
+                      : "Update My Attendance",
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
@@ -639,121 +486,9 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xfff8fafc),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xffe5e7eb)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.calendar_today_outlined,
-                        size: 18,
-                        color: Color(0xff64748b),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          "Posting Date: $todayDate",
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xff334155),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                _buildProfileInfoCard(),
                 const SizedBox(height: 12),
-                isMemberLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : DropdownSearch<Map<String, dynamic>>(
-                        selectedItem: selectedMember,
-                        items: teamMembers,
-                        compareFn: (item, selectedItem) {
-                          return item['member'] == selectedItem['member'];
-                        },
-                        filterFn: (member, filter) {
-                          final name = (member['member_name'] ?? '')
-                              .toString()
-                              .toLowerCase();
-                          final team = (member['team_name'] ?? '')
-                              .toString()
-                              .toLowerCase();
-                          final search = filter.toLowerCase();
-
-                          return name.contains(search) ||
-                              team.contains(search);
-                        },
-                        itemAsString: (member) {
-                          if (member.isEmpty) return "";
-                          return "${member['member_name']} - ${member['team_name']}";
-                        },
-                        popupProps: PopupProps.menu(
-                          showSearchBox: true,
-                          constraints: const BoxConstraints(maxHeight: 420),
-                          menuProps: MenuProps(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          searchFieldProps: TextFieldProps(
-                            decoration: InputDecoration(
-                              hintText: "Search member",
-                              prefixIcon: const Icon(Icons.search, size: 20),
-                              filled: true,
-                              fillColor: const Color(0xfff8fafc),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                          itemBuilder: (context, member, isSelected) {
-                            return ListTile(
-                              dense: true,
-                              leading: const CircleAvatar(
-                                radius: 16,
-                                backgroundColor: Color(0xffeff6ff),
-                                child: Icon(
-                                  Icons.person_outline,
-                                  size: 17,
-                                  color: Color(0xff2563eb),
-                                ),
-                              ),
-                              title: Text(
-                                member['member_name'] ?? '',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              subtitle: Text(
-                                member['team_name'] ?? '',
-                                style: const TextStyle(fontSize: 11),
-                              ),
-                            );
-                          },
-                        ),
-                        dropdownDecoratorProps: DropDownDecoratorProps(
-                          dropdownSearchDecoration: InputDecoration(
-                            labelText: "Select Member",
-                            prefixIcon: const Icon(Icons.person_outline),
-                            filled: true,
-                            fillColor: const Color(0xfff8fafc),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                        onChanged: (value) {
-                          setState(() {
-                            selectedMember = value;
-                          });
-                        },
-                      ),
+                _buildDateInfoCard(),
                 const SizedBox(height: 14),
                 const Text(
                   "Attendance Status",
@@ -877,17 +612,100 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 10),
-                Text(
-                  "${teamMembers.length} members available",
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xff64748b),
-                  ),
-                ),
               ],
             ),
+    );
+  }
+
+  Widget _buildProfileInfoCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xfff8fafc),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xffe5e7eb)),
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            radius: 20,
+            backgroundColor: Color(0xffeff6ff),
+            child: Icon(
+              Icons.person_outline,
+              color: Color(0xff2563eb),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  currentStaffName.isEmpty
+                      ? "Logged-in Staff"
+                      : currentStaffName,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xff111827),
+                  ),
+                ),
+                if (currentTeamName.isNotEmpty)
+                  Text(
+                    currentTeamName,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xff64748b),
+                    ),
+                  ),
+                if (currentTeamLeaderName.isNotEmpty)
+                  Text(
+                    "Leader: $currentTeamLeaderName",
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xff64748b),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateInfoCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xfff8fafc),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xffe5e7eb)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.calendar_today_outlined,
+            size: 18,
+            color: Color(0xff64748b),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "Posting Date: $todayDate",
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Color(0xff334155),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -939,24 +757,6 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
     );
   }
 
-  Widget _buildApprovalChip(String approvalStatus) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: getApprovalColor(approvalStatus).withOpacity(0.10),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        getApprovalLabel(approvalStatus),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          color: getApprovalColor(approvalStatus),
-        ),
-      ),
-    );
-  }
-
   Widget _buildSelectedDateAttendanceCard() {
     return Container(
       width: double.infinity,
@@ -969,7 +769,7 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            "Attendance - $formattedAttendanceViewDate",
+            "My Attendance - $formattedAttendanceViewDate",
             style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w800,
@@ -995,8 +795,9 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
                   : Column(
                       children: selectedDateAttendance.map<Widget>((item) {
                         final approvalStatus =
-                            item['approval_status'] ?? 'pending';
-
+                            item['approval_status']?.toString() ?? 'pending';
+                        final canEdit = approvalStatus == 'pending' ||
+                            approvalStatus == 'rejected';
                         return Container(
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(10),
@@ -1045,8 +846,6 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
                                         color: Color(0xff64748b),
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
-                                    _buildApprovalChip(approvalStatus),
                                   ],
                                 ),
                               ),
@@ -1062,94 +861,27 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 6),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      InkWell(
-                                        onTap: () => startEditAttendance(item),
-                                        child: const Icon(
-                                          Icons.edit_outlined,
-                                          color: Color(0xff2563eb),
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                    PopupMenuButton<String>(
-  enabled: !isSaving,
-  onSelected: (value) {
-    updateApprovalStatus(item, value);
-  },
-  shape: RoundedRectangleBorder(
-    borderRadius: BorderRadius.circular(14),
-  ),
-  itemBuilder: (_) => const [
-    PopupMenuItem(
-      value: "approved",
-      child: Row(
-        children: [
-          Icon(Icons.check_circle, color: Colors.green),
-          SizedBox(width: 10),
-          Text("Approve"),
-        ],
-      ),
-    ),
-    PopupMenuItem(
-      value: "rejected",
-      child: Row(
-        children: [
-          Icon(Icons.cancel, color: Colors.red),
-          SizedBox(width: 10),
-          Text("Reject"),
-        ],
-      ),
-    ),
-    PopupMenuItem(
-      value: "pending",
-      child: Row(
-        children: [
-          Icon(Icons.hourglass_empty, color: Colors.orange),
-          SizedBox(width: 10),
-          Text("Pending"),
-        ],
-      ),
-    ),
-  ],
-  child: Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-    decoration: BoxDecoration(
-      color: getApprovalColor(approvalStatus).withOpacity(0.10),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(
-        color: getApprovalColor(approvalStatus).withOpacity(0.45),
-      ),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          Icons.admin_panel_settings_rounded,
-          size: 16,
-          color: getApprovalColor(approvalStatus),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          "Approval",
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-            color: getApprovalColor(approvalStatus),
-          ),
-        ),
-        Icon(
-          Icons.arrow_drop_down,
-          size: 16,
-          color: getApprovalColor(approvalStatus),
-        ),
-      ],
-    ),
-  ),
-),
-                                    ],
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    "Status: ${approvalStatus.toUpperCase()}",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: approvalStatus == 'approved'
+                                          ? Colors.green
+                                          : approvalStatus == 'rejected'
+                                              ? Colors.red
+                                              : Colors.orange,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  InkWell(
+                                    onTap: () => startEditAttendance(item),
+                                    child: const Icon(
+                                      Icons.edit_outlined,
+                                      color: Color(0xff2563eb),
+                                      size: 20,
+                                    ),
                                   ),
                                 ],
                               ),

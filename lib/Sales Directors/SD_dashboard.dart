@@ -4,6 +4,7 @@ import 'package:beposoft/Sales%20Directors/sd_add_attendance.dart';
 import 'package:beposoft/Sales%20Directors/sd_add_team_staffs.dart';
 import 'package:beposoft/Sales%20Directors/sd_all_dsr_reportpage.dart';
 import 'package:beposoft/Sales%20Directors/sd_confirm_call_duration.dart';
+import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/customer.dart';
 import 'package:beposoft/pages/ACCOUNTS/grv_list.dart';
@@ -2380,6 +2381,32 @@ class _SdDashboardState extends State<SdDashboard> {
                             builder: (context) => bdm_dashbord()));
                   },
                 ),
+                    ListTile(
+                  leading: Icon(Icons.person),
+                  title: Text('Add Attendance'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => StaffSelfAttendanceScreen()));
+                    // Navigate to the Settings page or perform any other action
+                  },
+                ),
+   if (isManager)
+                  ListTile(
+                    leading: const Icon(Icons.fact_check_outlined),
+                    title: const Text('Approve Team Attendance'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              const StaffMarkAttendanceScreen(),
+                        ),
+                      );
+                    },
+                  ),
+
                 Divider(),
                 _buildDropdownTile(context, 'Customers', [
                   'Add Customer',
@@ -2413,6 +2440,9 @@ class _SdDashboardState extends State<SdDashboard> {
                 _buildDropdownTile(context, 'BDO DSR', [
                   'Add Team',
                   'Add Team Members',
+                  'View All Team Members',
+
+
                   // 'Add BDO Attendence',
                   // 'Approve BDO Call Duration'
                 ]),
@@ -2434,7 +2464,7 @@ class _SdDashboardState extends State<SdDashboard> {
                 if (isManager)
                   ListTile(
                     leading: const Icon(Icons.fact_check_outlined),
-                    title: const Text('Add Attendance'),
+                    title: const Text('Add & Approve Attendance'),
                     onTap: () {
                       Navigator.push(
                         context,

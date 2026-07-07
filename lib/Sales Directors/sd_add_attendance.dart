@@ -29,6 +29,8 @@ class _sdAllAttendanceAddPageState extends State<sdAllAttendanceAddPage> {
   List<dynamic> teams = [];
   List<dynamic> staffs = [];
   List<dynamic> attendanceData = [];
+  int? loggedInUserId;
+  bool isManager = false;
 
   String? selectedTeam;
 
@@ -76,6 +78,7 @@ class _sdAllAttendanceAddPageState extends State<sdAllAttendanceAddPage> {
     await Future.wait([
       fetchTeams(),
       fetchAttendance(),
+      getProfile(),
     ]);
 
     if (mounted) {
@@ -83,9 +86,74 @@ class _sdAllAttendanceAddPageState extends State<sdAllAttendanceAddPage> {
     }
   }
 
+Future<void> updateApprovalStatus(dynamic item, String approvalStatus) async {
+  if (loggedInUserId == null) {
+    showError("Logged-in user not found");
+    return;
+  }
+
+  try {
+    setState(() => editLoading = true);
+
+    final token = await getToken();
+    if (token == null) throw Exception("Token missing");
+
+    final payload = {
+      "staff": item["staff"],
+      "attendance_date": item["attendance_date"],
+      "attendance_time": item["attendance_time"],
+      "status": item["status"],
+      "approval_status": approvalStatus,
+      "approved_by": loggedInUserId,
+      "approved_at": DateTime.now().toIso8601String(),
+    };
+
+    final response = await http.put(
+      Uri.parse("${baseUrl}staff/attendance/edit/${item["id"]}/"),
+      headers: authHeaders(token),
+      body: jsonEncode(payload),
+    );
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      showSuccess("Attendance $approvalStatus");
+      await fetchAttendance();
+    } else {
+      showError("Approval update failed");
+    }
+  } catch (e) {
+    showError("Approval update failed");
+  } finally {
+    if (mounted) setState(() => editLoading = false);
+  }
+}
+
   Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString("token");
+  }
+
+  Future<void> getProfile() async {
+    try {
+      final token = await getToken();
+      if (token == null) throw Exception("Token missing");
+
+      final response = await http.get(
+        Uri.parse("${baseUrl}profile/"),
+        headers: authHeaders(token),
+      );
+
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+        final data = parsed["data"] ?? {};
+
+        setState(() {
+          loggedInUserId = int.tryParse("${data["id"]}");
+          isManager = data["is_manager"] ?? false;
+        });
+      }
+    } catch (e) {
+      debugPrint("PROFILE ERROR: $e");
+    }
   }
 
   Map<String, String> authHeaders(String token) {
@@ -118,16 +186,17 @@ class _sdAllAttendanceAddPageState extends State<sdAllAttendanceAddPage> {
     );
   }
 
-bool isAllowedSalesTeam(dynamic team) {
-  final name = (team["team_name"] ?? team["name"] ?? "")
-      .toString()
-      .trim()
-      .toUpperCase();
+  bool isAllowedSalesTeam(dynamic team) {
+    final name = (team["team_name"] ?? team["name"] ?? "")
+        .toString()
+        .trim()
+        .toUpperCase();
 
-  return name == "SALES DEPARTMENT (MUBARISH)" ||
-      name == "SALES DEPARTMENT (NOUFAL)" ||
-      name == "SALES DEPARTMENT (SHAMI)";
-}
+    return name == "SALES DEPARTMENT (MUBARISH)" ||
+        name == "SALES DEPARTMENT (NOUFAL)" ||
+        name == "SALES DEPARTMENT (SHAMI)";
+  }
+
   Future<void> fetchTeams() async {
     try {
       final token = await getToken();
@@ -193,41 +262,42 @@ bool isAllowedSalesTeam(dynamic team) {
   }
 
   Future<void> fetchAttendance() async {
-  try {
-    final token = await getToken();
-    if (token == null) throw Exception("Token missing");
+    try {
+      final token = await getToken();
+      if (token == null) throw Exception("Token missing");
 
-    final uri = Uri.parse("${baseUrl}staff/attendance/sales/data/").replace(
-      queryParameters: {
-        if (startDate != null) "start_date": formatDate(startDate!),
-        if (endDate != null) "end_date": formatDate(endDate!),
-      },
-    );
+      final uri = Uri.parse("${baseUrl}staff/attendance/sales/data/").replace(
+        queryParameters: {
+          if (startDate != null) "start_date": formatDate(startDate!),
+          if (endDate != null) "end_date": formatDate(endDate!),
+        },
+      );
 
-    final response = await http.get(
-      uri,
-      headers: authHeaders(token),
-    );
+      final response = await http.get(
+        uri,
+        headers: authHeaders(token),
+      );
 
-    print(response.body);
+      print(response.body);
 
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      final body = jsonDecode(response.body);
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final body = jsonDecode(response.body);
 
-      if (!mounted) return;
-      setState(() {
-        attendanceData = body["data"] ?? [];
-        teamName = "All Teams";
-        teamLeaderName = "All Team Leaders";
-      });
-    } else {
-      throw Exception("Failed to load attendance");
+        if (!mounted) return;
+        setState(() {
+          attendanceData = body["data"] ?? [];
+          teamName = "All Teams";
+          teamLeaderName = "All Team Leaders";
+        });
+      } else {
+        throw Exception("Failed to load attendance");
+      }
+    } catch (e) {
+      print("Attendance fetch error: $e");
+      showError("Failed to load attendance");
     }
-  } catch (e) {
-    print("Attendance fetch error: $e");
-    showError("Failed to load attendance");
   }
-}
+
   Future<void> addAttendance() async {
     if (!addFormKey.currentState!.validate()) return;
 
@@ -410,20 +480,20 @@ bool isAllowedSalesTeam(dynamic team) {
     fetchAttendance();
   }
 
-List<dynamic> buildTeamRows(dynamic team) {
-  final List<dynamic> rows = [];
+  List<dynamic> buildTeamRows(dynamic team) {
+    final List<dynamic> rows = [];
 
-  final directAttendance = team["attendance"] ?? [];
+    final directAttendance = team["attendance"] ?? [];
 
-  for (final item in directAttendance) {
-    rows.add({
-      ...item,
-      "attendance_date": item["attendance_date"] ?? "-",
-    });
+    for (final item in directAttendance) {
+      rows.add({
+        ...item,
+        "attendance_date": item["attendance_date"] ?? "-",
+      });
+    }
+
+    return rows;
   }
-
-  return rows;
-}
 
   int countByStatus(List<dynamic> rows, String status) {
     return rows.where((item) => item["status"] == status).length;
@@ -530,60 +600,65 @@ List<dynamic> buildTeamRows(dynamic team) {
     return prefs.getString('department');
   }
 
- Future<void> _navigateBack() async {
+  Future<void> _navigateBack() async {
     final dep = await getdepFromPrefs();
-   if(dep=="BDO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => bdo_dashbord()), // Replace AnotherPage with your target page
-            );
-
-}
-else if(dep=="BDM" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => bdm_dashbord()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="warehouse" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => WarehouseDashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="CEO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => ceo_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="CSO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => cso_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="COO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => ceo_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-
-else if(dep=="SD" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => SdDashboard()), // Replace AnotherPage with your target page
-            );
-}
-
-
-else if(dep=="Warehouse Admin" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => WarehouseAdmin()), // Replace AnotherPage with your target page
-            );
-}else {
+    if (dep == "BDO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                bdo_dashbord()), // Replace AnotherPage with your target page
+      );
+    } else if (dep == "BDM") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                bdm_dashbord()), // Replace AnotherPage with your target page
+      );
+    } else if (dep == "warehouse") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                WarehouseDashboard()), // Replace AnotherPage with your target page
+      );
+    } else if (dep == "CEO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                ceo_dashboard()), // Replace AnotherPage with your target page
+      );
+    } else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                cso_dashboard()), // Replace AnotherPage with your target page
+      );
+    } else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                ceo_dashboard()), // Replace AnotherPage with your target page
+      );
+    } else if (dep == "SD") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                SdDashboard()), // Replace AnotherPage with your target page
+      );
+    } else if (dep == "Warehouse Admin") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                WarehouseAdmin()), // Replace AnotherPage with your target page
+      );
+    } else {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => dashboard()),
@@ -595,12 +670,11 @@ else if(dep=="Warehouse Admin" ){
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FB),
-      
       appBar: AppBar(
-          leading: IconButton(
-    icon: const Icon(Icons.arrow_back_rounded),
-    onPressed: _navigateBack,
-  ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: _navigateBack,
+        ),
         title: const Text(
           "Daily Attendance",
           style: TextStyle(fontWeight: FontWeight.w800),
@@ -1077,93 +1151,178 @@ else if(dep=="Warehouse Admin" ){
     );
   }
 
-  Widget buildAttendanceRow(dynamic item, int index) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 17,
-                backgroundColor: const Color(0xFFEFF6FF),
-                child: Text(
-                  "${index + 1}",
-                  style: const TextStyle(
-                    color: Color(0xFF2563EB),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  item["staff_name"]?.toString() ?? "-",
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF111827),
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              buildStatusBadge(item["status"]?.toString()),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(
-                Icons.access_time_rounded,
-                size: 17,
-                color: Color(0xFF64748B),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                item["attendance_time"]?.toString() ?? "--:--",
+ Widget buildAttendanceRow(dynamic item, int index) {
+  final approvalStatus = item["approval_status"]?.toString() ?? "pending";
+
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    child: Column(
+      children: [
+        Row(
+          children: [
+            CircleAvatar(
+              radius: 17,
+              backgroundColor: const Color(0xFFEFF6FF),
+              child: Text(
+                "${index + 1}",
                 style: const TextStyle(
-                  color: Color(0xFF334155),
-                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF2563EB),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
-              const SizedBox(width: 16),
-              const Icon(
-                Icons.event_rounded,
-                size: 17,
-                color: Color(0xFF64748B),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  item["attendance_date"]?.toString() ?? "-",
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF334155)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                item["staff_name"]?.toString() ?? "-",
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF111827),
+                  fontWeight: FontWeight.w900,
                 ),
               ),
-              TextButton.icon(
-                onPressed: () {
-                  selectedTeam = null;
-                  editStaff = null;
-                  editStatus = null;
-                  editDate = null;
-                  editTime = null;
-                  openEditModal(item["id"]);
-                },
-                icon: const Icon(Icons.edit_rounded, size: 17),
-                label: const Text("Edit"),
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFFB45309),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w800),
-                ),
+            ),
+            const SizedBox(width: 8),
+            buildStatusBadge(item["status"]?.toString()),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            const Icon(Icons.access_time_rounded, size: 17, color: Color(0xFF64748B)),
+            const SizedBox(width: 6),
+            Text(
+              item["attendance_time"]?.toString() ?? "--:--",
+              style: const TextStyle(
+                color: Color(0xFF334155),
+                fontWeight: FontWeight.w800,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                item["attendance_date"]?.toString() ?? "-",
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Color(0xFF334155)),
+              ),
+            ),
+            IconButton(
+              tooltip: "Edit",
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+              onPressed: () {
+                selectedTeam = null;
+                editStaff = null;
+                editStatus = null;
+                editDate = null;
+                editTime = null;
+                openEditModal(item["id"]);
+              },
+              icon: const Icon(
+                Icons.edit_rounded,
+                size: 20,
+                color: Color(0xFFB45309),
+              ),
+            ),
+          PopupMenuButton<String>(
+  onSelected: (value) => updateApprovalStatus(item, value),
+  shape: RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(14),
+  ),
+  itemBuilder: (_) => const [
+    PopupMenuItem(
+      value: "approved",
+      child: Row(
+        children: [
+          Icon(Icons.check_circle, color: Colors.green),
+          SizedBox(width: 10),
+          Text("Approve"),
         ],
       ),
-    );
-  }
-
+    ),
+    PopupMenuItem(
+      value: "rejected",
+      child: Row(
+        children: [
+          Icon(Icons.cancel, color: Colors.red),
+          SizedBox(width: 10),
+          Text("Reject"),
+        ],
+      ),
+    ),
+    PopupMenuItem(
+      value: "pending",
+      child: Row(
+        children: [
+          Icon(Icons.hourglass_empty, color: Colors.orange),
+          SizedBox(width: 10),
+          Text("Pending"),
+        ],
+      ),
+    ),
+  ],
+  child: Container(
+    padding: const EdgeInsets.symmetric(
+      horizontal: 10,
+      vertical: 6,
+    ),
+    decoration: BoxDecoration(
+      color: approvalStatus == "approved"
+          ? Colors.green.shade50
+          : approvalStatus == "rejected"
+              ? Colors.red.shade50
+              : Colors.orange.shade50,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(
+        color: approvalStatus == "approved"
+            ? Colors.green
+            : approvalStatus == "rejected"
+                ? Colors.red
+                : Colors.orange,
+      ),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.gpp_good_rounded,
+          size: 18,
+          color: approvalStatus == "approved"
+              ? Colors.green
+              : approvalStatus == "rejected"
+                  ? Colors.red
+                  : Colors.orange,
+        ),
+        const SizedBox(width: 5),
+        Text(
+approvalStatus[0].toUpperCase() + approvalStatus.substring(1),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: approvalStatus == "approved"
+                ? Colors.green
+                : approvalStatus == "rejected"
+                    ? Colors.red
+                    : Colors.orange,
+          ),
+        ),
+        const SizedBox(width: 2),
+        const Icon(
+          Icons.arrow_drop_down,
+          size: 18,
+        ),
+      ],
+    ),
+  ),
+)
+          ],
+        ),
+      ],
+    ),
+  );
+}
   Widget buildStatusBadge(String? status) {
     Color bg;
     Color fg;
@@ -1259,55 +1418,56 @@ else if(dep=="Warehouse Admin" ){
     );
   }
 
- Widget buildTeamDropdown({
-  required String? value,
-  required ValueChanged<String?> onChanged,
-  String? Function(String?)? validator,
-}) {
-  final filteredTeams = teams.where(isAllowedSalesTeam).toList();
+  Widget buildTeamDropdown({
+    required String? value,
+    required ValueChanged<String?> onChanged,
+    String? Function(String?)? validator,
+  }) {
+    final filteredTeams = teams.where(isAllowedSalesTeam).toList();
 
-  final validValue = filteredTeams.any((team) {
-    final itemValue = (team["id"] ?? team["team_id"]).toString();
-    return itemValue == value;
-  })
-      ? value
-      : null;
-
-  return DropdownButtonFormField<String>(
-    isExpanded: true,
-    value: validValue,
-    decoration: inputDecoration("Team"),
-    items: filteredTeams.map((team) {
+    final validValue = filteredTeams.any((team) {
       final itemValue = (team["id"] ?? team["team_id"]).toString();
-      final label = (team["team_name"] ?? team["name"] ?? "-").toString();
+      return itemValue == value;
+    })
+        ? value
+        : null;
 
-      return DropdownMenuItem<String>(
-        value: itemValue,
-        child: Text(
-          label,
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-        ),
-      );
-    }).toList(),
-    selectedItemBuilder: (context) {
-      return filteredTeams.map((team) {
+    return DropdownButtonFormField<String>(
+      isExpanded: true,
+      value: validValue,
+      decoration: inputDecoration("Team"),
+      items: filteredTeams.map((team) {
+        final itemValue = (team["id"] ?? team["team_id"]).toString();
         final label = (team["team_name"] ?? team["name"] ?? "-").toString();
 
-        return Align(
-          alignment: Alignment.centerLeft,
+        return DropdownMenuItem<String>(
+          value: itemValue,
           child: Text(
             label,
             overflow: TextOverflow.ellipsis,
             maxLines: 1,
           ),
         );
-      }).toList();
-    },
-    onChanged: onChanged,
-    validator: validator,
-  );
-}
+      }).toList(),
+      selectedItemBuilder: (context) {
+        return filteredTeams.map((team) {
+          final label = (team["team_name"] ?? team["name"] ?? "-").toString();
+
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          );
+        }).toList();
+      },
+      onChanged: onChanged,
+      validator: validator,
+    );
+  }
+
   Widget buildStaffDropdown({
     required String? value,
     required ValueChanged<String?>? onChanged,

@@ -6,12 +6,15 @@ import 'package:beposoft/pages/ACCOUNTS/add_Expenses.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_Recipt.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_bank.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_credit_note.dart';
+import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/cso_order_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/cso_sales_report_summary.dart';
 import 'package:beposoft/pages/ACCOUNTS/cso_staff.dart';
 import 'package:beposoft/pages/ACCOUNTS/dailyproductcategorywisecyclingskating.dart';
 import 'package:beposoft/pages/ACCOUNTS/ordercomparison_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/staff_exit_form_list.dart';
+import 'package:beposoft/pages/ACCOUNTS/view_all_team_members.dart';
+import 'package:beposoft/pages/ADMIN/add_attendance.dart';
 import 'package:beposoft/pages/ADMIN/add_staffwise_department.dart';
 import 'package:beposoft/pages/ADMIN/admin_add_attendance.dart';
 import 'package:beposoft/pages/ADMIN/admin_add_team_staff.dart';
@@ -180,7 +183,26 @@ class drower {
           MaterialPageRoute(builder: (context) => AllMembersPage()),
         );
         break;
+          case 'Add Your Attendance':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => StaffSelfAttendanceScreen()),
+        );
+        break;
+             case 'Approve Your Team Attendance':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => StaffMarkAttendanceScreen()),
+        );
+        break;
+
       case 'Add Attendance':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => AllAttendanceAddPage()),
+        );
+        break;
+           case 'Add & Approve All Attendance':
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => AllAttendanceAddPage()),
@@ -206,7 +228,12 @@ class drower {
         );
         break;
 
-      //
+       case 'View All Team Members':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => ViewAllTeamMembers()),
+        );
+        break;
 
       case 'Add Team':
         Navigator.push(
@@ -460,6 +487,15 @@ class drower {
           MaterialPageRoute(
               builder: (context) => OrderList2(
                     status: 'Invoice Approved',
+                  )),
+        );
+        break;
+        case 'Pre Booked':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => OrderList2(
+                    status: 'Pre Booked',
                   )),
         );
         break;
@@ -1105,7 +1141,12 @@ class drower {
           MaterialPageRoute(builder: (context) => AddTeamMembers()),
         );
         break;
-
+       case 'View All Team Members':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => ViewAllTeamMembers()),
+        );
+        break;
       case 'Approve BDO Call Duration':
         Navigator.push(
           context,

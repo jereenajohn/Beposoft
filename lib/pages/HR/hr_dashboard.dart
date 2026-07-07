@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
+import 'package:beposoft/pages/ADMIN/add_attendance.dart';
 import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
 import 'package:beposoft/pages/auth_status_checker.dart';
 import 'package:beposoft/loginpage.dart';
@@ -295,10 +297,37 @@ class _HrDashboardState extends State<HrDashboard> {
                       MaterialPageRoute(builder: (context) => HrDashboard()));
                 },
               ),
+                //   ListTile(
+                //   leading: Icon(Icons.person),
+                //   title: Text('Add Attendance'),
+                //   onTap: () {
+                //     Navigator.push(
+                //         context,
+                //         MaterialPageRoute(
+                //             builder: (context) => StaffSelfAttendanceScreen()));
+                //     // Navigate to the Settings page or perform any other action
+                //   },
+                // ),
+                //   ListTile(
+                //     leading: const Icon(Icons.fact_check_outlined),
+                //     title: const Text('Approve Team Attendance'),
+                //     onTap: () {
+                //       Navigator.push(
+                //         context,
+                //         MaterialPageRoute(
+                //           builder: (context) =>
+                //               const StaffMarkAttendanceScreen(),
+                //         ),
+                //       );
+                //     },
+                //   ),
+
                _buildDropdownTile(context, 'Attendance', [
+                    'Add Your Attendance',
+                    'Approve Your Team Attendance',
                     'Add Department & Managers',
                     'Add Dept-wise Staffs',
-                    'Add Attendance',
+                    'Add & Approve All Attendance',
                     'View Attendance',
                     // 'Employee Leave Requests',
                     // 'View Leave List',

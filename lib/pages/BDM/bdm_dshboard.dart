@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/customer.dart';
 import 'package:beposoft/pages/ACCOUNTS/grv_list.dart';
@@ -2240,6 +2241,19 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
                   },
                 ),
                 Divider(),
+                    ListTile(
+                  leading: Icon(Icons.person),
+                  title: Text('Add Your Attendance'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => StaffSelfAttendanceScreen()));
+                    // Navigate to the Settings page or perform any other action
+                  },
+                ),
+
+
                 _buildDropdownTile(context, 'Customers', [
                   'Add Customer',
                   'Customers',
@@ -2274,7 +2288,7 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
                 if (isManager)
                   ListTile(
                     leading: const Icon(Icons.fact_check_outlined),
-                    title: const Text('Add Attendance'),
+                    title: const Text('Add & Approve Attendance'),
                     onTap: () {
                       Navigator.push(
                         context,
