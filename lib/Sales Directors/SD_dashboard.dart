@@ -8,6 +8,7 @@ import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/customer.dart';
 import 'package:beposoft/pages/ACCOUNTS/grv_list.dart';
+import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
 import 'package:beposoft/pages/ACCOUNTS/order_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/performa_invoice_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/view_staff.dart';
@@ -41,6 +42,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:beposoft/pages/BDM/bdm_dshboard.dart';
+import 'dart:async';
 
 class SdDashboard extends StatefulWidget {
   @override
@@ -67,6 +69,8 @@ class _SdDashboardState extends State<SdDashboard> {
   double familyTodaysTotalAmount = 0.0;
   bool isFamilySummaryLoading = false;
   bool isManager = false;
+  int inboxMailCount = 0;
+Timer? mailCountTimer;
 
   String? username = '';
   @override
@@ -78,6 +82,11 @@ class _SdDashboardState extends State<SdDashboard> {
     getSalesReport();
     fetchOrderData();
     getcustomer();
+    fetchInboxMailCount();
+
+mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+  fetchInboxMailCount();
+});
     fetchMyTeamDetailedSummary();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AuthStatusChecker.start(context);
@@ -99,7 +108,53 @@ class _SdDashboardState extends State<SdDashboard> {
   double totalAmountToday = 0.0;
   var family = '';
   String familyName = '';
+Future<void> fetchInboxMailCount() async {
+  try {
+    final token = await getTokenFromPrefs();
 
+    if (token == null || token.isEmpty) return;
+
+    final response = await http.get(
+      Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+
+      int count = 0;
+
+      if (decoded['count'] != null) {
+        count = decoded['count'];
+      } else if (decoded['results'] is Map &&
+          decoded['results']['data'] is List) {
+        count = decoded['results']['data'].length;
+      } else if (decoded['data'] is List) {
+        count = decoded['data'].length;
+      } else if (decoded['results'] is List) {
+        count = decoded['results'].length;
+      }
+
+      if (mounted && count != inboxMailCount) {
+        setState(() {
+          inboxMailCount = count;
+        });
+      }
+    }
+  } catch (e) {
+    debugPrint('MAIL COUNT ERROR: $e');
+  }
+}
+@override
+void dispose() {
+      _isDisposed = true;
+
+  mailCountTimer?.cancel();
+  super.dispose();
+}
   Future<bool> checkAppUpdate(BuildContext context) async {
     final packageInfo = await PackageInfo.fromPlatform();
     final currentVersion = packageInfo.version;
@@ -1712,11 +1767,6 @@ class _SdDashboardState extends State<SdDashboard> {
 
   bool _isDisposed = false;
 
-  @override
-  void dispose() {
-    _isDisposed = true;
-    super.dispose();
-  }
 
   String getTodaysBills() {
     // Get today's date in the same format as in the response (yyyy-MM-dd)
@@ -2334,16 +2384,62 @@ class _SdDashboardState extends State<SdDashboard> {
           elevation: 0,
           backgroundColor: Colors.white,
           // leading: Icon(Icons.arrow_back, color: Colors.black),
-          actions: [
-            //  IconButton(
-            //     icon: Image.asset('lib/assets/profile.png'),
+       actions: [
+  Padding(
+    padding: const EdgeInsets.only(right: 12),
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          icon: const Icon(
+            Icons.mail_outline_rounded,
+            color: Colors.black,
+            size: 28,
+          ),
+          onPressed: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const StaffMailPage(),
+              ),
+            );
 
-            //     onPressed: () {
-            //       Navigator.push(context, MaterialPageRoute(builder: (context)=>EditProfileScreen()));
+            fetchInboxMailCount();
+          },
+        ),
 
-            //     },
-            //   ),
-          ],
+        if (inboxMailCount > 0)
+          Positioned(
+            right: 4,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 6,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 18,
+                minHeight: 18,
+              ),
+              child: Text(
+                inboxMailCount > 99 ? '99+' : inboxMailCount.toString(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  ),
+],
         ),
         drawer: Drawer(
           backgroundColor: Colors.white,
@@ -2446,7 +2542,16 @@ class _SdDashboardState extends State<SdDashboard> {
                   // 'Add BDO Attendence',
                   // 'Approve BDO Call Duration'
                 ]),
-                
+                     ListTile(
+                  title: Text('Send Mail'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => StaffMailPage()));
+                  },
+                ),
+
                 if (isManager)
                   ListTile(
                     leading: const Icon(Icons.people),
