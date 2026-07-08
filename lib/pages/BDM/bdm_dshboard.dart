@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/customer.dart';
 import 'package:beposoft/pages/ACCOUNTS/grv_list.dart';
+import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
 import 'package:beposoft/pages/ACCOUNTS/order_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/performa_invoice_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/view_staff.dart';
@@ -69,6 +71,8 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
   int familyTodaysBills = 0;
   double familyTodaysTotalAmount = 0.0;
   bool isFamilySummaryLoading = false;
+  int inboxMailCount = 0;
+Timer? mailCountTimer;
 
   @override
   void initState() {
@@ -80,6 +84,11 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
     fetchOrderData();
     getcustomer();
     fetchMyTeamDetailedSummary();
+    fetchInboxMailCount();
+
+mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+  fetchInboxMailCount();
+});
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AuthStatusChecker.start(context);
     });
@@ -198,6 +207,53 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
       }
     }
   }
+  Future<void> fetchInboxMailCount() async {
+  try {
+    final token = await getTokenFromPrefs();
+
+    if (token == null || token.isEmpty) return;
+
+    final response = await http.get(
+      Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+
+      int count = 0;
+
+      if (decoded['count'] != null) {
+        count = decoded['count'];
+      } else if (decoded['results'] is Map &&
+          decoded['results']['data'] is List) {
+        count = decoded['results']['data'].length;
+      } else if (decoded['data'] is List) {
+        count = decoded['data'].length;
+      } else if (decoded['results'] is List) {
+        count = decoded['results'].length;
+      }
+
+      if (mounted && count != inboxMailCount) {
+        setState(() {
+          inboxMailCount = count;
+        });
+      }
+    }
+  } catch (e) {
+    debugPrint('MAIL COUNT ERROR: $e');
+  }
+}
+@override
+void dispose() {
+      _isDisposed = true;
+
+  mailCountTimer?.cancel();
+  super.dispose();
+}
 
   Future<void> pickTeamDate() async {
     final DateTime? picked = await showDatePicker(
@@ -1592,11 +1648,11 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
 
   bool _isDisposed = false;
 
-  @override
-  void dispose() {
-    _isDisposed = true;
-    super.dispose();
-  }
+  // @override
+  // void dispose() {
+  //   _isDisposed = true;
+  //   super.dispose();
+  // }
 
   String getTodaysBills() {
     String currentDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -2202,8 +2258,62 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.white,
-          actions: [],
+actions: [
+  Padding(
+    padding: const EdgeInsets.only(right: 12),
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          icon: const Icon(
+            Icons.mail_outline_rounded,
+            color: Colors.black,
+            size: 28,
+          ),
+          onPressed: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const StaffMailPage(),
+              ),
+            );
+
+            fetchInboxMailCount();
+          },
         ),
+
+        if (inboxMailCount > 0)
+          Positioned(
+            right: 4,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 6,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 18,
+                minHeight: 18,
+              ),
+              child: Text(
+                inboxMailCount > 99 ? '99+' : inboxMailCount.toString(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  ),
+],        ),
         drawer: Drawer(
           backgroundColor: Colors.white,
           child: Container(
@@ -2250,6 +2360,16 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
                         MaterialPageRoute(
                             builder: (context) => StaffSelfAttendanceScreen()));
                     // Navigate to the Settings page or perform any other action
+                  },
+                ),
+
+     ListTile(
+                  title: Text('Send Mail'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => StaffMailPage()));
                   },
                 ),
 

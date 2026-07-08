@@ -16,6 +16,7 @@ import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_supplier.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_team.dart';
+import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
 import 'package:beposoft/pages/ADMIN/add_staffwise_department.dart';
 import 'package:beposoft/pages/ADMIN/admin_add_attendance.dart';
 import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
@@ -50,7 +51,7 @@ import 'package:beposoft/pages/logout_hekper.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-
+import 'dart:async';
 import 'package:beposoft/loginpage.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_attribute.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_bank.dart';
@@ -80,6 +81,8 @@ class _admin_dashboardState extends State<admin_dashboard> {
   List<Map<String, dynamic>> orders = [];
   List<Map<String, dynamic>> filteredOrders = [];
   List<Map<String, dynamic>> shippedOrders = [];
+  int inboxMailCount = 0;
+Timer? mailCountTimer;
 
   String? username = '';
   bool isManager = false;
@@ -93,6 +96,13 @@ class _admin_dashboardState extends State<admin_dashboard> {
     getSalesReport();
     fetchOrderData();
     fetchshippedorders();
+
+    fetchInboxMailCount();
+
+mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+  fetchInboxMailCount();
+});
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkAppUpdate(context);
     });
@@ -100,6 +110,53 @@ class _admin_dashboardState extends State<admin_dashboard> {
       AuthStatusChecker.start(context);
     });
   }
+
+  @override
+void dispose() {
+  mailCountTimer?.cancel();
+  super.dispose();
+}
+
+Future<void> fetchInboxMailCount() async {
+  try {
+    final token = await getTokenFromPrefs();
+
+    if (token == null || token.isEmpty) return;
+
+    final response = await http.get(
+      Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+
+      int count = 0;
+
+      if (decoded['count'] != null) {
+        count = decoded['count'];
+      } else if (decoded['results'] is Map &&
+          decoded['results']['data'] is List) {
+        count = decoded['results']['data'].length;
+      } else if (decoded['data'] is List) {
+        count = decoded['data'].length;
+      } else if (decoded['results'] is List) {
+        count = decoded['results'].length;
+      }
+
+      if (mounted && count != inboxMailCount) {
+        setState(() {
+          inboxMailCount = count;
+        });
+      }
+    }
+  } catch (e) {
+    debugPrint('MAIL COUNT ERROR: $e');
+  }
+}
 
   int approval = 0;
   int confirm = 0;
@@ -640,7 +697,7 @@ class _admin_dashboardState extends State<admin_dashboard> {
       ),
       children: options.map((option) {
         return ListTile(
-          tileColor: Colors.white,
+          tileColor: Colors.white, 
           title: Text(
             option,
             style: const TextStyle(color: Colors.black),
@@ -664,16 +721,62 @@ class _admin_dashboardState extends State<admin_dashboard> {
           elevation: 0,
           backgroundColor: Colors.white,
           // leading: Icon(Icons.arrow_back, color: Colors.black),
-          actions: [
-            //  IconButton(
-            //     icon: Image.asset('lib/assets/profile.png'),
+       actions: [
+  Padding(
+    padding: const EdgeInsets.only(right: 12),
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          icon: const Icon(
+            Icons.mail_outline_rounded,
+            color: Colors.black,
+            size: 28,
+          ),
+          onPressed: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const StaffMailPage(),
+              ),
+            );
 
-            //     onPressed: () {
-            //       Navigator.push(context, MaterialPageRoute(builder: (context)=>EditProfileScreen()));
+            fetchInboxMailCount();
+          },
+        ),
 
-            //     },
-            //   ),
-          ],
+        if (inboxMailCount > 0)
+          Positioned(
+            right: 4,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 6,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 18,
+                minHeight: 18,
+              ),
+              child: Text(
+                inboxMailCount > 99 ? '99+' : inboxMailCount.toString(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  ),
+],
         ),
         drawer: Drawer(
           backgroundColor: Colors.white,
@@ -798,6 +901,16 @@ class _admin_dashboardState extends State<admin_dashboard> {
                         context,
                         MaterialPageRoute(
                             builder: (context) => EmployeeLeaveFormPage()));
+                  },
+                ),
+
+     ListTile(
+                  title: Text('Send Mail'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => StaffMailPage()));
                   },
                 ),
 

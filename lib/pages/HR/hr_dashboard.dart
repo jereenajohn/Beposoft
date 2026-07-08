@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
+import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
 import 'package:beposoft/pages/ADMIN/add_attendance.dart';
 import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
+import 'package:beposoft/pages/api.dart';
 import 'package:beposoft/pages/auth_status_checker.dart';
 import 'package:beposoft/loginpage.dart';
 import 'package:beposoft/pages/ACCOUNTS/Staff_exit_form_page.dart';
@@ -31,9 +34,16 @@ class HrDashboard extends StatefulWidget {
 
 class _HrDashboardState extends State<HrDashboard> {
   String? username = '';
+  int inboxMailCount = 0;
+Timer? mailCountTimer;
   void initState() {
     super.initState();
     _getUsername(); // Get the username when the page loads
+    fetchInboxMailCount();
+
+mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+  fetchInboxMailCount();
+});
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AuthStatusChecker.start(context);
     });
@@ -83,7 +93,57 @@ class _HrDashboardState extends State<HrDashboard> {
 
     return false;
   }
+  // Get token from SharedPreferences
+  Future<String?> getTokenFromPrefs() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getString('token');
+  }
 
+Future<void> fetchInboxMailCount() async {
+  try {
+    final token = await getTokenFromPrefs();
+
+    if (token == null || token.isEmpty) return;
+
+    final response = await http.get(
+      Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+
+      int count = 0;
+
+      if (decoded['count'] != null) {
+        count = decoded['count'];
+      } else if (decoded['results'] is Map &&
+          decoded['results']['data'] is List) {
+        count = decoded['results']['data'].length;
+      } else if (decoded['data'] is List) {
+        count = decoded['data'].length;
+      } else if (decoded['results'] is List) {
+        count = decoded['results'].length;
+      }
+
+      if (mounted && count != inboxMailCount) {
+        setState(() {
+          inboxMailCount = count;
+        });
+      }
+    }
+  } catch (e) {
+    debugPrint('MAIL COUNT ERROR: $e');
+  }
+}
+@override
+void dispose() {
+  mailCountTimer?.cancel();
+  super.dispose();
+}
   Future<bool> checkAppUpdate(BuildContext context) async {
     final packageInfo = await PackageInfo.fromPlatform();
     final currentVersion = packageInfo.version;
@@ -262,6 +322,62 @@ class _HrDashboardState extends State<HrDashboard> {
           'HR Dashboard',
           style: TextStyle(color: Colors.grey, fontSize: 12),
         ),
+     actions: [
+  Padding(
+    padding: const EdgeInsets.only(right: 12),
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          icon: const Icon(
+            Icons.mail_outline_rounded,
+            color: Colors.black,
+            size: 28,
+          ),
+          onPressed: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const StaffMailPage(),
+              ),
+            );
+
+            fetchInboxMailCount();
+          },
+        ),
+
+        if (inboxMailCount > 0)
+          Positioned(
+            right: 4,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 6,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 18,
+                minHeight: 18,
+              ),
+              child: Text(
+                inboxMailCount > 99 ? '99+' : inboxMailCount.toString(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  ),
+],
       ),
       drawer: Drawer(
         backgroundColor: Colors.white,
@@ -321,6 +437,15 @@ class _HrDashboardState extends State<HrDashboard> {
                 //       );
                 //     },
                 //   ),
+     ListTile(
+                  title: Text('Send Mail'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => StaffMailPage()));
+                  },
+                ),
 
                _buildDropdownTile(context, 'Attendance', [
                     'Add Your Attendance',

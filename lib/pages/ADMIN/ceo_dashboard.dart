@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:beposoft/pages/ACCOUNTS/Create_Purchase_Product_List.dart';
 import 'package:beposoft/pages/ACCOUNTS/Today_shipped_orders.dart';
 import 'package:beposoft/pages/ACCOUNTS/activity_log.dart';
+import 'dart:async';
 import 'package:beposoft/pages/ACCOUNTS/add_EMI.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_bank_type.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_category.dart';
@@ -18,6 +19,7 @@ import 'package:beposoft/pages/ACCOUNTS/add_warehouse.dart';
 import 'package:beposoft/pages/ACCOUNTS/all_users_categorywise_sales_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/all_users_sales_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/assetmanagement.dart';
+import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
 import 'package:beposoft/pages/ADMIN/add_staffwise_department.dart';
 import 'package:beposoft/pages/ADMIN/admin_add_attendance.dart';
 import 'package:beposoft/pages/ADMIN/admin_add_team_staff.dart';
@@ -129,7 +131,8 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   String selectedBdmReportDate = "";
   bool dbrLoading = true;
   int waitingForConfirmationCount = 0;
-
+int inboxMailCount = 0;
+Timer? mailCountTimer;
   bool isBankReportLoading = true;
   String monthlyExpenseFrom = "";
   String monthlyExpenseTo = "";
@@ -197,6 +200,9 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
 
   bool isManager = false;
   int teamWiseTotalPresent = 0;
+  int teamWiseTotalTeams = 0;
+int teamWiseTotalMembers = 0;
+int teamWiseGrandTotal = 0;
 
   List<Map<String, dynamic>> salesTeamCdTeamTotals = [];
   bool salesTeamCdLoading = false;
@@ -266,7 +272,11 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
       start: DateTime(now.year, now.month, now.day, 0, 0, 0),
       end: DateTime(now.year, now.month, now.day, 23, 59, 59),
     );
+fetchInboxMailCount();
 
+mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+  fetchInboxMailCount();
+});
     initdata();
     getProfile();
     getGrvList();
@@ -312,6 +322,11 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     );
   }
 
+@override
+void dispose() {
+  mailCountTimer?.cancel();
+  super.dispose();
+}
   void initdata() async {
     department = await getdepFromPrefs();
     await getdata();
@@ -319,7 +334,46 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
     // fetchorders();
     await fetchReport();
   }
+Future<void> fetchInboxMailCount() async {
+  try {
+    final token = await getTokenFromPrefs();
 
+    if (token == null || token.isEmpty) return;
+
+    final response = await http.get(
+      Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+
+      int count = 0;
+
+      if (decoded['count'] != null) {
+        count = decoded['count'];
+      } else if (decoded['results'] is Map &&
+          decoded['results']['data'] is List) {
+        count = decoded['results']['data'].length;
+      } else if (decoded['data'] is List) {
+        count = decoded['data'].length;
+      } else if (decoded['results'] is List) {
+        count = decoded['results'].length;
+      }
+
+      if (mounted && count != inboxMailCount) {
+        setState(() {
+          inboxMailCount = count;
+        });
+      }
+    }
+  } catch (e) {
+    debugPrint('MAIL COUNT ERROR: $e');
+  }
+}
   Future<void> fetchWaitingForConfirmationCount() async {
     try {
       final token = await getTokenFromPrefs();
@@ -412,12 +466,16 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
         });
 
         if (!mounted) return;
-        setState(() {
-          teamWiseTotalPresent = _asInt(summary['total_present']);
-          teamWiseTotalAbsent = _asInt(summary['total_absent']);
-          teamWiseTotalHalfDay = _asInt(summary['total_half_day']);
-          departmentAttendanceCards = cards;
-        });
+       setState(() {
+  teamWiseTotalTeams = _asInt(summary['total_teams']);
+  teamWiseTotalMembers = _asInt(summary['total_members']);
+  teamWiseTotalPresent = _asInt(summary['total_present']);
+  teamWiseTotalAbsent = _asInt(summary['total_absent']);
+  teamWiseTotalHalfDay = _asInt(summary['total_half_day']);
+  teamWiseGrandTotal = _asInt(summary['grand_total']);
+
+  departmentAttendanceCards = cards;
+});
       }
     } catch (e) {
       debugPrint("TEAM WISE ATTENDANCE COUNT ERROR: $e");
@@ -2533,11 +2591,11 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   Widget dashboardCards() {
     final bankSummary = _asMap(beposoftSummary['bank_summary']);
     final todayData = _asMap(bankSummary['today_data']);
-    final staffSummary = _asMap(beposoftSummary['staff_summary']);
+    // final staffSummary = _asMap(beposoftSummary['staff_summary']);
 
-    final totalStaffs = _asInt(staffSummary['total_staffs']);
-    final activeStaffs = _asInt(staffSummary['active_staffs']);
-    final deactiveStaffs = _asInt(staffSummary['deactive_staffs']);
+    // final totalStaffs = _asInt(staffSummary['total_staffs']);
+    // final activeStaffs = _asInt(staffSummary['active_staffs']);
+    // final deactiveStaffs = _asInt(staffSummary['deactive_staffs']);
 
     final totalFamilyPresentCount = familySummaryTeamCards.fold<int>(
       0,
@@ -2752,44 +2810,44 @@ value: "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}"
               );
             },
           ),
-          _buildDashboardCard(
-            title: "Employees",
-            value: "Total $activeStaffs",
-            lines: const [],
-            bottom: Column(
-              children: [
-                _buildEmployeeColumnItem(
-                  title: "Active",
-                  value: "$activeStaffs",
-                  icon: Icons.check_circle_rounded,
-                ),
-                const SizedBox(height: 6),
-                _buildEmployeeColumnItem(
-                  title: "Present",
-                  value: "$teamWiseTotalPresent",
-                  icon: Icons.person_pin_circle_rounded,
-                ),
-                const SizedBox(height: 6),
-                _buildEmployeeColumnItem(
-                  title: "Absent",
-                  value: "$teamWiseTotalAbsent",
-                  icon: Icons.cancel_rounded,
-                ),
-                const SizedBox(height: 6),
-                _buildEmployeeColumnItem(
-                  title: "Half Day",
-                  value: "$teamWiseTotalHalfDay",
-                  icon: Icons.access_time_filled_rounded,
-                ),
-              ],
-            ),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => staff_list()),
-              );
-            },
-          ),
+       _buildDashboardCard(
+  title: "Employees",
+  value: "Total $teamWiseTotalMembers",
+  lines: const [],
+  bottom: Column( 
+    children: [
+      // _buildEmployeeColumnItem(
+      //   title: "Teams",
+      //   value: "$teamWiseTotalTeams",
+      //   icon: Icons.groups_rounded,
+      // ),
+      const SizedBox(height: 6),
+      _buildEmployeeColumnItem(
+        title: "Present",
+        value: "$teamWiseTotalPresent",
+        icon: Icons.person_pin_circle_rounded,
+      ),
+      const SizedBox(height: 6),
+      _buildEmployeeColumnItem(
+        title: "Absent",
+        value: "$teamWiseTotalAbsent",
+        icon: Icons.cancel_rounded,
+      ),
+      const SizedBox(height: 6),
+      _buildEmployeeColumnItem(
+        title: "Half Day",
+        value: "$teamWiseTotalHalfDay",
+        icon: Icons.access_time_filled_rounded,
+      ),
+    ],
+  ),
+  onTap: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => staff_list()),
+    );
+  },
+),
           _buildDashboardCard(
             title: "Attendance",
             value: "",
@@ -6294,16 +6352,62 @@ value: "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}"
             elevation: 0,
             backgroundColor: Colors.white,
             // leading: Icon(Icons.arrow_back, color: Colors.black),
-            actions: [
-              //  IconButton(
-              //     icon: Image.asset('lib/assets/profile.png'),
+           actions: [
+  Padding(
+    padding: const EdgeInsets.only(right: 12),
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          icon: const Icon(
+            Icons.mail_outline_rounded,
+            color: Colors.black,
+            size: 28,
+          ),
+          onPressed: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const StaffMailPage(),
+              ),
+            );
 
-              //     onPressed: () {
-              //       Navigator.push(context, MaterialPageRoute(builder: (context)=>EditProfileScreen()));
+            fetchInboxMailCount();
+          },
+        ),
 
-              //     },
-              //   ),
-            ],
+        if (inboxMailCount > 0)
+          Positioned(
+            right: 4,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 6,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 18,
+                minHeight: 18,
+              ),
+              child: Text(
+                inboxMailCount > 99 ? '99+' : inboxMailCount.toString(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  ),
+],
           ),
           drawer: Drawer(
             backgroundColor: Colors.white,
@@ -6359,6 +6463,16 @@ value: "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}"
                       // Navigate to the Settings page or perform any other action
                     },
                   ),
+                       ListTile(
+                  title: Text('Send Mail'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => StaffMailPage()));
+                  },
+                ),
+
                   _buildDropdownTile(context, 'Customers', [
                     'Add Customer',
                     'Customers',

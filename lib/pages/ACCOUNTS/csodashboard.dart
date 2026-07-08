@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-
+import 'dart:async';
 import 'package:beposoft/Sales%20Directors/sd_add_attendance.dart';
 import 'package:beposoft/Sales%20Directors/sd_add_team_staffs.dart';
 import 'package:beposoft/Sales%20Directors/sd_all_dsr_reportpage.dart';
@@ -19,6 +19,7 @@ import 'package:beposoft/pages/ACCOUNTS/cso_waiting_for_approval_orderlist.dart'
 import 'package:beposoft/pages/ACCOUNTS/dailyproductcategorywisecyclingskating.dart';
 import 'package:beposoft/pages/ACCOUNTS/graph.dart';
 import 'package:beposoft/pages/ACCOUNTS/grv_list.dart';
+import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
 import 'package:beposoft/pages/ACCOUNTS/order_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/performa_invoice_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/status_wise_orders_list.dart';
@@ -105,7 +106,8 @@ class _cso_dashboardState extends State<cso_dashboard> {
   String todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
   DateTime? selectedDate;
-
+int inboxMailCount = 0;
+Timer? mailCountTimer;
   drower d = drower();
 
   @override
@@ -123,6 +125,11 @@ class _cso_dashboardState extends State<cso_dashboard> {
     getprofiledata();
     fetchCsoFamilySummary();
     fetchInvoiceCreatedCount();
+    fetchInboxMailCount();
+
+mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+  fetchInboxMailCount();
+});
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkAppUpdate(context);
@@ -156,6 +163,53 @@ class _cso_dashboardState extends State<cso_dashboard> {
 
     return false;
   }
+
+  @override
+void dispose() {
+  mailCountTimer?.cancel();
+  super.dispose();
+}
+
+  Future<void> fetchInboxMailCount() async {
+  try {
+    final token = await getTokenFromPrefs();
+
+    if (token == null || token.isEmpty) return;
+
+    final response = await http.get(
+      Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+
+      int count = 0;
+
+      if (decoded['count'] != null) {
+        count = decoded['count'];
+      } else if (decoded['results'] is Map &&
+          decoded['results']['data'] is List) {
+        count = decoded['results']['data'].length;
+      } else if (decoded['data'] is List) {
+        count = decoded['data'].length;
+      } else if (decoded['results'] is List) {
+        count = decoded['results'].length;
+      }
+
+      if (mounted && count != inboxMailCount) {
+        setState(() {
+          inboxMailCount = count;
+        });
+      }
+    }
+  } catch (e) {
+    debugPrint('MAIL COUNT ERROR: $e');
+  }
+}
   Future<bool> checkAppUpdate(BuildContext context) async {
     final packageInfo = await PackageInfo.fromPlatform();
     final currentVersion = packageInfo.version;
@@ -1525,6 +1579,7 @@ class _cso_dashboardState extends State<cso_dashboard> {
               ],
             ),
           ),
+          
               ListTile(
                   leading: Icon(Icons.person),
                   title: Text('Add Attendance'),
@@ -1624,6 +1679,17 @@ class _cso_dashboardState extends State<cso_dashboard> {
           //     );
           //   },
           // ),
+
+               ListTile(
+                  title: Text('Send Mail'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => StaffMailPage()));
+                  },
+                ),
+
           _buildDropdownTile(context, 'Reports', [
             'Sales Report Summary',
             'Sales Report',
@@ -1661,6 +1727,62 @@ class _cso_dashboardState extends State<cso_dashboard> {
           elevation: 0,
           backgroundColor: Colors.white,
           iconTheme: const IconThemeData(color: Color(0xFF111827)),
+        actions: [
+  Padding(
+    padding: const EdgeInsets.only(right: 12),
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          icon: const Icon(
+            Icons.mail_outline_rounded,
+            color: Colors.black,
+            size: 28,
+          ),
+          onPressed: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const StaffMailPage(),
+              ),
+            );
+
+            fetchInboxMailCount();
+          },
+        ),
+
+        if (inboxMailCount > 0)
+          Positioned(
+            right: 4,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 6,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 18,
+                minHeight: 18,
+              ),
+              child: Text(
+                inboxMailCount > 99 ? '99+' : inboxMailCount.toString(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  ),
+],
         ),
         drawer: _buildDrawer(context),
         body: SingleChildScrollView(
