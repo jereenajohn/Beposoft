@@ -48,8 +48,9 @@ class bdm_dashbord extends StatefulWidget {
   State<bdm_dashbord> createState() => _bdm_dashbordState();
 }
 
-class _bdm_dashbordState extends State<bdm_dashbord> {
-  List<String> statusOptions = ["pending", "approved", "rejected"];
+class _bdm_dashbordState extends State<bdm_dashbord>
+    with WidgetsBindingObserver {
+        List<String> statusOptions = ["pending", "approved", "rejected"];
   List<Map<String, dynamic>> grvlist = [];
   List<Map<String, dynamic>> proforma = [];
   List<Map<String, dynamic>> salesReportList = [];
@@ -63,7 +64,7 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
   String? selectedHourSlot;
   DateTime selectedTeamDate = DateTime.now();
   bool isManager = false;
-
+bool isFetchingInboxMailCount = false;
   String? username = '';
   int familyTotalBills = 0;
   double familyTotalAmount = 0.0;
@@ -78,6 +79,7 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _getUsername();
     fetchproformaData();
     initdata();
@@ -89,16 +91,23 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
     getprofiledata();
     getProfile();
 
-    mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+  mailCountTimer = Timer.periodic(
+  const Duration(seconds: 15),
+  (_) {
+    if (mounted) {
       fetchInboxMailCount();
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      AuthStatusChecker.start(context);
-    });
+    }
+  },
+);
+ WidgetsBinding.instance.addPostFrameCallback((_) {
+  if (!mounted) return;
+  AuthStatusChecker.start(context);
+});
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      checkAppUpdate(context);
-    });
+WidgetsBinding.instance.addPostFrameCallback((_) {
+  if (!mounted) return;
+  checkAppUpdate(context);
+});
   }
 
   void initdata() async {
@@ -121,7 +130,14 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
   String formatDisplayDate(DateTime date) {
     return DateFormat('dd-MM-yyyy').format(date);
   }
+@override
+void didChangeAppLifecycleState(AppLifecycleState state) {
+  super.didChangeAppLifecycleState(state);
 
+  if (state == AppLifecycleState.resumed) {
+    fetchInboxMailCount();
+  }
+}
   Future<void> getProfile() async {
     try {
       final token = await getTokenFromPrefs();
@@ -246,54 +262,130 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
     }
   }
 
-  Future<void> fetchInboxMailCount() async {
-    try {
-      final token = await getTokenFromPrefs();
+ Future<void> fetchInboxMailCount() async {
+  if (isFetchingInboxMailCount) return;
 
-      if (token == null || token.isEmpty) return;
+  isFetchingInboxMailCount = true;
 
-      final response = await http.get(
-        Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
+  try {
+    final String? token = await getTokenFromPrefs();
+
+    if (token == null || token.trim().isEmpty) {
+      return;
+    }
+
+    final Uri uri = Uri.parse(
+      '$api/api/internal/mails/',
+    ).replace(
+      queryParameters: {
+        'type': 'inbox',
+        'read_status': 'unread',
+        'page': '1',
+      },
+    );
+
+    final http.Response response = await http.get(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      debugPrint(
+        'MAIL COUNT REQUEST FAILED: '
+        '${response.statusCode} ${response.body}',
       );
+      return;
+    }
 
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
+    final dynamic decoded = jsonDecode(response.body);
 
-        int count = 0;
+    int newUnreadCount = 0;
 
-        if (decoded['count'] != null) {
-          count = decoded['count'];
-        } else if (decoded['results'] is Map &&
-            decoded['results']['data'] is List) {
-          count = decoded['results']['data'].length;
-        } else if (decoded['data'] is List) {
-          count = decoded['data'].length;
-        } else if (decoded['results'] is List) {
-          count = decoded['results'].length;
+    if (decoded is Map<String, dynamic>) {
+      final dynamic results = decoded['results'];
+      final dynamic data = decoded['data'];
+
+      final dynamic rawUnreadCount =
+          decoded['unread_count'] ??
+          (results is Map ? results['unread_count'] : null) ??
+          (data is Map ? data['unread_count'] : null);
+
+      final dynamic rawFilteredCount =
+          decoded['count'] ??
+          (results is Map ? results['count'] : null) ??
+          (data is Map ? data['count'] : null);
+
+      if (rawUnreadCount != null) {
+        newUnreadCount =
+            rawUnreadCount is int
+                ? rawUnreadCount
+                : int.tryParse(rawUnreadCount.toString()) ?? 0;
+      } else if (rawFilteredCount != null) {
+        newUnreadCount =
+            rawFilteredCount is int
+                ? rawFilteredCount
+                : int.tryParse(rawFilteredCount.toString()) ?? 0;
+      } else {
+        dynamic mailList;
+
+        if (results is Map && results['data'] is List) {
+          mailList = results['data'];
+        } else if (data is Map && data['data'] is List) {
+          mailList = data['data'];
+        } else if (results is List) {
+          mailList = results;
+        } else if (data is List) {
+          mailList = data;
         }
 
-        if (mounted && count != inboxMailCount) {
-          setState(() {
-            inboxMailCount = count;
-          });
+        if (mailList is List) {
+          newUnreadCount = mailList.where((dynamic mail) {
+            if (mail is! Map) return false;
+
+            if (mail.containsKey('is_read')) {
+              return mail['is_read'] != true;
+            }
+
+            if (mail.containsKey('read')) {
+              return mail['read'] != true;
+            }
+
+            final dynamic readAt = mail['read_at'];
+
+            return readAt == null ||
+                readAt.toString().trim().isEmpty;
+          }).length;
         }
       }
-    } catch (e) {
-      debugPrint('MAIL COUNT ERROR: $e');
     }
-  }
 
-  @override
-  void dispose() {
-    _isDisposed = true;
+    if (!mounted) return;
 
-    mailCountTimer?.cancel();
-    super.dispose();
+    if (inboxMailCount != newUnreadCount) {
+      setState(() {
+        inboxMailCount = newUnreadCount;
+      });
+    }
+  } catch (error, stackTrace) {
+    debugPrint('MAIL COUNT ERROR: $error');
+    debugPrintStack(stackTrace: stackTrace);
+  } finally {
+    isFetchingInboxMailCount = false;
   }
+}
+
+@override
+void dispose() {
+  _isDisposed = true;
+
+  WidgetsBinding.instance.removeObserver(this);
+  mailCountTimer?.cancel();
+
+  super.dispose();
+}
 
   Future<void> pickTeamDate() async {
     final DateTime? picked = await showDatePicker(
@@ -714,6 +806,7 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
         fetchOrderData(),
         fetchMyTeamDetailedSummary(),
         fetchFamilyWiseOrderSummary(),
+        fetchInboxMailCount(),
       ]);
     } catch (e) {
       debugPrint("Error refreshing dashboard: $e");
@@ -2310,16 +2403,18 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
                       color: Colors.black,
                       size: 28,
                     ),
-                    onPressed: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const StaffMailPage(),
-                        ),
-                      );
+                  onPressed: () async {
+  await Navigator.push<void>(
+    context,
+    MaterialPageRoute(
+      builder: (_) => const StaffMailPage(),
+    ),
+  );
 
-                      fetchInboxMailCount();
-                    },
+  if (!mounted) return;
+
+  await fetchInboxMailCount();
+},
                   ),
                   if (inboxMailCount > 0)
                     Positioned(
@@ -2405,15 +2500,23 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
                   },
                 ),
 
-                ListTile(
-                  title: Text('Send Mail'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => StaffMailPage()));
-                  },
-                ),
+              ListTile(
+  title: const Text('Send Mail'),
+  onTap: () async {
+    Navigator.pop(context);
+
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const StaffMailPage(),
+      ),
+    );
+
+    if (!mounted) return;
+
+    await fetchInboxMailCount();
+  },
+),
 
                 _buildDropdownTile(context, 'Customers', [
                   'Add Customer',
