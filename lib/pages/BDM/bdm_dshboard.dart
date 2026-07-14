@@ -72,7 +72,8 @@ class _bdm_dashbordState extends State<bdm_dashbord> {
   double familyTodaysTotalAmount = 0.0;
   bool isFamilySummaryLoading = false;
   int inboxMailCount = 0;
-Timer? mailCountTimer;
+  Timer? mailCountTimer;
+  String profileImage = '';
 
   @override
   void initState() {
@@ -85,10 +86,12 @@ Timer? mailCountTimer;
     getcustomer();
     fetchMyTeamDetailedSummary();
     fetchInboxMailCount();
+    getprofiledata();
+    getProfile();
 
-mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-  fetchInboxMailCount();
-});
+    mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      fetchInboxMailCount();
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AuthStatusChecker.start(context);
     });
@@ -117,6 +120,41 @@ mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
 
   String formatDisplayDate(DateTime date) {
     return DateFormat('dd-MM-yyyy').format(date);
+  }
+
+  Future<void> getProfile() async {
+    try {
+      final token = await getTokenFromPrefs();
+
+      final response = await http.get(
+        Uri.parse('$api/api/profile/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+        final data = parsed['data'];
+
+        setState(() {
+          isManager = data['is_manager'] ?? false;
+          profileImage = data['image']?.toString() ?? '';
+        });
+
+        debugPrint("IS MANAGER : $isManager");
+        debugPrint("PROFILE IMAGE : $profileImage");
+      }
+    } catch (e) {
+      debugPrint("PROFILE ERROR : $e");
+    }
+  }
+
+  String getProfileImageUrl() {
+    if (profileImage.trim().isEmpty) return '';
+    if (profileImage.startsWith('http')) return profileImage;
+    return '$api$profileImage';
   }
 
   Future<void> fetchFamilyWiseOrderSummary() async {
@@ -207,53 +245,55 @@ mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       }
     }
   }
+
   Future<void> fetchInboxMailCount() async {
-  try {
-    final token = await getTokenFromPrefs();
+    try {
+      final token = await getTokenFromPrefs();
 
-    if (token == null || token.isEmpty) return;
+      if (token == null || token.isEmpty) return;
 
-    final response = await http.get(
-      Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
+      final response = await http.get(
+        Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-    if (response.statusCode == 200) {
-      final decoded = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
 
-      int count = 0;
+        int count = 0;
 
-      if (decoded['count'] != null) {
-        count = decoded['count'];
-      } else if (decoded['results'] is Map &&
-          decoded['results']['data'] is List) {
-        count = decoded['results']['data'].length;
-      } else if (decoded['data'] is List) {
-        count = decoded['data'].length;
-      } else if (decoded['results'] is List) {
-        count = decoded['results'].length;
+        if (decoded['count'] != null) {
+          count = decoded['count'];
+        } else if (decoded['results'] is Map &&
+            decoded['results']['data'] is List) {
+          count = decoded['results']['data'].length;
+        } else if (decoded['data'] is List) {
+          count = decoded['data'].length;
+        } else if (decoded['results'] is List) {
+          count = decoded['results'].length;
+        }
+
+        if (mounted && count != inboxMailCount) {
+          setState(() {
+            inboxMailCount = count;
+          });
+        }
       }
-
-      if (mounted && count != inboxMailCount) {
-        setState(() {
-          inboxMailCount = count;
-        });
-      }
+    } catch (e) {
+      debugPrint('MAIL COUNT ERROR: $e');
     }
-  } catch (e) {
-    debugPrint('MAIL COUNT ERROR: $e');
   }
-}
-@override
-void dispose() {
-      _isDisposed = true;
 
-  mailCountTimer?.cancel();
-  super.dispose();
-}
+  @override
+  void dispose() {
+    _isDisposed = true;
+
+    mailCountTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> pickTeamDate() async {
     final DateTime? picked = await showDatePicker(
@@ -2258,62 +2298,64 @@ void dispose() {
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.white,
-actions: [
-  Padding(
-    padding: const EdgeInsets.only(right: 12),
-    child: Stack(
-      clipBehavior: Clip.none,
-      children: [
-        IconButton(
-          icon: const Icon(
-            Icons.mail_outline_rounded,
-            color: Colors.black,
-            size: 28,
-          ),
-          onPressed: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const StaffMailPage(),
-              ),
-            );
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.mail_outline_rounded,
+                      color: Colors.black,
+                      size: 28,
+                    ),
+                    onPressed: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const StaffMailPage(),
+                        ),
+                      );
 
-            fetchInboxMailCount();
-          },
-        ),
-
-        if (inboxMailCount > 0)
-          Positioned(
-            right: 4,
-            top: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 6,
-                vertical: 2,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              constraints: const BoxConstraints(
-                minWidth: 18,
-                minHeight: 18,
-              ),
-              child: Text(
-                inboxMailCount > 99 ? '99+' : inboxMailCount.toString(),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
+                      fetchInboxMailCount();
+                    },
+                  ),
+                  if (inboxMailCount > 0)
+                    Positioned(
+                      right: 4,
+                      top: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 18,
+                          minHeight: 18,
+                        ),
+                        child: Text(
+                          inboxMailCount > 99
+                              ? '99+'
+                              : inboxMailCount.toString(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
-          ),
-      ],
-    ),
-  ),
-],        ),
+          ],
+        ),
         drawer: Drawer(
           backgroundColor: Colors.white,
           child: Container(
@@ -2351,7 +2393,7 @@ actions: [
                   },
                 ),
                 Divider(),
-                    ListTile(
+                ListTile(
                   leading: Icon(Icons.person),
                   title: Text('Add Your Attendance'),
                   onTap: () {
@@ -2363,7 +2405,7 @@ actions: [
                   },
                 ),
 
-     ListTile(
+                ListTile(
                   title: Text('Send Mail'),
                   onTap: () {
                     Navigator.push(
@@ -2372,7 +2414,6 @@ actions: [
                             builder: (context) => StaffMailPage()));
                   },
                 ),
-
 
                 _buildDropdownTile(context, 'Customers', [
                   'Add Customer',
@@ -2390,8 +2431,8 @@ actions: [
                   // 'Add BDO Attendence',
                   'View Call Duration List'
                 ]),
-               
-                       if (isManager)
+
+                if (isManager)
                   ListTile(
                     leading: const Icon(Icons.group_add),
                     title: const Text('Add Attendance Team'),
@@ -2420,9 +2461,9 @@ actions: [
                     },
                   ),
                 // Divider(),
-               
+
                 ListTile(
-                   leading: Icon(Icons.pages),
+                  leading: Icon(Icons.pages),
                   title: Text('Request Leave Form'),
                   onTap: () {
                     Navigator.push(
@@ -2446,7 +2487,7 @@ actions: [
                     },
                   ),
 
-                   ListTile(
+                ListTile(
                   leading: Icon(Icons.person_2),
                   title: Text('View Staffs'),
                   onTap: () {
@@ -2493,9 +2534,13 @@ actions: [
                             ),
                           );
                         },
-                        child: const CircleAvatar(
+                        child: CircleAvatar(
                           radius: 25,
-                          backgroundImage: AssetImage('lib/assets/female.jpeg'),
+                          backgroundColor: const Color(0xFFE5E7EB),
+                          backgroundImage: getProfileImageUrl().isNotEmpty
+                              ? NetworkImage(getProfileImageUrl())
+                              : const AssetImage('lib/assets/female.jpeg')
+                                  as ImageProvider,
                         ),
                       ),
                       const SizedBox(width: 16),

@@ -86,46 +86,46 @@ class _sdAllAttendanceAddPageState extends State<sdAllAttendanceAddPage> {
     }
   }
 
-Future<void> updateApprovalStatus(dynamic item, String approvalStatus) async {
-  if (loggedInUserId == null) {
-    showError("Logged-in user not found");
-    return;
-  }
-
-  try {
-    setState(() => editLoading = true);
-
-    final token = await getToken();
-    if (token == null) throw Exception("Token missing");
-
-    final payload = {
-      "staff": item["staff"],
-      "attendance_date": item["attendance_date"],
-      "attendance_time": item["attendance_time"],
-      "status": item["status"],
-      "approval_status": approvalStatus,
-      "approved_by": loggedInUserId,
-      "approved_at": DateTime.now().toIso8601String(),
-    };
-
-    final response = await http.put(
-      Uri.parse("${baseUrl}staff/attendance/edit/${item["id"]}/"),
-      headers: authHeaders(token),
-      body: jsonEncode(payload),
-    );
-
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      showSuccess("Attendance $approvalStatus");
-      await fetchAttendance();
-    } else {
-      showError("Approval update failed");
+  Future<void> updateApprovalStatus(dynamic item, String approvalStatus) async {
+    if (loggedInUserId == null) {
+      showError("Logged-in user not found");
+      return;
     }
-  } catch (e) {
-    showError("Approval update failed");
-  } finally {
-    if (mounted) setState(() => editLoading = false);
+
+    try {
+      setState(() => editLoading = true);
+
+      final token = await getToken();
+      if (token == null) throw Exception("Token missing");
+
+      final payload = {
+        "staff": item["staff"],
+        "attendance_date": item["attendance_date"],
+        "attendance_time": item["attendance_time"],
+        "status": item["status"],
+        "approval_status": approvalStatus,
+        "approved_by": loggedInUserId,
+        "approved_at": DateTime.now().toIso8601String(),
+      };
+
+      final response = await http.put(
+        Uri.parse("${baseUrl}staff/attendance/edit/${item["id"]}/"),
+        headers: authHeaders(token),
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        showSuccess("Attendance $approvalStatus");
+        await fetchAttendance();
+      } else {
+        showError("Approval update failed");
+      }
+    } catch (e) {
+      showError("Approval update failed");
+    } finally {
+      if (mounted) setState(() => editLoading = false);
+    }
   }
-}
 
   Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -301,7 +301,7 @@ Future<void> updateApprovalStatus(dynamic item, String approvalStatus) async {
   Future<void> addAttendance() async {
     if (!addFormKey.currentState!.validate()) return;
 
-    if (addTime == null) {
+    if (addStatus != "absent" && addTime == null) {
       showError("Select reporting time");
       return;
     }
@@ -315,10 +315,9 @@ Future<void> updateApprovalStatus(dynamic item, String approvalStatus) async {
       final payload = {
         "staff": int.tryParse(addStaff.toString()),
         "attendance_date": todayDate,
-        "attendance_time": formatTime(addTime!),
+        "attendance_time": addStatus == "absent" ? null : formatTime(addTime!),
         "status": addStatus,
       };
-
       final response = await http.post(
         Uri.parse("${baseUrl}staff/attendance/"),
         headers: authHeaders(token),
@@ -424,7 +423,7 @@ Future<void> updateApprovalStatus(dynamic item, String approvalStatus) async {
       return;
     }
 
-    if (editTime == null) {
+    if (editStatus != "absent" && editTime == null) {
       showError("Select reporting time");
       return;
     }
@@ -434,11 +433,11 @@ Future<void> updateApprovalStatus(dynamic item, String approvalStatus) async {
 
       final token = await getToken();
       if (token == null) throw Exception("Token missing");
-
       final payload = {
         "staff": int.tryParse(editStaff.toString()),
         "attendance_date": editDate,
-        "attendance_time": formatTime(editTime!),
+        "attendance_time":
+            editStatus == "absent" ? null : formatTime(editTime!),
         "status": editStatus,
       };
 
@@ -1151,178 +1150,181 @@ Future<void> updateApprovalStatus(dynamic item, String approvalStatus) async {
     );
   }
 
- Widget buildAttendanceRow(dynamic item, int index) {
-  final approvalStatus = item["approval_status"]?.toString() ?? "pending";
+  Widget buildAttendanceRow(dynamic item, int index) {
+    final approvalStatus = item["approval_status"]?.toString() ?? "pending";
 
-  return Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-    child: Column(
-      children: [
-        Row(
-          children: [
-            CircleAvatar(
-              radius: 17,
-              backgroundColor: const Color(0xFFEFF6FF),
-              child: Text(
-                "${index + 1}",
-                style: const TextStyle(
-                  color: Color(0xFF2563EB),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 17,
+                backgroundColor: const Color(0xFFEFF6FF),
+                child: Text(
+                  "${index + 1}",
+                  style: const TextStyle(
+                    color: Color(0xFF2563EB),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                item["staff_name"]?.toString() ?? "-",
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFF111827),
-                  fontWeight: FontWeight.w900,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  item["staff_name"]?.toString() ?? "-",
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF111827),
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            buildStatusBadge(item["status"]?.toString()),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            const Icon(Icons.access_time_rounded, size: 17, color: Color(0xFF64748B)),
-            const SizedBox(width: 6),
-            Text(
-              item["attendance_time"]?.toString() ?? "--:--",
-              style: const TextStyle(
-                color: Color(0xFF334155),
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                item["attendance_date"]?.toString() ?? "-",
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Color(0xFF334155)),
-              ),
-            ),
-            IconButton(
-              tooltip: "Edit",
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-              onPressed: () {
-                selectedTeam = null;
-                editStaff = null;
-                editStatus = null;
-                editDate = null;
-                editTime = null;
-                openEditModal(item["id"]);
-              },
-              icon: const Icon(
-                Icons.edit_rounded,
-                size: 20,
-                color: Color(0xFFB45309),
-              ),
-            ),
-          PopupMenuButton<String>(
-  onSelected: (value) => updateApprovalStatus(item, value),
-  shape: RoundedRectangleBorder(
-    borderRadius: BorderRadius.circular(14),
-  ),
-  itemBuilder: (_) => const [
-    PopupMenuItem(
-      value: "approved",
-      child: Row(
-        children: [
-          Icon(Icons.check_circle, color: Colors.green),
-          SizedBox(width: 10),
-          Text("Approve"),
-        ],
-      ),
-    ),
-    PopupMenuItem(
-      value: "rejected",
-      child: Row(
-        children: [
-          Icon(Icons.cancel, color: Colors.red),
-          SizedBox(width: 10),
-          Text("Reject"),
-        ],
-      ),
-    ),
-    PopupMenuItem(
-      value: "pending",
-      child: Row(
-        children: [
-          Icon(Icons.hourglass_empty, color: Colors.orange),
-          SizedBox(width: 10),
-          Text("Pending"),
-        ],
-      ),
-    ),
-  ],
-  child: Container(
-    padding: const EdgeInsets.symmetric(
-      horizontal: 10,
-      vertical: 6,
-    ),
-    decoration: BoxDecoration(
-      color: approvalStatus == "approved"
-          ? Colors.green.shade50
-          : approvalStatus == "rejected"
-              ? Colors.red.shade50
-              : Colors.orange.shade50,
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(
-        color: approvalStatus == "approved"
-            ? Colors.green
-            : approvalStatus == "rejected"
-                ? Colors.red
-                : Colors.orange,
-      ),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          Icons.gpp_good_rounded,
-          size: 18,
-          color: approvalStatus == "approved"
-              ? Colors.green
-              : approvalStatus == "rejected"
-                  ? Colors.red
-                  : Colors.orange,
-        ),
-        const SizedBox(width: 5),
-        Text(
-approvalStatus[0].toUpperCase() + approvalStatus.substring(1),
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: approvalStatus == "approved"
-                ? Colors.green
-                : approvalStatus == "rejected"
-                    ? Colors.red
-                    : Colors.orange,
+              const SizedBox(width: 8),
+              buildStatusBadge(item["status"]?.toString()),
+            ],
           ),
-        ),
-        const SizedBox(width: 2),
-        const Icon(
-          Icons.arrow_drop_down,
-          size: 18,
-        ),
-      ],
-    ),
-  ),
-)
-          ],
-        ),
-      ],
-    ),
-  );
-}
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.access_time_rounded,
+                  size: 17, color: Color(0xFF64748B)),
+              const SizedBox(width: 6),
+              Text(
+                item["attendance_time"]?.toString() ?? "--:--",
+                style: const TextStyle(
+                  color: Color(0xFF334155),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  item["attendance_date"]?.toString() ?? "-",
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Color(0xFF334155)),
+                ),
+              ),
+              IconButton(
+                tooltip: "Edit",
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                onPressed: () {
+                  selectedTeam = null;
+                  editStaff = null;
+                  editStatus = null;
+                  editDate = null;
+                  editTime = null;
+                  openEditModal(item["id"]);
+                },
+                icon: const Icon(
+                  Icons.edit_rounded,
+                  size: 20,
+                  color: Color(0xFFB45309),
+                ),
+              ),
+              PopupMenuButton<String>(
+                onSelected: (value) => updateApprovalStatus(item, value),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: "approved",
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green),
+                        SizedBox(width: 10),
+                        Text("Approve"),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: "rejected",
+                    child: Row(
+                      children: [
+                        Icon(Icons.cancel, color: Colors.red),
+                        SizedBox(width: 10),
+                        Text("Reject"),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: "pending",
+                    child: Row(
+                      children: [
+                        Icon(Icons.hourglass_empty, color: Colors.orange),
+                        SizedBox(width: 10),
+                        Text("Pending"),
+                      ],
+                    ),
+                  ),
+                ],
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: approvalStatus == "approved"
+                        ? Colors.green.shade50
+                        : approvalStatus == "rejected"
+                            ? Colors.red.shade50
+                            : Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: approvalStatus == "approved"
+                          ? Colors.green
+                          : approvalStatus == "rejected"
+                              ? Colors.red
+                              : Colors.orange,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.gpp_good_rounded,
+                        size: 18,
+                        color: approvalStatus == "approved"
+                            ? Colors.green
+                            : approvalStatus == "rejected"
+                                ? Colors.red
+                                : Colors.orange,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        approvalStatus[0].toUpperCase() +
+                            approvalStatus.substring(1),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: approvalStatus == "approved"
+                              ? Colors.green
+                              : approvalStatus == "rejected"
+                                  ? Colors.red
+                                  : Colors.orange,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(
+                        Icons.arrow_drop_down,
+                        size: 18,
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget buildStatusBadge(String? status) {
     Color bg;
     Color fg;
@@ -1638,7 +1640,13 @@ approvalStatus[0].toUpperCase() + approvalStatus.substring(1),
                                 buildStatusDropdown(
                                   value: addStatus,
                                   onChanged: (value) {
-                                    dialogSetState(() => addStatus = value);
+                                    dialogSetState(() {
+                                      addStatus = value;
+
+                                      if (value == "absent") {
+                                        addTime = null;
+                                      }
+                                    });
                                   },
                                   validator: (value) =>
                                       value == null ? "Select Status" : null,
@@ -1758,7 +1766,13 @@ approvalStatus[0].toUpperCase() + approvalStatus.substring(1),
                                 buildStatusDropdown(
                                   value: editStatus,
                                   onChanged: (value) {
-                                    dialogSetState(() => editStatus = value);
+                                    dialogSetState(() {
+                                      editStatus = value;
+
+                                      if (value == "absent") {
+                                        editTime = null;
+                                      }
+                                    });
                                   },
                                   validator: (value) =>
                                       value == null ? "Select Status" : null,

@@ -289,7 +289,7 @@ class _AllAttendanceAddPageState extends State<AllAttendanceAddPage> {
   Future<void> addAttendance() async {
     if (!addFormKey.currentState!.validate()) return;
 
-    if (addTime == null) {
+    if (addStatus != "absent" && addTime == null) {
       showError("Select reporting time");
       return;
     }
@@ -303,7 +303,7 @@ class _AllAttendanceAddPageState extends State<AllAttendanceAddPage> {
       final payload = {
         "staff": int.tryParse(addStaff.toString()),
         "attendance_date": todayDate,
-        "attendance_time": formatTime(addTime!),
+        "attendance_time": addStatus == "absent" ? null : formatTime(addTime!),
         "status": addStatus,
       };
 
@@ -412,7 +412,7 @@ class _AllAttendanceAddPageState extends State<AllAttendanceAddPage> {
       return;
     }
 
-    if (editTime == null) {
+    if (editStatus != "absent" && editTime == null) {
       showError("Select reporting time");
       return;
     }
@@ -426,7 +426,8 @@ class _AllAttendanceAddPageState extends State<AllAttendanceAddPage> {
       final payload = {
         "staff": int.tryParse(editStaff.toString()),
         "attendance_date": editDate,
-        "attendance_time": formatTime(editTime!),
+        "attendance_time":
+            editStatus == "absent" ? null : formatTime(editTime!),
         "status": editStatus,
       };
 
@@ -1635,7 +1636,13 @@ class _AllAttendanceAddPageState extends State<AllAttendanceAddPage> {
                                 buildStatusDropdown(
                                   value: addStatus,
                                   onChanged: (value) {
-                                    dialogSetState(() => addStatus = value);
+                                    dialogSetState(() {
+                                      addStatus = value;
+
+                                      if (value == "absent") {
+                                        addTime = null;
+                                      }
+                                    });
                                   },
                                   validator: (value) =>
                                       value == null ? "Select Status" : null,
@@ -1755,7 +1762,13 @@ class _AllAttendanceAddPageState extends State<AllAttendanceAddPage> {
                                 buildStatusDropdown(
                                   value: editStatus,
                                   onChanged: (value) {
-                                    dialogSetState(() => editStatus = value);
+                                    dialogSetState(() {
+                                      editStatus = value;
+
+                                      if (value == "absent") {
+                                        editTime = null;
+                                      }
+                                    });
                                   },
                                   validator: (value) =>
                                       value == null ? "Select Status" : null,

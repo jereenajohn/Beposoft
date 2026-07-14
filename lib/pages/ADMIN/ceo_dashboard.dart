@@ -131,15 +131,19 @@ class _ceo_dashboardState extends State<ceo_dashboard> {
   String selectedBdmReportDate = "";
   bool dbrLoading = true;
   int waitingForConfirmationCount = 0;
-int inboxMailCount = 0;
-Timer? mailCountTimer;
+  int inboxMailCount = 0;
+  Timer? mailCountTimer;
   bool isBankReportLoading = true;
   String monthlyExpenseFrom = "";
   String monthlyExpenseTo = "";
   DateTimeRange? familySummaryTeamSelectedRange;
   String familySummaryTeamFromDate = "";
   String familySummaryTeamToDate = "";
+  String profileImage = '';
+  bool familyInventoryLoading = false;
 
+  Map<String, dynamic> cyclingInventorySummary = {};
+  Map<String, dynamic> skatingInventorySummary = {};
   Map<String, double> expenseTypeWiseTotals =
       {}; // will store totals grouped by expense_type
   Map<String, dynamic>? productsData;
@@ -186,7 +190,10 @@ Timer? mailCountTimer;
 
   Map<String, dynamic> beposoftSummary = {};
   bool beposoftSummaryLoading = false;
+  Map<String, dynamic> todayInventory = {};
+  Map<String, dynamic> monthInventory = {};
 
+  bool inventoryAmountLoading = false;
   int dashboardTotalStock = 0;
   double dashboardTotalRetailAmount = 0.0;
   bool dashboardInventoryLoading = false;
@@ -201,8 +208,8 @@ Timer? mailCountTimer;
   bool isManager = false;
   int teamWiseTotalPresent = 0;
   int teamWiseTotalTeams = 0;
-int teamWiseTotalMembers = 0;
-int teamWiseGrandTotal = 0;
+  int teamWiseTotalMembers = 0;
+  int teamWiseGrandTotal = 0;
 
   List<Map<String, dynamic>> salesTeamCdTeamTotals = [];
   bool salesTeamCdLoading = false;
@@ -272,11 +279,11 @@ int teamWiseGrandTotal = 0;
       start: DateTime(now.year, now.month, now.day, 0, 0, 0),
       end: DateTime(now.year, now.month, now.day, 23, 59, 59),
     );
-fetchInboxMailCount();
+    fetchInboxMailCount();
 
-mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-  fetchInboxMailCount();
-});
+    mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      fetchInboxMailCount();
+    });
     initdata();
     getProfile();
     getGrvList();
@@ -297,6 +304,9 @@ mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
     fetchDashboardInventorySummary();
     fetchSalesTeamCdTotalsForCeo();
     fetchWaitingForConfirmationCount();
+    getProfile();
+    fetchInventoryAmountSummary();
+    fetchFamilyWiseInventorySummary();
 
     //   fetchInternalTransfersData(
     // getdgnvd);
@@ -322,11 +332,12 @@ mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
     );
   }
 
-@override
-void dispose() {
-  mailCountTimer?.cancel();
-  super.dispose();
-}
+  @override
+  void dispose() {
+    mailCountTimer?.cancel();
+    super.dispose();
+  }
+
   void initdata() async {
     department = await getdepFromPrefs();
     await getdata();
@@ -334,46 +345,298 @@ void dispose() {
     // fetchorders();
     await fetchReport();
   }
-Future<void> fetchInboxMailCount() async {
-  try {
-    final token = await getTokenFromPrefs();
 
-    if (token == null || token.isEmpty) return;
+  Future<void> fetchFamilyWiseInventorySummary() async {
+    if (!mounted) return;
 
-    final response = await http.get(
-      Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
+    setState(() {
+      familyInventoryLoading = true;
+    });
 
-    if (response.statusCode == 200) {
-      final decoded = jsonDecode(response.body);
+    try {
+      final String? token = await getTokenFromPrefs();
 
-      int count = 0;
+      if (token == null || token.isEmpty) {
+        if (!mounted) return;
 
-      if (decoded['count'] != null) {
-        count = decoded['count'];
-      } else if (decoded['results'] is Map &&
-          decoded['results']['data'] is List) {
-        count = decoded['results']['data'].length;
-      } else if (decoded['data'] is List) {
-        count = decoded['data'].length;
-      } else if (decoded['results'] is List) {
-        count = decoded['results'].length;
+        setState(() {
+          cyclingInventorySummary = {};
+          skatingInventorySummary = {};
+          familyInventoryLoading = false;
+        });
+
+        return;
       }
 
-      if (mounted && count != inboxMailCount) {
+      final Uri uri = Uri.parse(
+        '$api/api/products/family/wise/summary/',
+      );
+
+      debugPrint('FAMILY INVENTORY SUMMARY URL: $uri');
+
+      final http.Response response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      debugPrint(
+        'FAMILY INVENTORY SUMMARY STATUS: '
+        '${response.statusCode}',
+      );
+
+      debugPrint(
+        'FAMILY INVENTORY SUMMARY BODY: '
+        '${response.body}',
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode != 200) {
         setState(() {
-          inboxMailCount = count;
+          cyclingInventorySummary = {};
+          skatingInventorySummary = {};
+          familyInventoryLoading = false;
+        });
+
+        return;
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+
+      final List<dynamic> results = decoded is Map && decoded['results'] is List
+          ? List<dynamic>.from(decoded['results'])
+          : <dynamic>[];
+
+      Map<String, dynamic> cyclingData = {};
+      Map<String, dynamic> skatingData = {};
+
+      for (final dynamic item in results) {
+        if (item is! Map) continue;
+
+        final Map<String, dynamic> family = Map<String, dynamic>.from(item);
+
+        final String familyName =
+            (family['family_name'] ?? '').toString().trim().toLowerCase();
+
+        if (familyName == 'cycling') {
+          cyclingData = family;
+        } else if (familyName == 'skating') {
+          skatingData = family;
+        }
+      }
+
+      setState(() {
+        cyclingInventorySummary = cyclingData;
+        skatingInventorySummary = skatingData;
+        familyInventoryLoading = false;
+      });
+    } catch (e, stackTrace) {
+      debugPrint(
+        'FAMILY INVENTORY SUMMARY ERROR: $e',
+      );
+
+      debugPrintStack(
+        stackTrace: stackTrace,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        cyclingInventorySummary = {};
+        skatingInventorySummary = {};
+        familyInventoryLoading = false;
+      });
+    }
+  }
+
+  Future<void> fetchInventoryAmountSummary() async {
+    if (!mounted) return;
+
+    setState(() {
+      inventoryAmountLoading = true;
+    });
+
+    try {
+      final token = await getTokenFromPrefs();
+
+      if (token == null || token.isEmpty) {
+        if (!mounted) return;
+
+        setState(() {
+          inventoryAmountLoading = false;
+        });
+        return;
+      }
+
+      final now = DateTime.now();
+
+      final today = DateFormat(
+        'yyyy-MM-dd',
+      ).format(now);
+
+      final monthStart = DateFormat(
+        'yyyy-MM-dd',
+      ).format(
+        DateTime(now.year, now.month, 1),
+      );
+
+      final todayUri = Uri.parse(
+        '$api/api/warehouse/product/amount/summary/',
+      ).replace(
+        queryParameters: {
+          'start_date': today,
+          'end_date': today,
+        },
+      );
+
+      final monthUri = Uri.parse(
+        '$api/api/warehouse/product/amount/summary/',
+      ).replace(
+        queryParameters: {
+          'start_date': monthStart,
+          'end_date': today,
+        },
+      );
+
+      final responses = await Future.wait([
+        http.get(
+          todayUri,
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        ),
+        http.get(
+          monthUri,
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        ),
+      ]);
+
+      final todayResponse = responses[0];
+      final monthResponse = responses[1];
+
+      if (!mounted) return;
+
+      if (todayResponse.statusCode == 200 && monthResponse.statusCode == 200) {
+        final todayDecoded = jsonDecode(
+          todayResponse.body,
+        );
+
+        final monthDecoded = jsonDecode(
+          monthResponse.body,
+        );
+
+        setState(() {
+          todayInventory = Map<String, dynamic>.from(todayDecoded);
+
+          monthInventory = Map<String, dynamic>.from(monthDecoded);
+
+          inventoryAmountLoading = false;
+        });
+      } else {
+        debugPrint(
+          'INVENTORY AMOUNT SUMMARY FAILED: '
+          'today=${todayResponse.statusCode}, '
+          'month=${monthResponse.statusCode}',
+        );
+
+        setState(() {
+          todayInventory = {};
+          monthInventory = {};
+          inventoryAmountLoading = false;
         });
       }
+    } catch (e) {
+      debugPrint(
+        'INVENTORY AMOUNT SUMMARY ERROR: $e',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        todayInventory = {};
+        monthInventory = {};
+        inventoryAmountLoading = false;
+      });
     }
-  } catch (e) {
-    debugPrint('MAIL COUNT ERROR: $e');
   }
-}
+
+  Future<void> getProfile() async {
+    try {
+      final token = await getTokenFromPrefs();
+
+      final response = await http.get(
+        Uri.parse('$api/api/profile/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+        final data = parsed['data'];
+
+        setState(() {
+          isManager = data['is_manager'] ?? false;
+          profileImage = data['image']?.toString() ?? '';
+        });
+
+        debugPrint("IS MANAGER : $isManager");
+        debugPrint("PROFILE IMAGE : $profileImage");
+      }
+    } catch (e) {
+      debugPrint("PROFILE ERROR : $e");
+    }
+  }
+
+  Future<void> fetchInboxMailCount() async {
+    try {
+      final token = await getTokenFromPrefs();
+
+      if (token == null || token.isEmpty) return;
+
+      final response = await http.get(
+        Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+
+        int count = 0;
+
+        if (decoded['count'] != null) {
+          count = decoded['count'];
+        } else if (decoded['results'] is Map &&
+            decoded['results']['data'] is List) {
+          count = decoded['results']['data'].length;
+        } else if (decoded['data'] is List) {
+          count = decoded['data'].length;
+        } else if (decoded['results'] is List) {
+          count = decoded['results'].length;
+        }
+
+        if (mounted && count != inboxMailCount) {
+          setState(() {
+            inboxMailCount = count;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('MAIL COUNT ERROR: $e');
+    }
+  }
+
   Future<void> fetchWaitingForConfirmationCount() async {
     try {
       final token = await getTokenFromPrefs();
@@ -466,46 +729,52 @@ Future<void> fetchInboxMailCount() async {
         });
 
         if (!mounted) return;
-       setState(() {
-  teamWiseTotalTeams = _asInt(summary['total_teams']);
-  teamWiseTotalMembers = _asInt(summary['total_members']);
-  teamWiseTotalPresent = _asInt(summary['total_present']);
-  teamWiseTotalAbsent = _asInt(summary['total_absent']);
-  teamWiseTotalHalfDay = _asInt(summary['total_half_day']);
-  teamWiseGrandTotal = _asInt(summary['grand_total']);
+        setState(() {
+          teamWiseTotalTeams = _asInt(summary['total_teams']);
+          teamWiseTotalMembers = _asInt(summary['total_members']);
+          teamWiseTotalPresent = _asInt(summary['total_present']);
+          teamWiseTotalAbsent = _asInt(summary['total_absent']);
+          teamWiseTotalHalfDay = _asInt(summary['total_half_day']);
+          teamWiseGrandTotal = _asInt(summary['grand_total']);
 
-  departmentAttendanceCards = cards;
-});
+          departmentAttendanceCards = cards;
+        });
       }
     } catch (e) {
       debugPrint("TEAM WISE ATTENDANCE COUNT ERROR: $e");
     }
   }
 
-  Future<void> getProfile() async {
-    try {
-      final token = await getTokenFromPrefs();
+  // Future<void> getProfile() async {
+  //   try {
+  //     final token = await getTokenFromPrefs();
 
-      final response = await http.get(
-        Uri.parse('$api/api/profile/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
+  //     final response = await http.get(
+  //       Uri.parse('$api/api/profile/'),
+  //       headers: {
+  //         'Authorization': 'Bearer $token',
+  //         'Content-Type': 'application/json',
+  //       },
+  //     );
 
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
+  //     if (response.statusCode == 200) {
+  //       final parsed = jsonDecode(response.body);
 
-        setState(() {
-          isManager = parsed['data']['is_manager'] ?? false;
-        });
+  //       setState(() {
+  //         isManager = parsed['data']['is_manager'] ?? false;
+  //       });
 
-        debugPrint("IS MANAGER : $isManager");
-      }
-    } catch (e) {
-      debugPrint("PROFILE ERROR : $e");
-    }
+  //       debugPrint("IS MANAGER : $isManager");
+  //     }
+  //   } catch (e) {
+  //     debugPrint("PROFILE ERROR : $e");
+  //   }
+  // }
+
+  String getProfileImageUrl() {
+    if (profileImage.trim().isEmpty) return '';
+    if (profileImage.startsWith('http')) return profileImage;
+    return '$api$profileImage';
   }
 
   Future<String?> getdepFromPrefs() async {
@@ -536,6 +805,8 @@ Future<void> fetchInboxMailCount() async {
       Future(() => getTodayODReportTotals()),
       Future(() => getCategoryWiseProducts()),
       Future(() => fetchBdmOverallFamilyReport()),
+      Future(() => fetchInventoryAmountSummary()),
+      Future(() => fetchFamilyWiseInventorySummary()),
       Future(() => getstaff()),
       Future(() => fetchGrvSummary()),
       Future(() => fetchWaitingForConfirmationCount()),
@@ -2688,16 +2959,16 @@ Future<void> fetchInboxMailCount() async {
     final dgmWeightFieldKg =
         _asDouble(dgmCurrentMonthSummary['total_weight_field_kg']);
 
-        final paymentSummary = _asMap(productsData?['payment_status_summary']);
+    final paymentSummary = _asMap(productsData?['payment_status_summary']);
 
-final todayPayment = _asMap(paymentSummary['today']);
-final monthPayment = _asMap(paymentSummary['month']);
+    final todayPayment = _asMap(paymentSummary['today']);
+    final monthPayment = _asMap(paymentSummary['month']);
 
-final todayPaid = _asMap(todayPayment['paid']);
-final todayCod = _asMap(todayPayment['COD']);
+    final todayPaid = _asMap(todayPayment['paid']);
+    final todayCod = _asMap(todayPayment['COD']);
 
-final monthPaid = _asMap(monthPayment['paid']);
-final monthCod = _asMap(monthPayment['COD']);
+    final monthPaid = _asMap(monthPayment['paid']);
+    final monthCod = _asMap(monthPayment['COD']);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
@@ -2709,23 +2980,24 @@ final monthCod = _asMap(monthPayment['COD']);
         mainAxisSpacing: 10,
         childAspectRatio: 0.72,
         children: [
-_buildDashboardCard(
-  title: "Sales",
-value: "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}",
-  lines: [
-    "MT. Invoices: ${_asInt(productsData?['month_count'])}",
-    "T Paid: ${_asInt(todayPaid['count'])} | ${_formatDashboardAmount(todayPaid['total'])}",
-    "T. COD: ${_asInt(todayCod['count'])} | ${_formatDashboardAmount(todayCod['total'])}",
-    "M. Paid: ${_asInt(monthPaid['count'])} | ${_formatDashboardAmount(monthPaid['total'])}",
-    "M. COD: ${_asInt(monthCod['count'])} | ${_formatDashboardAmount(monthCod['total'])}",
-  ],
-  onTap: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => SalesReportExcel()),
-    );
-  },
-),
+          _buildDashboardCard(
+            title: "Sales",
+            value:
+                "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}",
+            lines: [
+              "MT. Invoices: ${_asInt(productsData?['month_count'])}",
+              "T Paid: ${_asInt(todayPaid['count'])} | ${_formatDashboardAmount(todayPaid['total'])}",
+              "T. COD: ${_asInt(todayCod['count'])} | ${_formatDashboardAmount(todayCod['total'])}",
+              "M. Paid: ${_asInt(monthPaid['count'])} | ${_formatDashboardAmount(monthPaid['total'])}",
+              "M. COD: ${_asInt(monthCod['count'])} | ${_formatDashboardAmount(monthCod['total'])}",
+            ],
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => SalesReportExcel()),
+              );
+            },
+          ),
           _buildDashboardCard(
             title: "Finance",
             valueLabel: "TCB",
@@ -2810,44 +3082,44 @@ value: "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}"
               );
             },
           ),
-       _buildDashboardCard(
-  title: "Employees",
-  value: "Total $teamWiseTotalMembers",
-  lines: const [],
-  bottom: Column( 
-    children: [
-      // _buildEmployeeColumnItem(
-      //   title: "Teams",
-      //   value: "$teamWiseTotalTeams",
-      //   icon: Icons.groups_rounded,
-      // ),
-      const SizedBox(height: 6),
-      _buildEmployeeColumnItem(
-        title: "Present",
-        value: "$teamWiseTotalPresent",
-        icon: Icons.person_pin_circle_rounded,
-      ),
-      const SizedBox(height: 6),
-      _buildEmployeeColumnItem(
-        title: "Absent",
-        value: "$teamWiseTotalAbsent",
-        icon: Icons.cancel_rounded,
-      ),
-      const SizedBox(height: 6),
-      _buildEmployeeColumnItem(
-        title: "Half Day",
-        value: "$teamWiseTotalHalfDay",
-        icon: Icons.access_time_filled_rounded,
-      ),
-    ],
-  ),
-  onTap: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => staff_list()),
-    );
-  },
-),
+          _buildDashboardCard(
+            title: "Employees",
+            value: "Total $teamWiseTotalMembers",
+            lines: const [],
+            bottom: Column(
+              children: [
+                // _buildEmployeeColumnItem(
+                //   title: "Teams",
+                //   value: "$teamWiseTotalTeams",
+                //   icon: Icons.groups_rounded,
+                // ),
+                const SizedBox(height: 6),
+                _buildEmployeeColumnItem(
+                  title: "Present",
+                  value: "$teamWiseTotalPresent",
+                  icon: Icons.person_pin_circle_rounded,
+                ),
+                const SizedBox(height: 6),
+                _buildEmployeeColumnItem(
+                  title: "Absent",
+                  value: "$teamWiseTotalAbsent",
+                  icon: Icons.cancel_rounded,
+                ),
+                const SizedBox(height: 6),
+                _buildEmployeeColumnItem(
+                  title: "Half Day",
+                  value: "$teamWiseTotalHalfDay",
+                  icon: Icons.access_time_filled_rounded,
+                ),
+              ],
+            ),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => staff_list()),
+              );
+            },
+          ),
           _buildDashboardCard(
             title: "Attendance",
             value: "",
@@ -3006,17 +3278,60 @@ value: "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}"
             valueLabel: "WH",
             value: dashboardInventoryLoading
                 ? "Loading..."
-                : _formatDashboardAmount(dashboardTotalSellingAmount),
+                : _formatDashboardAmount(
+                    dashboardTotalSellingAmount,
+                  ),
             lines: [
               dashboardInventoryLoading
                   ? "Retail: Loading..."
-                  : "Retail: ${_formatDashboardAmount(dashboardTotalRetailAmount)}",
+                  : "Retail: ${_formatDashboardAmount(
+                      dashboardTotalRetailAmount,
+                    )}",
               dashboardInventoryLoading
                   ? "Landing: Loading..."
-                  : "Landing: ${_formatDashboardAmount(dashboardTotalLandingCostAmount)}",
-              // dashboardInventoryLoading
-              //     ? "Stock: Loading..."
-              //     : "Stock: $dashboardTotalStock",
+                  : "Landing: ${_formatDashboardAmount(
+                      dashboardTotalLandingCostAmount,
+                    )}",
+              inventoryAmountLoading
+                  ? "Today Qty: Loading..."
+                  : "Today Qty: ${_asInt(
+                      todayInventory['total_quantity'],
+                    )}",
+              inventoryAmountLoading
+                  ? "Today Amount: Loading..."
+                  : "T.Amount: ${_formatDashboardAmount(
+                      todayInventory['total_amount'],
+                    )}",
+              inventoryAmountLoading
+                  ? "Month Qty: Loading..."
+                  : "Month Qty: ${_asInt(
+                      monthInventory['total_quantity'],
+                    )}",
+              inventoryAmountLoading
+                  ? "Month Amount: Loading..."
+                  : "M.Amount: ${_formatDashboardAmount(
+                      monthInventory['total_amount'],
+                    )}",
+              // familyInventoryLoading
+              //     ? "Cycling Products: Loading..."
+              //     : "Cycling Products: ${_asInt(
+              //         cyclingInventorySummary['product_count'],
+              //       )}",
+              // familyInventoryLoading
+              //     ? "Cycling Value: Loading..."
+              //     : "Cycling Value: ${_formatDashboardAmount(
+              //         cyclingInventorySummary['total_selling_value'],
+              //       )}",
+              // familyInventoryLoading
+              //     ? "Skating Products: Loading..."
+              //     : "Skating Products: ${_asInt(
+              //         skatingInventorySummary['product_count'],
+              //       )}",
+              // familyInventoryLoading
+              //     ? "Skating Value: Loading..."
+              //     : "Skating Value: ${_formatDashboardAmount(
+              //         skatingInventorySummary['total_selling_value'],
+              //       )}",
             ],
             onTap: () {
               Navigator.push(
@@ -3192,10 +3507,59 @@ value: "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}"
   }) {
     final bool isExpanded = dashboardCardExpanded[title] ?? false;
 
-    final bool hasMore = enableSeeMore && lines.length > 1;
+    final bool canExpand = enableSeeMore && lines.length > 1;
 
-    final visibleLines = lines.length > 5 ? lines.take(5).toList() : lines;
-    final hiddenLines = lines.length > 5 ? lines.skip(5).toList() : [];
+    final List<dynamic> displayLines = canExpand
+        ? isExpanded
+            ? lines
+            : lines.take(1).toList()
+        : lines;
+
+    Widget buildLine(dynamic line) {
+      if (line is Widget) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Container(
+            width: double.infinity,
+            constraints: const BoxConstraints(
+              minHeight: 32,
+            ),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 6,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.14),
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.22),
+              ),
+            ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: line,
+            ),
+          ),
+        );
+      }
+
+      final String text = line?.toString() ?? '';
+      final List<String> parts = text.split(':');
+
+      final String titleText =
+          parts.length > 1 ? parts.first.trim() : text.trim();
+
+      final String valueText =
+          parts.length > 1 ? parts.sublist(1).join(':').trim() : '';
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: _buildDashboardLineItem(
+          title: titleText,
+          value: valueText,
+        ),
+      );
+    }
 
     return Material(
       color: Colors.transparent,
@@ -3241,147 +3605,81 @@ value: "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}"
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    // Container(
-                    //   height: 31,
-                    //   width: 31,
-                    //   decoration: BoxDecoration(
-                    //     color: Colors.white.withOpacity(0.20),
-                    //     borderRadius: BorderRadius.circular(11),
-                    //     border: Border.all(
-                    //       color: Colors.white.withOpacity(0.22),
-                    //     ),
-                    //   ),
-                    //   child: Icon(
-                    //     icon,
-                    //     color: Colors.white,
-                    //     size: 18,
-                    //   ),
-                    // ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                if (value.isNotEmpty)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
+                if (value.isNotEmpty) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    height: 22,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
                         child: Text(
                           valueLabel.isNotEmpty
                               ? "$valueLabel - $value"
                               : value,
+                          maxLines: 1,
+                          softWrap: false,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ],
-                  ),
-                if (value.isNotEmpty) const SizedBox(height: 7),
-                // ...lines.take(3).map((line) {
-                ...visibleLines.map((line) {
-                  if (line is Widget) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 5),
-                      child: Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(minHeight: 44),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.14),
-                          borderRadius: BorderRadius.circular(11),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.22),
-                          ),
-                        ),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: line,
-                        ),
-                      ),
-                    );
-                  }
-                  if (hasMore)
-                    InkWell(
-                      onTap: () {
-                        setState(() {
-                          dashboardCardExpanded[title] = !isExpanded;
-                        });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          isExpanded ? "See less" : "See more",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    );
-
-                  final text = line?.toString() ?? '';
-                  final parts = text.split(':');
-
-                  final String titleText =
-                      parts.length > 1 ? parts.first.trim() : text.trim();
-
-                  final String valueText =
-                      parts.length > 1 ? parts.sublist(1).join(':').trim() : "";
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 5),
-                    child: _buildDashboardLineItem(
-                      title: titleText,
-                      value: valueText,
                     ),
-                  );
-                }).toList(),
-                if (hiddenLines.isNotEmpty)
-                  Flexible(
-                    child: SingleChildScrollView(
-                      physics: const ClampingScrollPhysics(),
-                      child: Column(
-                        children: hiddenLines.map((line) {
-                          final text = line?.toString() ?? '';
-                          final parts = text.split(':');
-
-                          final String titleText = parts.length > 1
-                              ? parts.first.trim()
-                              : text.trim();
-
-                          final String valueText = parts.length > 1
-                              ? parts.sublist(1).join(':').trim()
-                              : "";
-
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 5),
-                            child: _buildDashboardLineItem(
-                              title: titleText,
-                              value: valueText,
+                  ),
+                  const SizedBox(height: 7),
+                ],
+                Expanded(
+                  child: SingleChildScrollView(
+                    primary: false,
+                    physics: const ClampingScrollPhysics(),
+                    padding: const EdgeInsets.only(
+                      bottom: 4,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ...displayLines.map(buildLine),
+                        if (bottom != null) ...[
+                          if (bottomTopSpacing > 0)
+                            SizedBox(height: bottomTopSpacing),
+                          bottom,
+                        ],
+                        if (canExpand)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: InkWell(
+                              onTap: () {
+                                setState(() {
+                                  dashboardCardExpanded[title] = !isExpanded;
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(8),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 6,
+                                ),
+                                child: Text(
+                                  isExpanded ? "See less" : "See more",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
                             ),
-                          );
-                        }).toList(),
-                      ),
+                          ),
+                      ],
                     ),
                   ),
-                if (bottom != null) ...[
-                  if (bottomTopSpacing > 0) SizedBox(height: bottomTopSpacing),
-                  Flexible(
-                    child: SingleChildScrollView(
-                      physics: const ClampingScrollPhysics(),
-                      child: bottom,
-                    ),
-                  ),
-                ] else
-                  const Spacer(),
+                ),
               ],
             ),
           ),
@@ -6352,62 +6650,63 @@ value: "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}"
             elevation: 0,
             backgroundColor: Colors.white,
             // leading: Icon(Icons.arrow_back, color: Colors.black),
-           actions: [
-  Padding(
-    padding: const EdgeInsets.only(right: 12),
-    child: Stack(
-      clipBehavior: Clip.none,
-      children: [
-        IconButton(
-          icon: const Icon(
-            Icons.mail_outline_rounded,
-            color: Colors.black,
-            size: 28,
-          ),
-          onPressed: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const StaffMailPage(),
-              ),
-            );
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.mail_outline_rounded,
+                        color: Colors.black,
+                        size: 28,
+                      ),
+                      onPressed: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const StaffMailPage(),
+                          ),
+                        );
 
-            fetchInboxMailCount();
-          },
-        ),
-
-        if (inboxMailCount > 0)
-          Positioned(
-            right: 4,
-            top: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 6,
-                vertical: 2,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              constraints: const BoxConstraints(
-                minWidth: 18,
-                minHeight: 18,
-              ),
-              child: Text(
-                inboxMailCount > 99 ? '99+' : inboxMailCount.toString(),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
+                        fetchInboxMailCount();
+                      },
+                    ),
+                    if (inboxMailCount > 0)
+                      Positioned(
+                        right: 4,
+                        top: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 18,
+                            minHeight: 18,
+                          ),
+                          child: Text(
+                            inboxMailCount > 99
+                                ? '99+'
+                                : inboxMailCount.toString(),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-            ),
-          ),
-      ],
-    ),
-  ),
-],
+            ],
           ),
           drawer: Drawer(
             backgroundColor: Colors.white,
@@ -6463,15 +6762,15 @@ value: "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}"
                       // Navigate to the Settings page or perform any other action
                     },
                   ),
-                       ListTile(
-                  title: Text('Send Mail'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => StaffMailPage()));
-                  },
-                ),
+                  ListTile(
+                    title: Text('Send Mail'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => StaffMailPage()));
+                    },
+                  ),
 
                   _buildDropdownTile(context, 'Customers', [
                     'Add Customer',
@@ -6542,8 +6841,11 @@ value: "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}"
                   _buildDropdownTile(context, 'Internal Transfer',
                       ['Add Transfer', 'Transfer List']),
 
-                  _buildDropdownTile(context, 'Daily Sales Reports',
-                      ['Add Team', 'Team wise Report', 'View All Team Members']),
+                  _buildDropdownTile(context, 'Daily Sales Reports', [
+                    'Add Team',
+                    'Team wise Report',
+                    'View All Team Members'
+                  ]),
 
                   _buildDropdownTile(context, 'Attendance', [
                     'Add Department & Managers',
@@ -7154,8 +7456,11 @@ value: "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}"
                           },
                           child: CircleAvatar(
                             radius: 25,
-                            backgroundImage: AssetImage(
-                                'lib/assets/female.jpeg'), // Replace with your new image
+                            backgroundColor: const Color(0xFFE5E7EB),
+                            backgroundImage: getProfileImageUrl().isNotEmpty
+                                ? NetworkImage(getProfileImageUrl())
+                                : const AssetImage('lib/assets/female.jpeg')
+                                    as ImageProvider,
                           ),
                         ),
                         SizedBox(width: 16),

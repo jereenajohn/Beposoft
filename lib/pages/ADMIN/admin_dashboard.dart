@@ -83,6 +83,7 @@ class _admin_dashboardState extends State<admin_dashboard> {
   List<Map<String, dynamic>> shippedOrders = [];
   int inboxMailCount = 0;
 Timer? mailCountTimer;
+String profileImage = '';
 
   String? username = '';
   bool isManager = false;
@@ -163,31 +164,40 @@ Future<void> fetchInboxMailCount() async {
   int approvalcount = 0;
   int confirmcount = 0;
 
-  Future<void> getProfile() async {
-    try {
-      final token = await getTokenFromPrefs();
+ Future<void> getProfile() async {
+  try {
+    final token = await getTokenFromPrefs();
 
-      final response = await http.get(
-        Uri.parse('$api/api/profile/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
+    final response = await http.get(
+      Uri.parse('$api/api/profile/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
 
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
+    if (response.statusCode == 200) {
+      final parsed = jsonDecode(response.body);
+      final data = parsed['data'];
 
-        setState(() {
-          isManager = parsed['data']['is_manager'] ?? false;
-        });
+      setState(() {
+        isManager = data['is_manager'] ?? false;
+        profileImage = data['image']?.toString() ?? '';
+      });
 
-        debugPrint("IS MANAGER : $isManager");
-      }
-    } catch (e) {
-      debugPrint("PROFILE ERROR : $e");
+      debugPrint("IS MANAGER : $isManager");
+      debugPrint("PROFILE IMAGE : $profileImage");
     }
+  } catch (e) {
+    debugPrint("PROFILE ERROR : $e");
   }
+}
+
+String getProfileImageUrl() {
+  if (profileImage.trim().isEmpty) return '';
+  if (profileImage.startsWith('http')) return profileImage;
+  return '$api$profileImage';
+}
 
   Future<void> fetchOrderData() async {
     try {
@@ -1461,10 +1471,12 @@ Future<void> fetchInboxMailCount() async {
                         );
                       },
                       child: CircleAvatar(
-                        radius: 25,
-                        backgroundImage: AssetImage(
-                            'lib/assets/female.jpeg'), // Replace with your new image
-                      ),
+  radius: 25,
+  backgroundColor: const Color(0xFFE5E7EB),
+  backgroundImage: getProfileImageUrl().isNotEmpty
+      ? NetworkImage(getProfileImageUrl())
+      : const AssetImage('lib/assets/female.jpeg') as ImageProvider,
+),
                     ),
                     SizedBox(width: 16),
                     Text(
