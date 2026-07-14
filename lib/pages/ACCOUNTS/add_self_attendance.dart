@@ -186,7 +186,8 @@ class _StaffSelfAttendanceScreenState extends State<StaffSelfAttendanceScreen> {
       return;
     }
 
-    if (attendanceTimeController.text.trim().isEmpty) {
+    if (selectedStatus != 'absent' &&
+        attendanceTimeController.text.trim().isEmpty) {
       showMsg("Choose reporting time");
       return;
     }
@@ -210,7 +211,9 @@ class _StaffSelfAttendanceScreenState extends State<StaffSelfAttendanceScreen> {
       final body = {
         "staff": currentStaffId,
         "attendance_date": todayDate,
-        "attendance_time": attendanceTimeController.text.trim(),
+        "attendance_time": selectedStatus == 'absent'
+            ? null
+            : attendanceTimeController.text.trim(),
         "status": selectedStatus,
       };
 
@@ -269,7 +272,8 @@ class _StaffSelfAttendanceScreenState extends State<StaffSelfAttendanceScreen> {
       return;
     }
 
-    if (attendanceTimeController.text.trim().isEmpty) {
+    if (selectedStatus != 'absent' &&
+        attendanceTimeController.text.trim().isEmpty) {
       showMsg("Choose reporting time");
       return;
     }
@@ -282,7 +286,9 @@ class _StaffSelfAttendanceScreenState extends State<StaffSelfAttendanceScreen> {
       final body = {
         "staff": currentStaffId,
         "attendance_date": todayDate,
-        "attendance_time": attendanceTimeController.text.trim(),
+        "attendance_time": selectedStatus == 'absent'
+            ? null
+            : attendanceTimeController.text.trim(),
         "status": selectedStatus,
       };
 
@@ -716,6 +722,10 @@ class _StaffSelfAttendanceScreenState extends State<StaffSelfAttendanceScreen> {
       onTap: () {
         setState(() {
           selectedStatus = value;
+
+          if (value == 'absent') {
+            attendanceTimeController.clear();
+          }
         });
       },
       borderRadius: BorderRadius.circular(12),

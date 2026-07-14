@@ -79,9 +79,10 @@ class _admin_dashboardState extends State<dashboard> {
   List<Map<String, dynamic>> filteredOrders = [];
   List<Map<String, dynamic>> shippedOrders = [];
   bool isManager = false;
-int inboxMailCount = 0;
-Timer? mailCountTimer;
+  int inboxMailCount = 0;
+  Timer? mailCountTimer;
   String? username = '';
+  String profileImage = '';
   @override
   void initState() {
     super.initState();
@@ -97,59 +98,61 @@ Timer? mailCountTimer;
     fetchshippedorders();
     fetchInboxMailCount();
 
-mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-  fetchInboxMailCount();
-});
+    mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      fetchInboxMailCount();
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AuthStatusChecker.start(context);
     });
   }
-@override
-void dispose() {
-  mailCountTimer?.cancel();
-  super.dispose();
-}
 
-Future<void> fetchInboxMailCount() async {
-  try {
-    final token = await getTokenFromPrefs();
-
-    if (token == null || token.isEmpty) return;
-
-    final response = await http.get(
-      Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final decoded = jsonDecode(response.body);
-
-      int count = 0;
-
-      if (decoded['count'] != null) {
-        count = decoded['count'];
-      } else if (decoded['results'] is Map &&
-          decoded['results']['data'] is List) {
-        count = decoded['results']['data'].length;
-      } else if (decoded['data'] is List) {
-        count = decoded['data'].length;
-      } else if (decoded['results'] is List) {
-        count = decoded['results'].length;
-      }
-
-      if (mounted && count != inboxMailCount) {
-        setState(() {
-          inboxMailCount = count;
-        });
-      }
-    }
-  } catch (e) {
-    debugPrint('MAIL COUNT ERROR: $e');
+  @override
+  void dispose() {
+    mailCountTimer?.cancel();
+    super.dispose();
   }
-}
+
+  Future<void> fetchInboxMailCount() async {
+    try {
+      final token = await getTokenFromPrefs();
+
+      if (token == null || token.isEmpty) return;
+
+      final response = await http.get(
+        Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+
+        int count = 0;
+
+        if (decoded['count'] != null) {
+          count = decoded['count'];
+        } else if (decoded['results'] is Map &&
+            decoded['results']['data'] is List) {
+          count = decoded['results']['data'].length;
+        } else if (decoded['data'] is List) {
+          count = decoded['data'].length;
+        } else if (decoded['results'] is List) {
+          count = decoded['results'].length;
+        }
+
+        if (mounted && count != inboxMailCount) {
+          setState(() {
+            inboxMailCount = count;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('MAIL COUNT ERROR: $e');
+    }
+  }
+
   Future<void> getProfile() async {
     try {
       final token = await getTokenFromPrefs();
@@ -164,16 +167,25 @@ Future<void> fetchInboxMailCount() async {
 
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
+        final data = parsed['data'];
 
         setState(() {
-          isManager = parsed['data']['is_manager'] ?? false;
+          isManager = data['is_manager'] ?? false;
+          profileImage = data['image']?.toString() ?? '';
         });
 
         debugPrint("IS MANAGER : $isManager");
+        debugPrint("PROFILE IMAGE : $profileImage");
       }
     } catch (e) {
       debugPrint("PROFILE ERROR : $e");
     }
+  }
+
+  String getProfileImageUrl() {
+    if (profileImage.trim().isEmpty) return '';
+    if (profileImage.startsWith('http')) return profileImage;
+    return '$api$profileImage';
   }
 
   int approval = 0;
@@ -712,62 +724,63 @@ Future<void> fetchInboxMailCount() async {
           elevation: 0,
           backgroundColor: Colors.white,
           // leading: Icon(Icons.arrow_back, color: Colors.black),
-       actions: [
-  Padding(
-    padding: const EdgeInsets.only(right: 12),
-    child: Stack(
-      clipBehavior: Clip.none,
-      children: [
-        IconButton(
-          icon: const Icon(
-            Icons.mail_outline_rounded,
-            color: Colors.black,
-            size: 28,
-          ),
-          onPressed: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const StaffMailPage(),
-              ),
-            );
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.mail_outline_rounded,
+                      color: Colors.black,
+                      size: 28,
+                    ),
+                    onPressed: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const StaffMailPage(),
+                        ),
+                      );
 
-            fetchInboxMailCount();
-          },
-        ),
-
-        if (inboxMailCount > 0)
-          Positioned(
-            right: 4,
-            top: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 6,
-                vertical: 2,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              constraints: const BoxConstraints(
-                minWidth: 18,
-                minHeight: 18,
-              ),
-              child: Text(
-                inboxMailCount > 99 ? '99+' : inboxMailCount.toString(),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
+                      fetchInboxMailCount();
+                    },
+                  ),
+                  if (inboxMailCount > 0)
+                    Positioned(
+                      right: 4,
+                      top: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 18,
+                          minHeight: 18,
+                        ),
+                        child: Text(
+                          inboxMailCount > 99
+                              ? '99+'
+                              : inboxMailCount.toString(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
-          ),
-      ],
-    ),
-  ),
-],
+          ],
         ),
         drawer: Drawer(
           backgroundColor: Colors.white,
@@ -814,7 +827,7 @@ Future<void> fetchInboxMailCount() async {
                     // Navigate to the Settings page or perform any other action
                   },
                 ),
-                 ListTile(
+                ListTile(
                   leading: Icon(Icons.person),
                   title: Text('Add Attendance'),
                   onTap: () {
@@ -894,7 +907,7 @@ Future<void> fetchInboxMailCount() async {
                   },
                 ),
 
-                  ListTile(
+                ListTile(
                   title: Text('Send Mail'),
                   onTap: () {
                     Navigator.push(
@@ -903,7 +916,6 @@ Future<void> fetchInboxMailCount() async {
                             builder: (context) => StaffMailPage()));
                   },
                 ),
-
 
                 _buildDropdownTile(context, 'Customers', [
                   'Add Customer',
@@ -1029,8 +1041,6 @@ Future<void> fetchInboxMailCount() async {
                 //       );
                 //     },
                 //   ),
-
-              
 
                 ListTile(
                   leading: Icon(Icons.person),
@@ -1476,8 +1486,11 @@ Future<void> fetchInboxMailCount() async {
                       },
                       child: CircleAvatar(
                         radius: 25,
-                        backgroundImage: AssetImage(
-                            'lib/assets/female.jpeg'), // Replace with your new image
+                        backgroundColor: const Color(0xFFE5E7EB),
+                        backgroundImage: getProfileImageUrl().isNotEmpty
+                            ? NetworkImage(getProfileImageUrl())
+                            : const AssetImage('lib/assets/female.jpeg')
+                                as ImageProvider,
                       ),
                     ),
                     SizedBox(width: 16),

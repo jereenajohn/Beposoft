@@ -35,11 +35,17 @@ class HrDashboard extends StatefulWidget {
 class _HrDashboardState extends State<HrDashboard> {
   String? username = '';
   int inboxMailCount = 0;
+      String profileImage = '';
+            bool isManager = false;
+
+
 Timer? mailCountTimer;
   void initState() {
     super.initState();
     _getUsername(); // Get the username when the page loads
     fetchInboxMailCount();
+        getProfile();
+
 
 mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
   fetchInboxMailCount();
@@ -52,6 +58,39 @@ mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
     });
   }
 
+ Future<void> getProfile() async {
+    try {
+      final token = await getTokenFromPrefs();
+
+      final response = await http.get(
+        Uri.parse('$api/api/profile/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+        final data = parsed['data'];
+
+        setState(() {
+          isManager = data['is_manager'] ?? false;
+          profileImage = data['image']?.toString() ?? '';
+        });
+
+        debugPrint("IS MANAGER : $isManager");
+        debugPrint("PROFILE IMAGE : $profileImage");
+      }
+    } catch (e) {
+      debugPrint("PROFILE ERROR : $e");
+    }
+  }
+  String getProfileImageUrl() {
+    if (profileImage.trim().isEmpty) return '';
+    if (profileImage.startsWith('http')) return profileImage;
+    return '$api$profileImage';
+  }
   Future<String?> getusernameFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('username');
@@ -569,11 +608,14 @@ void dispose() {
                         ),
                       );
                     },
-                    child: CircleAvatar(
-                      radius: 25,
-                      backgroundImage: AssetImage(
-                          'lib/assets/female.jpeg'), // Replace with your new image
-                    ),
+                          child: CircleAvatar(
+                          radius: 25,
+                          backgroundColor: const Color(0xFFE5E7EB),
+                          backgroundImage: getProfileImageUrl().isNotEmpty
+                              ? NetworkImage(getProfileImageUrl())
+                              : const AssetImage('lib/assets/female.jpeg')
+                                  as ImageProvider,
+                        ),
                   ),
                   SizedBox(width: 16),
                   Text(

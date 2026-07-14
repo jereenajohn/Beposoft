@@ -77,9 +77,7 @@ class _ceo_family_summary_monthlyState
     // fetchOrderData();
 
     //   fetchInternalTransfersData();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      checkAppUpdate(context);
-    });
+   
   }
 
   Map<String, Map<String, dynamic>> familyWiseSummary = {};
@@ -92,90 +90,7 @@ class _ceo_family_summary_monthlyState
   int approvalcount = 0;
   int confirmcount = 0;
 
-  Future<bool> checkAppUpdate(BuildContext context) async {
-    final packageInfo = await PackageInfo.fromPlatform();
-    final currentVersion = packageInfo.version;
-
-    try {
-      final response = await http.get(Uri.parse(
-        'https://play.google.com/store/apps/details?id=com.bepositive.beposoft&hl=en',
-      ));
-
-      if (response.statusCode == 200) {
-        final content = response.body;
-        final versionRegex = RegExp(r'\[\[\["([0-9.]+)"\]\]');
-        final match = versionRegex.firstMatch(content);
-
-        if (match != null) {
-          final storeVersion = match.group(1);
-          if (storeVersion != null && storeVersion != currentVersion) {
-            final result = await showDialog<bool>(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) => AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                titlePadding: const EdgeInsets.only(top: 20),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                title: Column(
-                  children: [
-                    Icon(Icons.system_update, size: 48, color: Colors.green),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Update Available',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                content: Text(
-                  'A new version ($storeVersion) is available.\n\nYou are using $currentVersion.\n\nPlease update the app to continue enjoying the latest features and improvements.',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                actionsAlignment: MainAxisAlignment.spaceEvenly,
-                actions: [
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.open_in_new, size: 18),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    label: const Text("Update Now"),
-                    onPressed: () async {
-                      final playStoreUrl = Uri.parse(
-                          'https://play.google.com/store/apps/details?id=com.bepositive.beposoft');
-                      if (await canLaunchUrl(playStoreUrl)) {
-                        await launchUrl(playStoreUrl,
-                            mode: LaunchMode.externalApplication);
-                      }
-                      Navigator.of(context)
-                          .pop(false); // Prevent app from loading
-                    },
-                  ),
-                  TextButton(
-                    child: const Text("Maybe Later"),
-                    onPressed: () =>
-                        Navigator.of(context).pop(true), // Continue with app
-                  ),
-                ],
-              ),
-            );
-            return result == true;
-          }
-        }
-      }
-    } catch (e) {
-      // Optionally log error
-    }
-
-    return true; // Proceed normally if no update
-  }
-
+ 
   Future<String?> getTokenFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('token');
@@ -661,7 +576,7 @@ class _ceo_family_summary_monthlyState
                               }
                             },
                             child: Card(
-                              color: Colors.white,
+                              color: Colors.white, 
                               elevation: 4,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
@@ -790,7 +705,7 @@ class _ceo_family_summary_monthlyState
                     final creditOrderCount =
                         monthSummary['credit']?['count'] ?? 0;
                     final creditTotalAmount =
-                        monthSummary['credit']?['total'] ?? 0.0;
+                        monthSummary['credit']?['total'] ?? 0.0;    
 
                     final grandTotalOrders =
                         (productsData?['month_count'] ?? 0);

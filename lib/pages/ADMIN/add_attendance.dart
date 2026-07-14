@@ -234,10 +234,11 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
       return;
     }
 
-    if (attendanceTimeController.text.trim().isEmpty) {
-      showMsg("Choose reporting time");
-      return;
-    }
+ if (selectedStatus != 'absent' &&
+    attendanceTimeController.text.trim().isEmpty) {
+  showMsg("Choose reporting time");
+  return;
+}
 
     final alreadyMarked = selectedDateAttendance.any(
       (attendance) =>
@@ -257,12 +258,14 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
 
       final token = await gettokenFromPrefs();
 
-      final body = {
-        "staff": selectedMember!['member'],
-        "attendance_date": todayDate,
-        "attendance_time": attendanceTimeController.text.trim(),
-        "status": selectedStatus,
-      };
+  final body = {
+  "staff": selectedMember!['member'],
+  "attendance_date": todayDate,
+  "attendance_time": selectedStatus == 'absent'
+      ? null
+      : attendanceTimeController.text.trim(),
+  "status": selectedStatus,
+};
 
       final response = await http.post(
         Uri.parse('$api/api/staff/attendance/'),
@@ -319,23 +322,25 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
       showMsg("Select member");
       return;
     }
-
-    if (attendanceTimeController.text.trim().isEmpty) {
-      showMsg("Choose reporting time");
-      return;
-    }
+if (selectedStatus != 'absent' &&
+    attendanceTimeController.text.trim().isEmpty) {
+  showMsg("Choose reporting time");
+  return;
+}
 
     try {
       setState(() => isSaving = true);
 
       final token = await gettokenFromPrefs();
 
-      final body = {
-        "staff": selectedMember!['member'],
-        "attendance_date": todayDate,
-        "attendance_time": attendanceTimeController.text.trim(),
-        "status": selectedStatus,
-      };
+   final body = {
+  "staff": selectedMember!['member'],
+  "attendance_date": todayDate,
+  "attendance_time": selectedStatus == 'absent'
+      ? null
+      : attendanceTimeController.text.trim(),
+  "status": selectedStatus,
+};
 
       final response = await http.put(
         Uri.parse('$api/api/staff/attendance/edit/$editingAttendanceId/'),
@@ -895,11 +900,15 @@ class _StaffMarkAttendanceScreenState extends State<StaffMarkAttendanceScreen> {
     final bool isSelected = selectedStatus == value;
 
     return InkWell(
-      onTap: () {
-        setState(() {
-          selectedStatus = value;
-        });
-      },
+   onTap: () {
+  setState(() {
+    selectedStatus = value;
+
+    if (value == 'absent') {
+      attendanceTimeController.clear();
+    }
+  });
+},
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 11),
