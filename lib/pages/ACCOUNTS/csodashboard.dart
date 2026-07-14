@@ -61,11 +61,12 @@ class cso_dashboard extends StatefulWidget {
   State<cso_dashboard> createState() => _cso_dashboardState();
 }
 
-class _cso_dashboardState extends State<cso_dashboard> {
+class _cso_dashboardState extends State<cso_dashboard>
+    with WidgetsBindingObserver {
   int todayBillsExcludingBepocartCount = 0;
   double totalTodayBillsExcludingBepocart = 0.0;
   int todayOrdersTotalAmountt = 0;
-
+  bool isFetchingInboxMailCount = false;
   List<String> statusOptions = ["pending", "approved", "rejected"];
   List<Map<String, dynamic>> grvlist = [];
   List<Map<String, dynamic>> proforma = [];
@@ -148,6 +149,9 @@ class _cso_dashboardState extends State<cso_dashboard> {
   @override
   void initState() {
     super.initState();
+
+    WidgetsBinding.instance.addObserver(this);
+
     _getUsername();
     getGrvList();
     fetchproformaData();
@@ -168,13 +172,28 @@ class _cso_dashboardState extends State<cso_dashboard> {
     fetchInboxMailCount();
     getProfile();
 
-    mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      fetchInboxMailCount();
-    });
+    mailCountTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) {
+        if (mounted) {
+          fetchInboxMailCount();
+        }
+      },
+    );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       checkAppUpdate(context);
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    if (state == AppLifecycleState.resumed) {
+      fetchInboxMailCount();
+    }
   }
 
   bool _isUpdateAvailable(String currentVersion, String storeVersion) {
@@ -208,6 +227,7 @@ class _cso_dashboardState extends State<cso_dashboard> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     mailCountTimer?.cancel();
     super.dispose();
   }
@@ -248,43 +268,112 @@ class _cso_dashboardState extends State<cso_dashboard> {
   }
 
   Future<void> fetchInboxMailCount() async {
+    if (isFetchingInboxMailCount) return;
+
+    isFetchingInboxMailCount = true;
+
     try {
-      final token = await getTokenFromPrefs();
+      final String? token = await getTokenFromPrefs();
 
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.trim().isEmpty) {
+        return;
+      }
 
-      final response = await http.get(
-        Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
+      final Uri uri = Uri.parse(
+        '$api/api/internal/mails/',
+      ).replace(
+        queryParameters: {
+          'type': 'inbox',
+          'read_status': 'unread',
+          'page': '1',
+        },
+      );
+
+      final http.Response response = await http.get(
+        uri,
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
 
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
+      if (response.statusCode != 200) {
+        debugPrint(
+          'MAIL COUNT REQUEST FAILED: '
+          '${response.statusCode} ${response.body}',
+        );
+        return;
+      }
 
-        int count = 0;
+      final dynamic decoded = jsonDecode(response.body);
 
-        if (decoded['count'] != null) {
-          count = decoded['count'];
-        } else if (decoded['results'] is Map &&
-            decoded['results']['data'] is List) {
-          count = decoded['results']['data'].length;
-        } else if (decoded['data'] is List) {
-          count = decoded['data'].length;
-        } else if (decoded['results'] is List) {
-          count = decoded['results'].length;
-        }
+      int newUnreadCount = 0;
 
-        if (mounted && count != inboxMailCount) {
-          setState(() {
-            inboxMailCount = count;
-          });
+      if (decoded is Map<String, dynamic>) {
+        final dynamic results = decoded['results'];
+        final dynamic data = decoded['data'];
+
+        final dynamic rawUnreadCount = decoded['unread_count'] ??
+            (results is Map ? results['unread_count'] : null) ??
+            (data is Map ? data['unread_count'] : null);
+
+        final dynamic rawFilteredCount = decoded['count'] ??
+            (results is Map ? results['count'] : null) ??
+            (data is Map ? data['count'] : null);
+
+        if (rawUnreadCount != null) {
+          newUnreadCount = rawUnreadCount is int
+              ? rawUnreadCount
+              : int.tryParse(rawUnreadCount.toString()) ?? 0;
+        } else if (rawFilteredCount != null) {
+          newUnreadCount = rawFilteredCount is int
+              ? rawFilteredCount
+              : int.tryParse(rawFilteredCount.toString()) ?? 0;
+        } else {
+          dynamic mailList;
+
+          if (results is Map && results['data'] is List) {
+            mailList = results['data'];
+          } else if (data is Map && data['data'] is List) {
+            mailList = data['data'];
+          } else if (results is List) {
+            mailList = results;
+          } else if (data is List) {
+            mailList = data;
+          }
+
+          if (mailList is List) {
+            newUnreadCount = mailList.where((dynamic mail) {
+              if (mail is! Map) return false;
+
+              if (mail.containsKey('is_read')) {
+                return mail['is_read'] != true;
+              }
+
+              if (mail.containsKey('read')) {
+                return mail['read'] != true;
+              }
+
+              final dynamic readAt = mail['read_at'];
+
+              return readAt == null || readAt.toString().trim().isEmpty;
+            }).length;
+          }
         }
       }
-    } catch (e) {
-      debugPrint('MAIL COUNT ERROR: $e');
+
+      if (!mounted) return;
+
+      if (inboxMailCount != newUnreadCount) {
+        setState(() {
+          inboxMailCount = newUnreadCount;
+        });
+      }
+    } catch (error, stackTrace) {
+      debugPrint('MAIL COUNT ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    } finally {
+      isFetchingInboxMailCount = false;
     }
   }
 
@@ -1201,43 +1290,44 @@ class _cso_dashboardState extends State<cso_dashboard> {
         : cleanName.toUpperCase();
   }
 
- Future<void> fetchOrdersSummaryFamilyData() async {
-  try {
-    final token = await getTokenFromPrefs();
+  Future<void> fetchOrdersSummaryFamilyData() async {
+    try {
+      final token = await getTokenFromPrefs();
 
-    if (token == null || token.isEmpty) {
-      return;
-    }
+      if (token == null || token.isEmpty) {
+        return;
+      }
 
-    final response = await http.get(
-      Uri.parse(
-        '$api/api/family/orders/summary/without/bepocart/',
-      ),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-
-    if (response.statusCode != 200) {
-      debugPrint(
-        'CSO SALES SUMMARY FAILED: ${response.statusCode} ${response.body}',
+      final response = await http.get(
+        Uri.parse(
+          '$api/api/family/orders/summary/without/bepocart/',
+        ),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
       );
-      return;
+
+      if (response.statusCode != 200) {
+        debugPrint(
+          'CSO SALES SUMMARY FAILED: ${response.statusCode} ${response.body}',
+        );
+        return;
+      }
+
+      final decoded = jsonDecode(response.body);
+      final overall = _asMap(decoded['overall']);
+
+      if (!mounted) return;
+
+      setState(() {
+        productsData = overall;
+      });
+    } catch (e) {
+      debugPrint('CSO SALES SUMMARY ERROR: $e');
     }
-
-    final decoded = jsonDecode(response.body);
-    final overall = _asMap(decoded['overall']);
-
-    if (!mounted) return;
-
-    setState(() {
-      productsData = overall;
-    });
-  } catch (e) {
-    debugPrint('CSO SALES SUMMARY ERROR: $e');
   }
-}
+
   Future<void> fetchTeamWiseAttendanceCount() async {
     try {
       final token = await getTokenFromPrefs();
@@ -1311,77 +1401,78 @@ class _cso_dashboardState extends State<cso_dashboard> {
     }
   }
 
- Future<void> fetchGrvSummary() async {
-  if (mounted) {
-    setState(() {
-      salesReturnLoading = true;
-    });
-  }
+  Future<void> fetchGrvSummary() async {
+    if (mounted) {
+      setState(() {
+        salesReturnLoading = true;
+      });
+    }
 
-  try {
-    final token = await getTokenFromPrefs();
+    try {
+      final token = await getTokenFromPrefs();
 
-    if (token == null || token.isEmpty) {
-      if (mounted) {
+      if (token == null || token.isEmpty) {
+        if (mounted) {
+          setState(() {
+            salesReturnLoading = false;
+          });
+        }
+        return;
+      }
+
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+      final uri = Uri.parse(
+        '$api/api/grv/family/payment/summary/without/bepocart/',
+      ).replace(
+        queryParameters: {
+          'start_date': today,
+          'end_date': today,
+        },
+      );
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+
         setState(() {
+          salesReturnGrandTotal = _asMap(
+            decoded['grand_total'],
+          );
+          salesReturnLoading = false;
+        });
+      } else {
+        debugPrint(
+          'CSO SALES RETURN FAILED: '
+          '${response.statusCode} ${response.body}',
+        );
+
+        setState(() {
+          salesReturnGrandTotal = {};
           salesReturnLoading = false;
         });
       }
-      return;
-    }
+    } catch (e) {
+      debugPrint('CSO SALES RETURN ERROR: $e');
 
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-    final uri = Uri.parse(
-      '$api/api/grv/family/payment/summary/without/bepocart/',
-    ).replace(
-      queryParameters: {
-        'start_date': today,
-        'end_date': today,
-      },
-    );
-
-    final response = await http.get(
-      uri,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-
-    if (!mounted) return;
-
-    if (response.statusCode == 200) {
-      final decoded = jsonDecode(response.body);
-
-      setState(() {
-        salesReturnGrandTotal = _asMap(
-          decoded['grand_total'],
-        );
-        salesReturnLoading = false;
-      });
-    } else {
-      debugPrint(
-        'CSO SALES RETURN FAILED: '
-        '${response.statusCode} ${response.body}',
-      );
+      if (!mounted) return;
 
       setState(() {
         salesReturnGrandTotal = {};
         salesReturnLoading = false;
       });
     }
-  } catch (e) {
-    debugPrint('CSO SALES RETURN ERROR: $e');
-
-    if (!mounted) return;
-
-    setState(() {
-      salesReturnGrandTotal = {};
-      salesReturnLoading = false;
-    });
   }
-}
+
   Future<String?> getWarehouseFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final intValue = prefs.getInt('warehouse');
@@ -1393,7 +1484,10 @@ class _cso_dashboardState extends State<cso_dashboard> {
     final token = await getTokenFromPrefs();
     final warehouseId = await getWarehouseFromPrefs();
 
-    if (token == null || token.isEmpty || warehouseId == null || warehouseId.isEmpty) {
+    if (token == null ||
+        token.isEmpty ||
+        warehouseId == null ||
+        warehouseId.isEmpty) {
       return;
     }
 
@@ -1415,10 +1509,12 @@ class _cso_dashboardState extends State<cso_dashboard> {
         final summary = _asMap(results['summary']);
         setState(() {
           dashboardTotalStock = _asInt(summary['total_stock']);
-          dashboardTotalRetailAmount = _asDouble(summary['total_retail_amount']);
+          dashboardTotalRetailAmount =
+              _asDouble(summary['total_retail_amount']);
           dashboardTotalLandingCostAmount =
               _asDouble(summary['total_landing_cost_amount']);
-          dashboardTotalSellingAmount = _asDouble(summary['total_selling_amount']);
+          dashboardTotalSellingAmount =
+              _asDouble(summary['total_selling_amount']);
           dashboardInventoryLoading = false;
         });
       } else {
@@ -1484,78 +1580,75 @@ class _cso_dashboardState extends State<cso_dashboard> {
     }
   }
 
- Widget _buildDashboardLineItem({
-  required String title,
-  required String value,
-  IconData? icon,
-}) {
-  return Container(
-    width: double.infinity,
-    height: 32,
-    padding: const EdgeInsets.symmetric(
-      horizontal: 9,
-      vertical: 4,
-    ),
-    decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.14),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: Colors.white.withOpacity(0.22),
+  Widget _buildDashboardLineItem({
+    required String title,
+    required String value,
+    IconData? icon,
+  }) {
+    return Container(
+      width: double.infinity,
+      height: 32,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 9,
+        vertical: 4,
       ),
-    ),
-    child: Row(
-      children: [
-        if (icon != null) ...[
-          Icon(
-            icon,
-            color: Colors.white,
-            size: 14,
-          ),
-          const SizedBox(width: 6),
-        ],
-
-        Expanded(
-          flex: 4,
-          child: Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.90),
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.22),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(
+              icon,
+              color: Colors.white,
+              size: 14,
+            ),
+            const SizedBox(width: 6),
+          ],
+          Expanded(
+            flex: 4,
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.90),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-        ),
-
-        if (value.isNotEmpty) ...[
-          const SizedBox(width: 5),
-
-          Expanded(
-            flex: 6,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
+          if (value.isNotEmpty) ...[
+            const SizedBox(width: 5),
+            Expanded(
+              flex: 6,
+              child: Align(
                 alignment: Alignment.centerRight,
-                child: Text(
-                  value,
-                  maxLines: 1,
-                  softWrap: false,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
+          ],
         ],
-      ],
-    ),
-  );
-}
+      ),
+    );
+  }
 
   Widget _buildAttendanceTeamContainer({
     required String teamName,
@@ -1585,9 +1678,17 @@ class _cso_dashboardState extends State<cso_dashboard> {
               ),
             ),
           ),
-          Text('P: $present', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+          Text('P: $present',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700)),
           const SizedBox(width: 18),
-          Text('A: $absent', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+          Text('A: $absent',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -1613,140 +1714,138 @@ class _cso_dashboardState extends State<cso_dashboard> {
               teamName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold),
             ),
           ),
-          Text('Avg CD: $avgCd', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+          Text('Avg CD: $avgCd',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700)),
         ],
       ),
     );
   }
 
- Widget _buildDashboardCard({
-  required String title,
-  required String value,
-  required VoidCallback onTap,
-  List<String> lines = const [],
-  Widget? bottom,
-  String valueLabel = '',
-}) {
-  return Material(
-    color: Colors.transparent,
-    child: InkWell(
-      borderRadius: BorderRadius.circular(20),
-      onTap: onTap,
-      child: Ink(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: const LinearGradient(
-            colors: [
-              Color(0xFF56AFFF),
-              Color(0xFF2C74FF),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF2C74FF).withOpacity(0.25),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(11),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              if (value.isNotEmpty) ...[
-          SizedBox(
-  width: double.infinity,
-  height: 22,
-  child: Align(
-    alignment: Alignment.centerLeft,
-    child: FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.centerLeft,
-      child: Text(
-        valueLabel.isNotEmpty
-            ? '$valueLabel - $value'
-            : value,
-        maxLines: 1,
-        softWrap: false,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 15,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    ),
-  ),
-),
-                const SizedBox(height: 8),
+  Widget _buildDashboardCard({
+    required String title,
+    required String value,
+    required VoidCallback onTap,
+    List<String> lines = const [],
+    Widget? bottom,
+    String valueLabel = '',
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              colors: [
+                Color(0xFF56AFFF),
+                Color(0xFF2C74FF),
               ],
-
-              Expanded(
-                child: lines.isEmpty && bottom == null
-                    ? const SizedBox.shrink()
-                    : SingleChildScrollView(
-                        physics: const ClampingScrollPhysics(),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ...lines.map((line) {
-                              final parts = line.split(':');
-
-                              final String titleText = parts.length > 1
-                                  ? parts.first.trim()
-                                  : line.trim();
-
-                              final String valueText = parts.length > 1
-                                  ? parts
-                                      .sublist(1)
-                                      .join(':')
-                                      .trim()
-                                  : '';
-
-                              return Padding(
-                                padding:
-                                    const EdgeInsets.only(bottom: 6),
-                                child: _buildDashboardLineItem(
-                                  title: titleText,
-                                  value: valueText,
-                                ),
-                              );
-                            }),
-
-                            if (bottom != null) ...[
-                              if (lines.isNotEmpty)
-                                const SizedBox(height: 2),
-                              bottom,
-                            ],
-                          ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF2C74FF).withOpacity(0.25),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(11),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (value.isNotEmpty) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    height: 22,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          valueLabel.isNotEmpty
+                              ? '$valueLabel - $value'
+                              : value,
+                          maxLines: 1,
+                          softWrap: false,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
-              ),
-            ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                Expanded(
+                  child: lines.isEmpty && bottom == null
+                      ? const SizedBox.shrink()
+                      : SingleChildScrollView(
+                          physics: const ClampingScrollPhysics(),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ...lines.map((line) {
+                                final parts = line.split(':');
+
+                                final String titleText = parts.length > 1
+                                    ? parts.first.trim()
+                                    : line.trim();
+
+                                final String valueText = parts.length > 1
+                                    ? parts.sublist(1).join(':').trim()
+                                    : '';
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: _buildDashboardLineItem(
+                                    title: titleText,
+                                    value: valueText,
+                                  ),
+                                );
+                              }),
+                              if (bottom != null) ...[
+                                if (lines.isNotEmpty) const SizedBox(height: 2),
+                                bottom,
+                              ],
+                            ],
+                          ),
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget buildCsoDashboardCards() {
     final paymentSummary = _asMap(productsData['payment_status_summary']);
@@ -1776,7 +1875,8 @@ class _cso_dashboardState extends State<cso_dashboard> {
         children: [
           _buildDashboardCard(
             title: 'Sales',
-            value: 'M.Total- ${_formatDashboardAmount(productsData['month_total_amount'])}',
+            value:
+                'M.Total- ${_formatDashboardAmount(productsData['month_total_amount'])}',
             lines: [
               'MT. Invoices: ${_asInt(productsData['month_count'])}',
               'T. Paid: ${_asInt(todayPaid['count'])} | ${_formatDashboardAmount(todayPaid['total'])}',
@@ -1784,27 +1884,39 @@ class _cso_dashboardState extends State<cso_dashboard> {
               'M. Paid: ${_asInt(monthPaid['count'])} | ${_formatDashboardAmount(monthPaid['total'])}',
               'M. COD: ${_asInt(monthCod['count'])} | ${_formatDashboardAmount(monthCod['total'])}',
             ],
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SalesReportExcelsummary())),
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => SalesReportExcelsummary())),
           ),
           _buildDashboardCard(
             title: 'Employees',
             value: 'Total $teamWiseTotalMembers',
             bottom: Column(
               children: [
-                _buildDashboardLineItem(title: 'Present', value: '$teamWiseTotalPresent', icon: Icons.person_pin_circle_rounded),
+                _buildDashboardLineItem(
+                    title: 'Present',
+                    value: '$teamWiseTotalPresent',
+                    icon: Icons.person_pin_circle_rounded),
                 const SizedBox(height: 6),
-                _buildDashboardLineItem(title: 'Absent', value: '$teamWiseTotalAbsent', icon: Icons.cancel_rounded),
+                _buildDashboardLineItem(
+                    title: 'Absent',
+                    value: '$teamWiseTotalAbsent',
+                    icon: Icons.cancel_rounded),
                 const SizedBox(height: 6),
-                _buildDashboardLineItem(title: 'Half Day', value: '$teamWiseTotalHalfDay', icon: Icons.access_time_filled_rounded),
+                _buildDashboardLineItem(
+                    title: 'Half Day',
+                    value: '$teamWiseTotalHalfDay',
+                    icon: Icons.access_time_filled_rounded),
               ],
             ),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => staff_list())),
+            onTap: () => Navigator.push(
+                context, MaterialPageRoute(builder: (_) => staff_list())),
           ),
           _buildDashboardCard(
             title: 'Attendance',
             value: '',
             bottom: departmentAttendanceCards.isEmpty
-                ? const Text('Loading attendance...', style: TextStyle(color: Colors.white))
+                ? const Text('Loading attendance...',
+                    style: TextStyle(color: Colors.white))
                 : Column(
                     children: departmentAttendanceCards.map((item) {
                       return _buildAttendanceTeamContainer(
@@ -1814,50 +1926,74 @@ class _cso_dashboardState extends State<cso_dashboard> {
                       );
                     }).toList(),
                   ),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HrTeamAttendanceScreen())),
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const HrTeamAttendanceScreen())),
           ),
           _buildDashboardCard(
             title: 'Sales Return',
             value: salesReturnLoading ? 'Loading...' : '',
             bottom: Column(
               children: [
-                _buildDashboardLineItem(title: 'Today COD SR INV', value: '$todayCodReturnCount'),
+                _buildDashboardLineItem(
+                    title: 'Today COD SR INV', value: '$todayCodReturnCount'),
                 const SizedBox(height: 8),
-                _buildDashboardLineItem(title: 'Amount', value: _formatDashboardAmount(todayCodReturnAmount)),
+                _buildDashboardLineItem(
+                    title: 'Amount',
+                    value: _formatDashboardAmount(todayCodReturnAmount)),
                 const SizedBox(height: 8),
-                _buildDashboardLineItem(title: 'Today Cash SR INV', value: '$todayCashReturnCount'),
+                _buildDashboardLineItem(
+                    title: 'Today Cash SR INV', value: '$todayCashReturnCount'),
                 const SizedBox(height: 8),
-                _buildDashboardLineItem(title: 'Amount', value: _formatDashboardAmount(todayCashReturnAmount)),
+                _buildDashboardLineItem(
+                    title: 'Amount',
+                    value: _formatDashboardAmount(todayCashReturnAmount)),
               ],
             ),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CsoGrvFamilyPaymentSummaryPage())),
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => CsoGrvFamilyPaymentSummaryPage())),
           ),
           _buildDashboardCard(
             title: 'Inventory',
             valueLabel: 'WH',
-            value: dashboardInventoryLoading ? 'Loading...' : _formatDashboardAmount(dashboardTotalSellingAmount),
+            value: dashboardInventoryLoading
+                ? 'Loading...'
+                : _formatDashboardAmount(dashboardTotalSellingAmount),
             lines: [
-              dashboardInventoryLoading ? 'Retail: Loading...' : 'Retail: ${_formatDashboardAmount(dashboardTotalRetailAmount)}',
-              dashboardInventoryLoading ? 'Landing: Loading...' : 'Landing: ${_formatDashboardAmount(dashboardTotalLandingCostAmount)}',
+              dashboardInventoryLoading
+                  ? 'Retail: Loading...'
+                  : 'Retail: ${_formatDashboardAmount(dashboardTotalRetailAmount)}',
+              dashboardInventoryLoading
+                  ? 'Landing: Loading...'
+                  : 'Landing: ${_formatDashboardAmount(dashboardTotalLandingCostAmount)}',
             ],
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => WarehouseSummaryScreen())),
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => WarehouseSummaryScreen())),
           ),
           _buildDashboardCard(
             title: 'Sales Analysis (DSR)',
             value: '',
             bottom: salesTeamCdLoading
-                ? const Text('Loading CD report...', style: TextStyle(color: Colors.white))
+                ? const Text('Loading CD report...',
+                    style: TextStyle(color: Colors.white))
                 : salesTeamCdTeamTotals.isEmpty
-                    ? _buildSalesTeamContainer(teamName: 'No Team', avgCd: '0.00%')
+                    ? _buildSalesTeamContainer(
+                        teamName: 'No Team', avgCd: '0.00%')
                     : Column(
                         children: salesTeamCdTeamTotals.map((team) {
                           return _buildSalesTeamContainer(
-                            teamName: _teamShortName(team['team_name'].toString()),
-                            avgCd: '${_asDouble(team['avg_cd']).toStringAsFixed(2)}%',
+                            teamName:
+                                _teamShortName(team['team_name'].toString()),
+                            avgCd:
+                                '${_asDouble(team['avg_cd']).toStringAsFixed(2)}%',
                           );
                         }).toList(),
                       ),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SalesTeamCdReportPage())),
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => SalesTeamCdReportPage())),
           ),
         ],
       ),
@@ -2475,10 +2611,20 @@ class _cso_dashboardState extends State<cso_dashboard> {
           // ),
 
           ListTile(
-            title: Text('Send Mail'),
-            onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (context) => StaffMailPage()));
+            title: const Text('Send Mail'),
+            onTap: () async {
+              Navigator.pop(context);
+
+              await Navigator.push<void>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const StaffMailPage(),
+                ),
+              );
+
+              if (!mounted) return;
+
+              await fetchInboxMailCount();
             },
           ),
 
@@ -2531,14 +2677,16 @@ class _cso_dashboardState extends State<cso_dashboard> {
                       size: 28,
                     ),
                     onPressed: () async {
-                      await Navigator.push(
+                      await Navigator.push<void>(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const StaffMailPage(),
+                          builder: (_) => const StaffMailPage(),
                         ),
                       );
 
-                      fetchInboxMailCount();
+                      if (!mounted) return;
+
+                      await fetchInboxMailCount();
                     },
                   ),
                   if (inboxMailCount > 0)

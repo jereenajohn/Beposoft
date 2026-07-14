@@ -70,8 +70,9 @@ class dashboard extends StatefulWidget {
   State<dashboard> createState() => _admin_dashboardState();
 }
 
-class _admin_dashboardState extends State<dashboard> {
-  List<String> statusOptions = ["pending", "approved", "rejected"];
+class _admin_dashboardState extends State<dashboard>
+    with WidgetsBindingObserver {
+        List<String> statusOptions = ["pending", "approved", "rejected"];
   List<Map<String, dynamic>> grvlist = [];
   List<Map<String, dynamic>> proforma = [];
   List<Map<String, dynamic>> salesReportList = [];
@@ -81,77 +82,177 @@ class _admin_dashboardState extends State<dashboard> {
   bool isManager = false;
   int inboxMailCount = 0;
   Timer? mailCountTimer;
+  bool isFetchingInboxMailCount = false;
   String? username = '';
   String profileImage = '';
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      checkAppUpdate(context);
-    });
-    _getUsername(); // Get the username when the page loads
-    getGrvList();
-    fetchproformaData();
-    getSalesReport();
-    getProfile();
-    fetchOrderData();
-    fetchshippedorders();
+@override
+void initState() {
+  super.initState();
+
+  WidgetsBinding.instance.addObserver(this);
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
+    checkAppUpdate(context);
+  });
+
+  _getUsername();
+  getGrvList();
+  fetchproformaData();
+  getSalesReport();
+  getProfile();
+  fetchOrderData();
+  fetchshippedorders();
+
+  fetchInboxMailCount();
+
+  mailCountTimer = Timer.periodic(
+    const Duration(seconds: 15),
+    (_) {
+      if (mounted) {
+        fetchInboxMailCount();
+      }
+    },
+  );
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
+    AuthStatusChecker.start(context);
+  });
+}
+@override
+void didChangeAppLifecycleState(AppLifecycleState state) {
+  super.didChangeAppLifecycleState(state);
+
+  if (state == AppLifecycleState.resumed) {
     fetchInboxMailCount();
-
-    mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      fetchInboxMailCount();
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      AuthStatusChecker.start(context);
-    });
   }
-
+}
   @override
   void dispose() {
     mailCountTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  Future<void> fetchInboxMailCount() async {
-    try {
-      final token = await getTokenFromPrefs();
+ Future<void> fetchInboxMailCount() async {
+  if (isFetchingInboxMailCount) return;
 
-      if (token == null || token.isEmpty) return;
+  isFetchingInboxMailCount = true;
 
-      final response = await http.get(
-        Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
+  try {
+    final String? token = await getTokenFromPrefs();
+
+    if (token == null || token.trim().isEmpty) {
+      return;
+    }
+
+    final Uri uri = Uri.parse(
+      '$api/api/internal/mails/',
+    ).replace(
+      queryParameters: {
+        'type': 'inbox',
+        'read_status': 'unread',
+        'page': '1',
+      },
+    );
+
+    final http.Response response = await http.get(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      debugPrint(
+        'MAIL COUNT REQUEST FAILED: '
+        '${response.statusCode} ${response.body}',
       );
+      return;
+    }
 
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
+    final dynamic decoded = jsonDecode(response.body);
 
-        int count = 0;
+    int newUnreadCount = 0;
 
-        if (decoded['count'] != null) {
-          count = decoded['count'];
-        } else if (decoded['results'] is Map &&
-            decoded['results']['data'] is List) {
-          count = decoded['results']['data'].length;
-        } else if (decoded['data'] is List) {
-          count = decoded['data'].length;
-        } else if (decoded['results'] is List) {
-          count = decoded['results'].length;
+    if (decoded is Map<String, dynamic>) {
+      final dynamic results = decoded['results'];
+      final dynamic data = decoded['data'];
+
+      final dynamic rawUnreadCount =
+          decoded['unread_count'] ??
+          (results is Map ? results['unread_count'] : null) ??
+          (data is Map ? data['unread_count'] : null);
+
+      final dynamic rawFilteredCount =
+          decoded['count'] ??
+          (results is Map ? results['count'] : null) ??
+          (data is Map ? data['count'] : null);
+
+      if (rawUnreadCount != null) {
+        newUnreadCount =
+            rawUnreadCount is int
+                ? rawUnreadCount
+                : int.tryParse(rawUnreadCount.toString()) ?? 0;
+      } else if (rawFilteredCount != null) {
+        /*
+         * Since the API request contains read_status=unread,
+         * this count represents unread mails.
+         */
+        newUnreadCount =
+            rawFilteredCount is int
+                ? rawFilteredCount
+                : int.tryParse(rawFilteredCount.toString()) ?? 0;
+      } else {
+        dynamic mailList;
+
+        if (results is Map && results['data'] is List) {
+          mailList = results['data'];
+        } else if (data is Map && data['data'] is List) {
+          mailList = data['data'];
+        } else if (results is List) {
+          mailList = results;
+        } else if (data is List) {
+          mailList = data;
         }
 
-        if (mounted && count != inboxMailCount) {
-          setState(() {
-            inboxMailCount = count;
-          });
+        if (mailList is List) {
+          newUnreadCount = mailList.where((dynamic mail) {
+            if (mail is! Map) return false;
+
+            if (mail.containsKey('is_read')) {
+              return mail['is_read'] != true;
+            }
+
+            if (mail.containsKey('read')) {
+              return mail['read'] != true;
+            }
+
+            final dynamic readAt = mail['read_at'];
+
+            return readAt == null ||
+                readAt.toString().trim().isEmpty;
+          }).length;
         }
       }
-    } catch (e) {
-      debugPrint('MAIL COUNT ERROR: $e');
     }
+
+    if (!mounted) return;
+
+    if (inboxMailCount != newUnreadCount) {
+      setState(() {
+        inboxMailCount = newUnreadCount;
+      });
+    }
+  } catch (error, stackTrace) {
+    debugPrint('MAIL COUNT ERROR: $error');
+    debugPrintStack(stackTrace: stackTrace);
+  } finally {
+    isFetchingInboxMailCount = false;
   }
+}
 
   Future<void> getProfile() async {
     try {
@@ -736,16 +837,18 @@ class _admin_dashboardState extends State<dashboard> {
                       color: Colors.black,
                       size: 28,
                     ),
-                    onPressed: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const StaffMailPage(),
-                        ),
-                      );
+                 onPressed: () async {
+  await Navigator.push<void>(
+    context,
+    MaterialPageRoute(
+      builder: (_) => const StaffMailPage(),
+    ),
+  );
 
-                      fetchInboxMailCount();
-                    },
+  if (!mounted) return;
+
+  await fetchInboxMailCount();
+},
                   ),
                   if (inboxMailCount > 0)
                     Positioned(
@@ -907,15 +1010,23 @@ class _admin_dashboardState extends State<dashboard> {
                   },
                 ),
 
-                ListTile(
-                  title: Text('Send Mail'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => StaffMailPage()));
-                  },
-                ),
+            ListTile(
+  title: const Text('Send Mail'),
+  onTap: () async {
+    Navigator.pop(context);
+
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const StaffMailPage(),
+      ),
+    );
+
+    if (!mounted) return;
+
+    await fetchInboxMailCount();
+  },
+),
 
                 _buildDropdownTile(context, 'Customers', [
                   'Add Customer',

@@ -32,31 +32,54 @@ class HrDashboard extends StatefulWidget {
   State<HrDashboard> createState() => _HrDashboardState();
 }
 
-class _HrDashboardState extends State<HrDashboard> {
-  String? username = '';
+class _HrDashboardState extends State<HrDashboard>
+    with WidgetsBindingObserver {
+        String? username = '';
   int inboxMailCount = 0;
       String profileImage = '';
             bool isManager = false;
+            bool isFetchingInboxMailCount = false;
 
 
 Timer? mailCountTimer;
-  void initState() {
-    super.initState();
-    _getUsername(); // Get the username when the page loads
-    fetchInboxMailCount();
-        getProfile();
+@override
+void initState() {
+  super.initState();
 
+  WidgetsBinding.instance.addObserver(this);
 
-mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+  _getUsername();
   fetchInboxMailCount();
-});
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      AuthStatusChecker.start(context);
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      checkAppUpdate(context);
-    });
+  getProfile();
+
+  mailCountTimer = Timer.periodic(
+    const Duration(seconds: 15),
+    (_) {
+      if (mounted) {
+        fetchInboxMailCount();
+      }
+    },
+  );
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
+    AuthStatusChecker.start(context);
+  });
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
+    checkAppUpdate(context);
+  });
+}
+
+@override
+void didChangeAppLifecycleState(AppLifecycleState state) {
+  super.didChangeAppLifecycleState(state);
+
+  if (state == AppLifecycleState.resumed) {
+    fetchInboxMailCount();
   }
+}
 
  Future<void> getProfile() async {
     try {
@@ -139,47 +162,122 @@ mailCountTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
   }
 
 Future<void> fetchInboxMailCount() async {
+  if (isFetchingInboxMailCount) return;
+
+  isFetchingInboxMailCount = true;
+
   try {
-    final token = await getTokenFromPrefs();
+    final String? token = await getTokenFromPrefs();
 
-    if (token == null || token.isEmpty) return;
+    if (token == null || token.trim().isEmpty) {
+      return;
+    }
 
-    final response = await http.get(
-      Uri.parse('$api/api/internal/mails/?type=inbox&page=1'),
+    final Uri uri = Uri.parse(
+      '$api/api/internal/mails/',
+    ).replace(
+      queryParameters: {
+        'type': 'inbox',
+        'read_status': 'unread',
+        'page': '1',
+      },
+    );
+
+    final http.Response response = await http.get(
+      uri,
       headers: {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
     );
 
-    if (response.statusCode == 200) {
-      final decoded = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      debugPrint(
+        'MAIL COUNT REQUEST FAILED: '
+        '${response.statusCode} ${response.body}',
+      );
+      return;
+    }
 
-      int count = 0;
+    final dynamic decoded = jsonDecode(response.body);
 
-      if (decoded['count'] != null) {
-        count = decoded['count'];
-      } else if (decoded['results'] is Map &&
-          decoded['results']['data'] is List) {
-        count = decoded['results']['data'].length;
-      } else if (decoded['data'] is List) {
-        count = decoded['data'].length;
-      } else if (decoded['results'] is List) {
-        count = decoded['results'].length;
-      }
+    int newUnreadCount = 0;
 
-      if (mounted && count != inboxMailCount) {
-        setState(() {
-          inboxMailCount = count;
-        });
+    if (decoded is Map<String, dynamic>) {
+      final dynamic results = decoded['results'];
+      final dynamic data = decoded['data'];
+
+      final dynamic rawUnreadCount =
+          decoded['unread_count'] ??
+          (results is Map ? results['unread_count'] : null) ??
+          (data is Map ? data['unread_count'] : null);
+
+      final dynamic rawFilteredCount =
+          decoded['count'] ??
+          (results is Map ? results['count'] : null) ??
+          (data is Map ? data['count'] : null);
+
+      if (rawUnreadCount != null) {
+        newUnreadCount =
+            rawUnreadCount is int
+                ? rawUnreadCount
+                : int.tryParse(rawUnreadCount.toString()) ?? 0;
+      } else if (rawFilteredCount != null) {
+        newUnreadCount =
+            rawFilteredCount is int
+                ? rawFilteredCount
+                : int.tryParse(rawFilteredCount.toString()) ?? 0;
+      } else {
+        dynamic mailList;
+
+        if (results is Map && results['data'] is List) {
+          mailList = results['data'];
+        } else if (data is Map && data['data'] is List) {
+          mailList = data['data'];
+        } else if (results is List) {
+          mailList = results;
+        } else if (data is List) {
+          mailList = data;
+        }
+
+        if (mailList is List) {
+          newUnreadCount = mailList.where((dynamic mail) {
+            if (mail is! Map) return false;
+
+            if (mail.containsKey('is_read')) {
+              return mail['is_read'] != true;
+            }
+
+            if (mail.containsKey('read')) {
+              return mail['read'] != true;
+            }
+
+            final dynamic readAt = mail['read_at'];
+
+            return readAt == null ||
+                readAt.toString().trim().isEmpty;
+          }).length;
+        }
       }
     }
-  } catch (e) {
-    debugPrint('MAIL COUNT ERROR: $e');
+
+    if (!mounted) return;
+
+    if (inboxMailCount != newUnreadCount) {
+      setState(() {
+        inboxMailCount = newUnreadCount;
+      });
+    }
+  } catch (error, stackTrace) {
+    debugPrint('MAIL COUNT ERROR: $error');
+    debugPrintStack(stackTrace: stackTrace);
+  } finally {
+    isFetchingInboxMailCount = false;
   }
 }
 @override
 void dispose() {
+  WidgetsBinding.instance.removeObserver(this);
   mailCountTimer?.cancel();
   super.dispose();
 }
@@ -373,16 +471,18 @@ void dispose() {
             color: Colors.black,
             size: 28,
           ),
-          onPressed: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const StaffMailPage(),
-              ),
-            );
+        onPressed: () async {
+  await Navigator.push<void>(
+    context,
+    MaterialPageRoute(
+      builder: (_) => const StaffMailPage(),
+    ),
+  );
 
-            fetchInboxMailCount();
-          },
+  if (!mounted) return;
+
+  await fetchInboxMailCount();
+},
         ),
 
         if (inboxMailCount > 0)
@@ -476,15 +576,23 @@ void dispose() {
                 //       );
                 //     },
                 //   ),
-     ListTile(
-                  title: Text('Send Mail'),
-                  onTap: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => StaffMailPage()));
-                  },
-                ),
+ ListTile(
+  title: const Text('Send Mail'),
+  onTap: () async {
+    Navigator.pop(context);
+
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const StaffMailPage(),
+      ),
+    );
+
+    if (!mounted) return;
+
+    await fetchInboxMailCount();
+  },
+),
 
                _buildDropdownTile(context, 'Attendance', [
                     'Add Your Attendance',

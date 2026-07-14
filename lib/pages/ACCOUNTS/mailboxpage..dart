@@ -43,6 +43,10 @@ class _StaffMailPageState extends State<StaffMailPage>
   bool isLoadingInbox = false;
   bool isLoadingSent = false;
   bool isDeleting = false;
+  bool isUpdatingReadStatus = false;
+
+  int unreadCount = 0;
+  String readStatusFilter = '';
 
   dynamic selectedMail;
   List<dynamic> mailThread = [];
@@ -341,31 +345,74 @@ class _StaffMailPageState extends State<StaffMailPage>
 
       final currentPage = isInbox ? inboxPage : sentPage;
 
+      final Map<String, String> query = {
+        'type': type,
+        'search': mailSearchController.text.trim(),
+        'page': currentPage.toString(),
+      };
+
+      if (isInbox && readStatusFilter.isNotEmpty) {
+        query['read_status'] = readStatusFilter;
+      }
+
       final response = await http.get(
-        buildUri('api/internal/mails/', {
-          'type': type,
-          'search': mailSearchController.text.trim(),
-          'page': currentPage.toString(),
-        }),
+        buildUri('api/internal/mails/', query),
         headers: jsonHeaders(token),
       );
 
-      final decoded = jsonDecode(response.body);
+      if (response.statusCode != 200) {
+        throw Exception('Mail API failed with ${response.statusCode}');
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
 
       if (!mounted) return;
 
-      final List<dynamic> data = decoded['results']?['data'] ??
-          decoded['data']?['data'] ??
-          decoded['results'] ??
-          decoded['data'] ??
-          [];
+      dynamic rawData;
+      dynamic rawUnreadCount = 0;
+      dynamic rawNext;
 
-      final bool hasNext =
-          decoded['next'] != null || decoded['results']?['next'] != null;
+      if (decoded is Map) {
+        final dynamic results = decoded['results'];
+        final dynamic rootData = decoded['data'];
+
+        if (results is Map) {
+          rawData = results['data'];
+          rawUnreadCount =
+              results['unread_count'] ?? decoded['unread_count'] ?? 0;
+          rawNext = results['next'] ?? decoded['next'];
+        } else if (results is List) {
+          rawData = results;
+          rawUnreadCount = decoded['unread_count'] ?? 0;
+          rawNext = decoded['next'];
+        } else if (rootData is Map && rootData['data'] is List) {
+          rawData = rootData['data'];
+          rawUnreadCount =
+              rootData['unread_count'] ?? decoded['unread_count'] ?? 0;
+          rawNext = rootData['next'] ?? decoded['next'];
+        } else {
+          rawData = rootData;
+          rawUnreadCount = decoded['unread_count'] ?? 0;
+          rawNext = decoded['next'];
+        }
+
+        if (rawNext == null && decoded['links'] is Map) {
+          rawNext = decoded['links']['next'];
+        }
+      } else if (decoded is List) {
+        rawData = decoded;
+      }
+
+      final List<dynamic> data =
+          rawData is List ? List<dynamic>.from(rawData) : <dynamic>[];
+      final bool hasNext = rawNext != null;
+      final int responseUnreadCount =
+          int.tryParse(rawUnreadCount.toString()) ?? 0;
 
       setState(() {
         if (isInbox) {
           inboxMails = refresh ? data : [...inboxMails, ...data];
+          unreadCount = responseUnreadCount;
           inboxPage++;
           hasMoreInbox = hasNext;
         } else {
@@ -1418,10 +1465,38 @@ class _StaffMailPageState extends State<StaffMailPage>
           labelColor: const Color(0xFF2563EB),
           unselectedLabelColor: const Color(0xFF64748B),
           indicatorColor: const Color(0xFF2563EB),
-          tabs: const [
-            Tab(text: 'Inbox'),
-            Tab(text: 'Sent'),
-            Tab(text: 'Compose'),
+          tabs: [
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Inbox'),
+                  if (unreadCount > 0) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        unreadCount > 99 ? '99+' : '$unreadCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const Tab(text: 'Sent'),
+            const Tab(text: 'Compose'),
           ],
         ),
       ),
@@ -1474,7 +1549,28 @@ class _StaffMailPageState extends State<StaffMailPage>
                 icon: Icons.search_rounded,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            if (type == 'inbox') ...[
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    buildReadFilterChip(label: 'All', value: ''),
+                    const SizedBox(width: 8),
+                    buildReadFilterChip(
+                      label: unreadCount > 0
+                          ? 'Unread ($unreadCount)'
+                          : 'Unread',
+                      value: 'unread',
+                    ),
+                    const SizedBox(width: 8),
+                    buildReadFilterChip(label: 'Read', value: 'read'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ] else
+              const SizedBox(height: 4),
             if (mails.isEmpty && isLoading)
               const Padding(
                 padding: EdgeInsets.only(top: 120),
@@ -1502,6 +1598,46 @@ class _StaffMailPageState extends State<StaffMailPage>
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget buildReadFilterChip({
+    required String label,
+    required String value,
+  }) {
+    final bool selected = readStatusFilter == value;
+
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) {
+        if (readStatusFilter == value) return;
+
+        setState(() {
+          readStatusFilter = value;
+          inboxMails = [];
+          inboxPage = 1;
+          hasMoreInbox = true;
+        });
+
+        fetchMails(type: 'inbox', refresh: true);
+      },
+      selectedColor: const Color(0xFFDBEAFE),
+      backgroundColor: Colors.white,
+      side: BorderSide(
+        color: selected
+            ? const Color(0xFF2563EB)
+            : const Color(0xFFE2E8F0),
+      ),
+      labelStyle: TextStyle(
+        color: selected
+            ? const Color(0xFF1D4ED8)
+            : const Color(0xFF475569),
+        fontWeight: FontWeight.w800,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(999),
       ),
     );
   }
@@ -1696,6 +1832,24 @@ class _StaffMailPageState extends State<StaffMailPage>
                           ),
                         ),
                       ),
+
+                      if ((int.tryParse(mail['reply_count']?.toString() ?? '0') ?? 0) > 0) ...[
+                        const Icon(
+                          Icons.reply_all_rounded,
+                          size: 16,
+                          color: Color(0xFF2563EB),
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          '${mail['reply_count']}',
+                          style: const TextStyle(
+                            color: Color(0xFF2563EB),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
 
                       if (attachments.isNotEmpty) ...[
                         const Icon(
@@ -3123,6 +3277,95 @@ class _StaffMailPageState extends State<StaffMailPage>
     );
   }
 
+  Future<bool> updateMailReadStatus(
+    int mailId,
+    bool isRead, {
+    bool showFeedback = true,
+  }) async {
+    if (isUpdatingReadStatus) return false;
+
+    final String? token = await getTokenFromPrefs();
+
+    if (token == null || token.isEmpty) {
+      showMsg('Token missing');
+      return false;
+    }
+
+    try {
+      if (mounted) {
+        setState(() => isUpdatingReadStatus = true);
+      }
+
+      final http.Response response = await http.patch(
+        Uri.parse('$api/api/internal/mails/$mailId/read/status/'),
+        headers: jsonHeaders(token),
+        body: jsonEncode({'is_read': isRead}),
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        String message = 'Failed to update read status';
+        try {
+          final dynamic decoded = jsonDecode(response.body);
+          message = decoded?['message']?.toString() ?? message;
+        } catch (_) {}
+        if (showFeedback) showMsg(message);
+        return false;
+      }
+
+      dynamic updatedData;
+      try {
+        final dynamic decoded = jsonDecode(response.body);
+        updatedData = decoded?['data'];
+      } catch (_) {}
+
+      final bool updatedIsRead =
+          updatedData?['is_read'] is bool ? updatedData['is_read'] : isRead;
+      final dynamic updatedReadAt = updatedData?['read_at'];
+
+      if (!mounted) return true;
+
+      setState(() {
+        inboxMails = inboxMails.map((item) {
+          if (int.tryParse(item?['id']?.toString() ?? '') != mailId) {
+            return item;
+          }
+          return <String, dynamic>{
+            ...Map<String, dynamic>.from(item as Map),
+            'is_read': updatedIsRead,
+            'read_at': updatedReadAt,
+          };
+        }).toList();
+
+        if (selectedMail is Map &&
+            int.tryParse(selectedMail?['id']?.toString() ?? '') == mailId) {
+          selectedMail = <String, dynamic>{
+            ...Map<String, dynamic>.from(selectedMail as Map),
+            'is_read': updatedIsRead,
+            'read_at': updatedReadAt,
+          };
+        }
+      });
+
+      if (showFeedback) {
+        showMsg(
+          updatedIsRead ? 'Mail marked as read' : 'Mail marked as unread',
+          success: true,
+        );
+      }
+
+      await fetchMails(type: 'inbox', refresh: true);
+      return true;
+    } catch (e) {
+      debugPrint('UPDATE READ STATUS ERROR: $e');
+      if (showFeedback) showMsg('Failed to update read status');
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() => isUpdatingReadStatus = false);
+      }
+    }
+  }
+
   Future<void> openMailDetail(dynamic mail, String mailboxType) async {
     final int? mailId = int.tryParse(
       mail?['id']?.toString() ?? '',
@@ -3133,9 +3376,19 @@ class _StaffMailPageState extends State<StaffMailPage>
       return;
     }
 
+    final bool wasUnread = mailboxType == 'inbox' && isUnreadMail(mail);
+
     resetReplyForm();
 
     final bool loaded = await loadMailThread(mailId);
+
+    if (loaded && wasUnread) {
+      await updateMailReadStatus(
+        mailId,
+        true,
+        showFeedback: false,
+      );
+    }
 
     if (!loaded || !mounted || selectedMail == null) {
       return;
@@ -3226,6 +3479,29 @@ class _StaffMailPageState extends State<StaffMailPage>
                                   ],
                                 ),
                               ),
+                              if (mailboxType == 'inbox')
+                                IconButton(
+                                  tooltip: isUnreadMail(selectedMail)
+                                      ? 'Mark as read'
+                                      : 'Mark as unread',
+                                  onPressed: isUpdatingReadStatus
+                                      ? null
+                                      : () async {
+                                          final bool targetRead =
+                                              isUnreadMail(selectedMail);
+                                          await updateMailReadStatus(
+                                            mailId,
+                                            targetRead,
+                                          );
+                                          refreshSheet();
+                                        },
+                                  icon: Icon(
+                                    isUnreadMail(selectedMail)
+                                        ? Icons.mark_email_read_outlined
+                                        : Icons.mark_email_unread_outlined,
+                                    color: const Color(0xFF2563EB),
+                                  ),
+                                ),
                               IconButton(
                                 tooltip: 'Delete',
                                 onPressed: isDeleting
