@@ -116,6 +116,11 @@ List<String> usabilityOptions = [
   int? selectedwarehouseId; // Variable to store the selected department's ID
   String? selectedwarehouseName;
 
+  int? selectedMainCategoryId;
+  String? selectedMainCategoryName;
+  List<Map<String, dynamic>> mainCategories = [];
+  bool isLoadingMainCategories = false;
+
   int? selectedcategoryId; // Variable to store the selected department's ID
   String? selectedcategoryName;
   int? selectedrackId; // Variable to store the selected department's ID
@@ -154,6 +159,7 @@ List<String> usabilityOptions = [
     super.initState();
     getfamily();
     getwarehouse();
+    getMainCategories();
     getproductcategory();
     getrack();
   }
@@ -261,6 +267,155 @@ List<String> usabilityOptions = [
 
   List<Map<String, dynamic>> category = [];
 
+  List<dynamic> _extractMainCategoryList(dynamic decoded) {
+    if (decoded is List) {
+      return decoded;
+    }
+
+    if (decoded is! Map) {
+      return <dynamic>[];
+    }
+
+    final dynamic data = decoded['data'];
+    final dynamic results = decoded['results'];
+    final dynamic categories = decoded['categories'];
+
+    if (data is List) {
+      return data;
+    }
+
+    if (results is List) {
+      return results;
+    }
+
+    if (categories is List) {
+      return categories;
+    }
+
+    if (data is Map) {
+      final dynamic nested =
+          data['data'] ?? data['results'] ?? data['categories'];
+
+      if (nested is List) {
+        return nested;
+      }
+    }
+
+    if (results is Map) {
+      final dynamic nested =
+          results['data'] ?? results['results'] ?? results['categories'];
+
+      if (nested is List) {
+        return nested;
+      }
+    }
+
+    return <dynamic>[];
+  }
+
+  Future<void> getMainCategories() async {
+    if (isLoadingMainCategories) return;
+
+    if (mounted) {
+      setState(() {
+        isLoadingMainCategories = true;
+      });
+    }
+
+    try {
+      final String? token = await gettokenFromPrefs();
+
+      if (token == null || token.trim().isEmpty) {
+        showErrorSnackBar(
+          'Authentication token is missing. Please login again.',
+        );
+        return;
+      }
+
+      final http.Response response = await http.get(
+        Uri.parse('$api/api/main/categories/add/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        String message = 'Failed to load main categories.';
+
+        try {
+          final dynamic decoded = jsonDecode(response.body);
+          message = decoded['message']?.toString() ??
+              decoded['detail']?.toString() ??
+              message;
+        } catch (_) {}
+
+        showErrorSnackBar(message);
+        return;
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      final List<dynamic> rawCategories =
+          _extractMainCategoryList(decoded);
+
+      final List<Map<String, dynamic>> parsedCategories = [];
+
+      for (final dynamic item in rawCategories) {
+        if (item is! Map) continue;
+
+        final dynamic rawId = item['id'];
+        final int? id = rawId is int
+            ? rawId
+            : int.tryParse(rawId?.toString() ?? '');
+
+        final String categoryName =
+            (item['name'] ?? '').toString().trim();
+
+        if (id == null || categoryName.isEmpty) continue;
+
+        parsedCategories.add({
+          'id': id,
+          'name': categoryName,
+        });
+      }
+
+      parsedCategories.sort(
+        (a, b) => a['name']
+            .toString()
+            .toLowerCase()
+            .compareTo(
+              b['name'].toString().toLowerCase(),
+            ),
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        mainCategories = parsedCategories;
+
+        if (selectedMainCategoryId != null &&
+            !mainCategories.any(
+              (item) => item['id'] == selectedMainCategoryId,
+            )) {
+          selectedMainCategoryId = null;
+          selectedMainCategoryName = null;
+        }
+      });
+    } catch (error) {
+      debugPrint('GET MAIN CATEGORIES ERROR: $error');
+      showErrorSnackBar(
+        'Something went wrong while loading main categories.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoadingMainCategories = false;
+        });
+      }
+    }
+  }
+
   Future<void> getproductcategory() async {
     try {
       final token = await gettokenFromPrefs();
@@ -268,7 +423,7 @@ List<String> usabilityOptions = [
       var response = await http.get(
         Uri.parse('$api/api/product/category/add/'),
         headers: {
-          'Authorization': ' Bearer $token',
+          'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
@@ -429,6 +584,7 @@ List<String> usabilityOptions = [
         'type': selecttype,
         'purchase_type': selectpurchasetype,
         'unit': selectunit,
+        'main_category': selectedMainCategoryId,
         'product_category': selectedcategoryId,
         'purchase_rate': purchaserate.text,
         'tax': taxx.text,
@@ -1020,6 +1176,119 @@ List<String> usabilityOptions = [
                                   ],
                                 ),
                               ),
+                              const SizedBox(height: 10),
+
+                              DropdownButtonFormField<int>(
+                                isExpanded: true,
+                                value: selectedMainCategoryId,
+                                decoration: InputDecoration(
+                                  labelText: 'Select Main Category *',
+                                  hintText: isLoadingMainCategories
+                                      ? 'Loading main categories...'
+                                      : 'Choose a main category',
+                                  prefixIcon: const Icon(
+                                    Icons.category_outlined,
+                                  ),
+                                  suffixIcon: isLoadingMainCategories
+                                      ? const Padding(
+                                          padding: EdgeInsets.all(14),
+                                          child: SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child:
+                                                CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          ),
+                                        )
+                                      : null,
+                                  border: const OutlineInputBorder(),
+                                  contentPadding:
+                                      const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                ),
+                                validator: (int? value) {
+                                  if (value == null) {
+                                    return 'Please select a main category';
+                                  }
+
+                                  return null;
+                                },
+                                onChanged: isLoadingMainCategories
+                                    ? null
+                                    : (int? newValue) {
+                                        setState(() {
+                                          selectedMainCategoryId =
+                                              newValue;
+
+                                          if (newValue == null) {
+                                            selectedMainCategoryName =
+                                                null;
+                                            return;
+                                          }
+
+                                          final Map<String, dynamic>
+                                              selected =
+                                              mainCategories.firstWhere(
+                                            (element) =>
+                                                element['id'] ==
+                                                newValue,
+                                          );
+
+                                          selectedMainCategoryName =
+                                              selected['name']
+                                                  ?.toString();
+                                        });
+                                      },
+                                items: mainCategories
+                                    .map<DropdownMenuItem<int>>(
+                                  (Map<String, dynamic> item) {
+                                    return DropdownMenuItem<int>(
+                                      value: item['id'] as int,
+                                      child: Text(
+                                        item['name']?.toString() ??
+                                            '',
+                                        maxLines: 1,
+                                        overflow:
+                                            TextOverflow.ellipsis,
+                                      ),
+                                    );
+                                  },
+                                ).toList(),
+                              ),
+
+                              if (!isLoadingMainCategories &&
+                                  mainCategories.isEmpty)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.only(top: 8),
+                                  child: Row(
+                                    children: [
+                                      const Expanded(
+                                        child: Text(
+                                          'No main categories found.',
+                                          style: TextStyle(
+                                            color: Colors.red,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                      TextButton.icon(
+                                        onPressed:
+                                            getMainCategories,
+                                        icon: const Icon(
+                                          Icons.refresh_rounded,
+                                          size: 18,
+                                        ),
+                                        label:
+                                            const Text('Retry'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
                               const SizedBox(height: 10),
 
                               DropdownButtonFormField<int>(
@@ -1834,6 +2103,32 @@ List<String> usabilityOptions = [
                         SizedBox(width: 13),
                         ElevatedButton(
                           onPressed: () async {
+                            if (selectedMainCategoryId == null) {
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Please select a main category.',
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            if (selectedcategoryId == null) {
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Please select a product category.',
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
                             // Parse the values
                             landingPriceValue =
                                 double.tryParse(landingprice.text) ?? 0.0;

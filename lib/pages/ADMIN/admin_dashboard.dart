@@ -11,6 +11,7 @@ import 'package:beposoft/pages/ACCOUNTS/add_country_code.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_currency.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_daily_sales_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_district.dart';
+import 'package:beposoft/pages/ACCOUNTS/add_main_category.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_purpose_of_payment.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
@@ -1109,7 +1110,18 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
 
                 _buildDropdownTile(context, 'Daily Sales Reports',
                     ['Add Team', 'Team wise Report']),
-
+     ListTile(
+                  leading: Icon(Icons.category),
+                  title: Text('Add Main Category'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) =>
+                                MainCategoryManagementPage()));
+                    // Navigate to the Settings page or perform any other action
+                  },
+                ),
                 ListTile(
                   leading: Icon(Icons.person),
                   title: Text('Purchase Invoice'),

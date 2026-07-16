@@ -30,6 +30,8 @@ class _StaffMailPageState extends State<StaffMailPage>
 
   List<dynamic> staffs = [];
   List<Map<String, dynamic>> selectedStaffs = [];
+  List<Map<String, dynamic>> selectedCcStaffs = [];
+  List<Map<String, dynamic>> selectedBccStaffs = [];
   List<Map<String, dynamic>> allRecipientStaffs = [];
   List<PlatformFile> selectedFiles = [];
 
@@ -52,6 +54,8 @@ class _StaffMailPageState extends State<StaffMailPage>
   List<dynamic> mailThread = [];
   List<dynamic> replyStaffs = [];
   List<Map<String, dynamic>> replyRecipientUsers = [];
+  List<Map<String, dynamic>> replyCcRecipientUsers = [];
+  List<Map<String, dynamic>> replyBccRecipientUsers = [];
   List<PlatformFile> replyDocuments = [];
 
   bool isLoadingMailDetail = false;
@@ -466,8 +470,10 @@ class _StaffMailPageState extends State<StaffMailPage>
   Future<void> sendMail() async {
     if (isSending) return;
 
-    if (selectedStaffs.isEmpty) {
-      showMsg('Please select at least one recipient');
+    if (selectedStaffs.isEmpty &&
+        selectedCcStaffs.isEmpty &&
+        selectedBccStaffs.isEmpty) {
+      showMsg('Select at least one To, CC or BCC recipient');
       return;
     }
 
@@ -508,24 +514,38 @@ class _StaffMailPageState extends State<StaffMailPage>
       request.fields['subject'] = subjectController.text.trim();
       request.fields['message'] = messageController.text.trim();
 
-      final Set<int> uniqueRecipientIds = selectedStaffs
+      final Set<int> toIds = selectedStaffs
+          .map(getRecipientId)
+          .whereType<int>()
+          .where((id) => id > 0)
+          .toSet();
+      final Set<int> ccIds = selectedCcStaffs
+          .map(getRecipientId)
+          .whereType<int>()
+          .where((id) => id > 0)
+          .toSet();
+      final Set<int> bccIds = selectedBccStaffs
           .map(getRecipientId)
           .whereType<int>()
           .where((id) => id > 0)
           .toSet();
 
-      if (uniqueRecipientIds.isEmpty) {
+      if (toIds.isEmpty && ccIds.isEmpty && bccIds.isEmpty) {
         showMsg('No valid recipients selected');
         return;
       }
 
-      for (final int recipientId in uniqueRecipientIds) {
-        request.files.add(
-          http.MultipartFile.fromString(
-            'recipients',
-            recipientId.toString(),
-          ),
-        );
+      for (final int recipientId in toIds) {
+        request.files.add(http.MultipartFile.fromString(
+          'recipients', recipientId.toString()));
+      }
+      for (final int recipientId in ccIds) {
+        request.files.add(http.MultipartFile.fromString(
+          'cc_recipients', recipientId.toString()));
+      }
+      for (final int recipientId in bccIds) {
+        request.files.add(http.MultipartFile.fromString(
+          'bcc_recipients', recipientId.toString()));
       }
 
       for (final file in selectedFiles) {
@@ -551,6 +571,8 @@ class _StaffMailPageState extends State<StaffMailPage>
 
         setState(() {
           selectedStaffs.clear();
+          selectedCcStaffs.clear();
+          selectedBccStaffs.clear();
           selectedFiles.clear();
           subjectController.clear();
           messageController.clear();
@@ -728,6 +750,12 @@ class _StaffMailPageState extends State<StaffMailPage>
           (selected) => getRecipientId(selected) == recipientId,
         );
       } else {
+        selectedCcStaffs.removeWhere(
+          (selected) => getRecipientId(selected) == recipientId,
+        );
+        selectedBccStaffs.removeWhere(
+          (selected) => getRecipientId(selected) == recipientId,
+        );
         selectedStaffs.add(normalized);
       }
 
@@ -890,7 +918,14 @@ class _StaffMailPageState extends State<StaffMailPage>
     for (final Map<String, dynamic> staff in completeList) {
       final int? recipientId = getRecipientId(staff);
 
-      if (recipientId != null && isApprovedRecipient(staff)) {
+      final excludedIds = {
+        ...selectedCcStaffs.map(getRecipientId).whereType<int>(),
+        ...selectedBccStaffs.map(getRecipientId).whereType<int>(),
+      };
+
+      if (recipientId != null &&
+          isApprovedRecipient(staff) &&
+          !excludedIds.contains(recipientId)) {
         uniqueRecipients[recipientId] = staff;
       }
     }
@@ -920,6 +955,973 @@ class _StaffMailPageState extends State<StaffMailPage>
       allRecipientsSelected = false;
       staffSearchController.clear();
     });
+  }
+
+  Set<int> _composeExcludedIdsFor(String type) {
+    final Set<int> excluded = {};
+
+    if (type != 'to') {
+      excluded.addAll(
+        selectedStaffs.map(getRecipientId).whereType<int>(),
+      );
+    }
+
+    if (type != 'cc') {
+      excluded.addAll(
+        selectedCcStaffs.map(getRecipientId).whereType<int>(),
+      );
+    }
+
+    if (type != 'bcc') {
+      excluded.addAll(
+        selectedBccStaffs.map(getRecipientId).whereType<int>(),
+      );
+    }
+
+    return excluded;
+  }
+
+  Future<List<Map<String, dynamic>>> _eligibleComposeRecipients(
+    String type,
+  ) async {
+    List<Map<String, dynamic>> completeList = allRecipientStaffs;
+
+    if (completeList.isEmpty) {
+      completeList = await fetchAllRecipientStaffs();
+    }
+
+    final Set<int> excludedIds = _composeExcludedIdsFor(type);
+    final Map<int, Map<String, dynamic>> uniqueRecipients = {};
+
+    for (final Map<String, dynamic> staff in completeList) {
+      final int? recipientId = getRecipientId(staff);
+
+      if (recipientId != null &&
+          recipientId > 0 &&
+          isApprovedRecipient(staff) &&
+          !excludedIds.contains(recipientId)) {
+        uniqueRecipients[recipientId] = staff;
+      }
+    }
+
+    return uniqueRecipients.values.toList();
+  }
+
+  Future<void> selectAllComposeRecipientsFor(String type) async {
+    final List<Map<String, dynamic>> eligible =
+        await _eligibleComposeRecipients(type);
+
+    if (eligible.isEmpty) {
+      showMsg('No approved recipients found');
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      final List<Map<String, dynamic>> target = _composeListFor(type);
+      target
+        ..clear()
+        ..addAll(eligible);
+
+      allRecipientsSelected = type == 'to';
+      staffSearchController.clear();
+    });
+
+    showMsg(
+      '${eligible.length} ${_recipientLabel(type)} recipients selected',
+      success: true,
+    );
+  }
+
+  void clearAllComposeRecipientsFor(String type) {
+    setState(() {
+      _composeListFor(type).clear();
+
+      if (type == 'to') {
+        allRecipientsSelected = false;
+      }
+
+      staffSearchController.clear();
+    });
+  }
+
+  bool areAllComposeRecipientsSelected(
+    String type,
+    List<Map<String, dynamic>> eligible,
+  ) {
+    if (eligible.isEmpty) return false;
+
+    final Set<int> eligibleIds =
+        eligible.map(getRecipientId).whereType<int>().toSet();
+
+    final Set<int> selectedIds =
+        _composeListFor(type).map(getRecipientId).whereType<int>().toSet();
+
+    return eligibleIds.isNotEmpty && selectedIds.containsAll(eligibleIds);
+  }
+
+  Set<int> get composeRecipientIds => {
+        ...selectedStaffs.map(getRecipientId).whereType<int>(),
+        ...selectedCcStaffs.map(getRecipientId).whereType<int>(),
+        ...selectedBccStaffs.map(getRecipientId).whereType<int>(),
+      };
+
+  Set<int> get replyAllRecipientIds => {
+        ...replyRecipientUsers.map(getRecipientId).whereType<int>(),
+        ...replyCcRecipientUsers.map(getRecipientId).whereType<int>(),
+        ...replyBccRecipientUsers.map(getRecipientId).whereType<int>(),
+      };
+
+  List<Map<String, dynamic>> _composeListFor(String type) {
+    switch (type) {
+      case 'cc':
+        return selectedCcStaffs;
+      case 'bcc':
+        return selectedBccStaffs;
+      default:
+        return selectedStaffs;
+    }
+  }
+
+  List<Map<String, dynamic>> _replyListFor(String type) {
+    switch (type) {
+      case 'cc':
+        return replyCcRecipientUsers;
+      case 'bcc':
+        return replyBccRecipientUsers;
+      default:
+        return replyRecipientUsers;
+    }
+  }
+
+  String _recipientLabel(String type) {
+    switch (type) {
+      case 'cc':
+        return 'CC';
+      case 'bcc':
+        return 'BCC';
+      default:
+        return 'To';
+    }
+  }
+
+  Future<void> openComposeRecipientSelector(String type) async {
+    List<Map<String, dynamic>> visible = [];
+    List<Map<String, dynamic>> eligibleAll = [];
+    bool loading = true;
+    bool sheetActive = true;
+    bool initialLoadStarted = false;
+    Timer? localDebounce;
+
+    Future<void> load(
+      String search,
+      StateSetter modalSetState,
+      BuildContext modalContext,
+    ) async {
+      if (!sheetActive) return;
+
+      await fetchStaffs(search);
+
+      if (!sheetActive || !mounted || !modalContext.mounted) return;
+
+      eligibleAll = await _eligibleComposeRecipients(type);
+
+      if (!sheetActive || !mounted || !modalContext.mounted) return;
+
+      visible = staffs
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .where((user) {
+            final int? id = getRecipientId(user);
+            final Set<int> currentGroupIds = _composeListFor(type)
+                .map(getRecipientId)
+                .whereType<int>()
+                .toSet();
+
+            return id != null &&
+                (!composeRecipientIds.contains(id) ||
+                    currentGroupIds.contains(id));
+          })
+          .toList();
+
+      loading = false;
+
+      if (sheetActive && modalContext.mounted) {
+        modalSetState(() {});
+      }
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (modalContext, modalSetState) {
+            if (!initialLoadStarted) {
+              initialLoadStarted = true;
+
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (sheetActive && modalContext.mounted) {
+                  load('', modalSetState, modalContext);
+                }
+              });
+            }
+
+            return DraggableScrollableSheet(
+              initialChildSize: .88,
+              minChildSize: .5,
+              maxChildSize: .96,
+              builder: (_, scrollController) => Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(26),
+                  ),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      Container(
+                        width: 48,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE2E8F0),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 18, 8, 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Select ${_recipientLabel(type)} recipients',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.pop(sheetContext),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        child: TextField(
+                          decoration: inputDecoration(
+                            hint: 'Search staff',
+                            icon: Icons.search_rounded,
+                          ),
+                          onChanged: (value) {
+                            localDebounce?.cancel();
+                            localDebounce = Timer(
+                              const Duration(milliseconds: 400),
+                              () {
+                                if (sheetActive && modalContext.mounted) {
+                                  load(
+                                    value.trim(),
+                                    modalSetState,
+                                    modalContext,
+                                  );
+                                }
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        child: Builder(
+                          builder: (_) {
+                            final bool allSelected =
+                                areAllComposeRecipientsSelected(
+                              type,
+                              eligibleAll,
+                            );
+
+                            return InkWell(
+                              onTap: isFetchingAllStaffs
+                                  ? null
+                                  : () async {
+                                      if (allSelected) {
+                                        clearAllComposeRecipientsFor(type);
+                                      } else {
+                                        await selectAllComposeRecipientsFor(
+                                          type,
+                                        );
+                                      }
+
+                                      eligibleAll =
+                                          await _eligibleComposeRecipients(
+                                        type,
+                                      );
+
+                                      if (modalContext.mounted) {
+                                        modalSetState(() {});
+                                      }
+                                    },
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: allSelected
+                                      ? const Color(0xFFEFF6FF)
+                                      : const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: allSelected
+                                        ? const Color(0xFF2563EB)
+                                        : const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 48,
+                                      height: 48,
+                                      child: Center(
+                                        child: isFetchingAllStaffs
+                                            ? const SizedBox(
+                                                width: 23,
+                                                height: 23,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2.5,
+                                                ),
+                                              )
+                                            : Checkbox(
+                                                value: allSelected,
+                                                activeColor:
+                                                    const Color(0xFF2563EB),
+                                                onChanged: (_) async {
+                                                  if (allSelected) {
+                                                    clearAllComposeRecipientsFor(
+                                                      type,
+                                                    );
+                                                  } else {
+                                                    await selectAllComposeRecipientsFor(
+                                                      type,
+                                                    );
+                                                  }
+
+                                                  eligibleAll =
+                                                      await _eligibleComposeRecipients(
+                                                    type,
+                                                  );
+
+                                                  if (modalContext.mounted) {
+                                                    modalSetState(() {});
+                                                  }
+                                                },
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            isFetchingAllStaffs
+                                                ? 'Loading all staff...'
+                                                : allSelected
+                                                    ? 'Clear All'
+                                                    : 'Select All',
+                                            style: const TextStyle(
+                                              color: Color(0xFF0F172A),
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            isFetchingAllStaffs
+                                                ? 'Fetching every staff page'
+                                                : allSelected
+                                                    ? 'All available ${_recipientLabel(type)} recipients selected'
+                                                    : 'Select approved staff from all pages',
+                                            style: const TextStyle(
+                                              color: Color(0xFF64748B),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEFF6FF),
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                      ),
+                                      child: Text(
+                                        '${_composeListFor(type).length} selected',
+                                        style: const TextStyle(
+                                          color: Color(0xFF2563EB),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: loading
+                            ? const Center(
+                                child: CircularProgressIndicator(),
+                              )
+                            : visible.isEmpty
+                                ? const Center(
+                                    child: Text('No staff found'),
+                                  )
+                                : ListView.separated(
+                                    controller: scrollController,
+                                    padding: const EdgeInsets.fromLTRB(
+                                      18,
+                                      4,
+                                      18,
+                                      100,
+                                    ),
+                                    itemCount: visible.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(height: 8),
+                                    itemBuilder: (_, index) {
+                                      final Map<String, dynamic> user =
+                                          visible[index];
+                                      final int id = getRecipientId(user)!;
+                                      final List<Map<String, dynamic>> list =
+                                          _composeListFor(type);
+                                      final bool selected = list.any(
+                                        (e) => getRecipientId(e) == id,
+                                      );
+
+                                      return CheckboxListTile(
+                                        value: selected,
+                                        activeColor: const Color(0xFF2563EB),
+                                        title: Text(
+                                          staffName(user),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                        subtitle: Text(
+                                          user['department_name']
+                                                  ?.toString() ??
+                                              user['department']?.toString() ??
+                                              'mexpo.org',
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                        ),
+                                        tileColor: selected
+                                            ? const Color(0xFFEFF6FF)
+                                            : const Color(0xFFF8FAFC),
+                                        onChanged: (_) {
+                                          if (!sheetActive ||
+                                              !modalContext.mounted) {
+                                            return;
+                                          }
+
+                                          setState(() {
+                                            if (selected) {
+                                              list.removeWhere(
+                                                (e) =>
+                                                    getRecipientId(e) == id,
+                                              );
+                                            } else {
+                                              selectedStaffs.removeWhere(
+                                                (e) =>
+                                                    getRecipientId(e) == id,
+                                              );
+                                              selectedCcStaffs.removeWhere(
+                                                (e) =>
+                                                    getRecipientId(e) == id,
+                                              );
+                                              selectedBccStaffs.removeWhere(
+                                                (e) =>
+                                                    getRecipientId(e) == id,
+                                              );
+                                              list.add(user);
+                                            }
+
+                                            allRecipientsSelected = false;
+                                          });
+
+                                          if (modalContext.mounted) {
+                                            modalSetState(() {});
+                                          }
+                                        },
+                                      );
+                                    },
+                                  ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            style: primaryButtonStyle(),
+                            onPressed: () => Navigator.pop(sheetContext),
+                            child: Text(
+                              'Done (${_composeListFor(type).length})',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    sheetActive = false;
+    localDebounce?.cancel();
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> openReplyGroupSelector(
+    String type,
+    VoidCallback refreshParent,
+  ) async {
+    List<Map<String, dynamic>> visible = [];
+    List<Map<String, dynamic>> eligibleAll = [];
+    bool loading = true;
+    bool sheetActive = true;
+    bool initialLoadStarted = false;
+    Timer? localDebounce;
+
+    Future<void> load(
+      String search,
+      StateSetter modalSetState,
+      BuildContext modalContext,
+    ) async {
+      if (!sheetActive) return;
+
+      await fetchReplySelectorStaffs(search);
+
+      if (!sheetActive || !mounted || !modalContext.mounted) return;
+
+      eligibleAll = await _eligibleReplyRecipients(type);
+
+      if (!sheetActive || !mounted || !modalContext.mounted) return;
+
+      visible = replyStaffs
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .where((user) {
+            final int? id = getRecipientId(user);
+            final Set<int> currentGroupIds = _replyListFor(type)
+                .map(getRecipientId)
+                .whereType<int>()
+                .toSet();
+
+            return id != null &&
+                (!replyAllRecipientIds.contains(id) ||
+                    currentGroupIds.contains(id));
+          })
+          .toList();
+
+      loading = false;
+
+      if (sheetActive && modalContext.mounted) {
+        modalSetState(() {});
+      }
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (modalContext, modalSetState) {
+            if (!initialLoadStarted) {
+              initialLoadStarted = true;
+
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (sheetActive && modalContext.mounted) {
+                  load('', modalSetState, modalContext);
+                }
+              });
+            }
+
+            return DraggableScrollableSheet(
+              initialChildSize: .88,
+              minChildSize: .5,
+              maxChildSize: .96,
+              builder: (_, scrollController) => Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(26),
+                  ),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      Container(
+                        width: 48,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE2E8F0),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 18, 8, 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Select Reply ${_recipientLabel(type)}',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.pop(sheetContext),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        child: TextField(
+                          decoration: inputDecoration(
+                            hint: 'Search staff',
+                            icon: Icons.search_rounded,
+                          ),
+                          onChanged: (value) {
+                            localDebounce?.cancel();
+                            localDebounce = Timer(
+                              const Duration(milliseconds: 400),
+                              () {
+                                if (sheetActive && modalContext.mounted) {
+                                  load(
+                                    value.trim(),
+                                    modalSetState,
+                                    modalContext,
+                                  );
+                                }
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        child: Builder(
+                          builder: (_) {
+                            final bool allSelected =
+                                areAllReplyRecipientsSelected(
+                              type,
+                              eligibleAll,
+                            );
+
+                            return InkWell(
+                              onTap: isFetchingAllStaffs
+                                  ? null
+                                  : () async {
+                                      if (allSelected) {
+                                        clearAllReplyRecipientsFor(type);
+                                      } else {
+                                        await selectAllReplyRecipientsFor(
+                                          type,
+                                        );
+                                      }
+
+                                      eligibleAll =
+                                          await _eligibleReplyRecipients(type);
+
+                                      if (modalContext.mounted) {
+                                        modalSetState(() {});
+                                      }
+
+                                      refreshParent();
+                                    },
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: allSelected
+                                      ? const Color(0xFFEFF6FF)
+                                      : const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: allSelected
+                                        ? const Color(0xFF2563EB)
+                                        : const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 48,
+                                      height: 48,
+                                      child: Center(
+                                        child: isFetchingAllStaffs
+                                            ? const SizedBox(
+                                                width: 23,
+                                                height: 23,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2.5,
+                                                ),
+                                              )
+                                            : Checkbox(
+                                                value: allSelected,
+                                                activeColor:
+                                                    const Color(0xFF2563EB),
+                                                onChanged: (_) async {
+                                                  if (allSelected) {
+                                                    clearAllReplyRecipientsFor(
+                                                      type,
+                                                    );
+                                                  } else {
+                                                    await selectAllReplyRecipientsFor(
+                                                      type,
+                                                    );
+                                                  }
+
+                                                  eligibleAll =
+                                                      await _eligibleReplyRecipients(
+                                                    type,
+                                                  );
+
+                                                  if (modalContext.mounted) {
+                                                    modalSetState(() {});
+                                                  }
+
+                                                  refreshParent();
+                                                },
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            isFetchingAllStaffs
+                                                ? 'Loading all staff...'
+                                                : allSelected
+                                                    ? 'Clear All'
+                                                    : 'Select All',
+                                            style: const TextStyle(
+                                              color: Color(0xFF0F172A),
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            isFetchingAllStaffs
+                                                ? 'Fetching every staff page'
+                                                : allSelected
+                                                    ? 'All available reply ${_recipientLabel(type)} recipients selected'
+                                                    : 'Select approved staff from all pages',
+                                            style: const TextStyle(
+                                              color: Color(0xFF64748B),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEFF6FF),
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                      ),
+                                      child: Text(
+                                        '${_replyListFor(type).length} selected',
+                                        style: const TextStyle(
+                                          color: Color(0xFF2563EB),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: loading
+                            ? const Center(
+                                child: CircularProgressIndicator(),
+                              )
+                            : visible.isEmpty
+                                ? const Center(
+                                    child: Text('No staff found'),
+                                  )
+                                : ListView.separated(
+                                    controller: scrollController,
+                                    padding: const EdgeInsets.fromLTRB(
+                                      18,
+                                      4,
+                                      18,
+                                      100,
+                                    ),
+                                    itemCount: visible.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(height: 8),
+                                    itemBuilder: (_, index) {
+                                      final Map<String, dynamic> user =
+                                          visible[index];
+                                      final int id = getRecipientId(user)!;
+                                      final List<Map<String, dynamic>> list =
+                                          _replyListFor(type);
+                                      final bool selected = list.any(
+                                        (e) => getRecipientId(e) == id,
+                                      );
+
+                                      return CheckboxListTile(
+                                        value: selected,
+                                        activeColor: const Color(0xFF2563EB),
+                                        title: Text(
+                                          staffName(user),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                        subtitle: Text(
+                                          user['department_name']
+                                                  ?.toString() ??
+                                              user['department']?.toString() ??
+                                              'mexpo.org',
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                        ),
+                                        tileColor: selected
+                                            ? const Color(0xFFEFF6FF)
+                                            : const Color(0xFFF8FAFC),
+                                        onChanged: (_) {
+                                          if (!sheetActive ||
+                                              !modalContext.mounted) {
+                                            return;
+                                          }
+
+                                          setState(() {
+                                            if (selected) {
+                                              list.removeWhere(
+                                                (e) =>
+                                                    getRecipientId(e) == id,
+                                              );
+                                            } else {
+                                              replyRecipientUsers.removeWhere(
+                                                (e) =>
+                                                    getRecipientId(e) == id,
+                                              );
+                                              replyCcRecipientUsers.removeWhere(
+                                                (e) =>
+                                                    getRecipientId(e) == id,
+                                              );
+                                              replyBccRecipientUsers
+                                                  .removeWhere(
+                                                (e) =>
+                                                    getRecipientId(e) == id,
+                                              );
+                                              list.add(user);
+                                            }
+                                          });
+
+                                          if (modalContext.mounted) {
+                                            modalSetState(() {});
+                                          }
+
+                                          refreshParent();
+                                        },
+                                      );
+                                    },
+                                  ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            style: primaryButtonStyle(),
+                            onPressed: () => Navigator.pop(sheetContext),
+                            child: Text(
+                              'Done (${_replyListFor(type).length})',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    sheetActive = false;
+    localDebounce?.cancel();
+
+    if (mounted) {
+      refreshParent();
+    }
   }
 
   Future<void> openStaffSelector() async {
@@ -1943,6 +2945,8 @@ class _StaffMailPageState extends State<StaffMailPage>
     setState(() {
       replyStaffs = [];
       replyRecipientUsers = [];
+      replyCcRecipientUsers = [];
+      replyBccRecipientUsers = [];
       replyDocuments = [];
       allReplyRecipientsSelected = false;
     });
@@ -2239,6 +3243,12 @@ class _StaffMailPageState extends State<StaffMailPage>
               getRecipientId(selected) == recipientId,
         );
       } else {
+        replyCcRecipientUsers.removeWhere(
+          (selected) => getRecipientId(selected) == recipientId,
+        );
+        replyBccRecipientUsers.removeWhere(
+          (selected) => getRecipientId(selected) == recipientId,
+        );
         replyRecipientUsers.add(normalized);
       }
 
@@ -2265,9 +3275,15 @@ class _StaffMailPageState extends State<StaffMailPage>
     for (final Map<String, dynamic> staff in completeList) {
       final int? recipientId = getRecipientId(staff);
 
+      final excludedIds = {
+        ...replyCcRecipientUsers.map(getRecipientId).whereType<int>(),
+        ...replyBccRecipientUsers.map(getRecipientId).whereType<int>(),
+      };
+
       if (recipientId == null ||
           recipientId <= 0 ||
           recipientId == currentUserId ||
+          excludedIds.contains(recipientId) ||
           !isApprovedRecipient(staff)) {
         continue;
       }
@@ -2300,6 +3316,112 @@ class _StaffMailPageState extends State<StaffMailPage>
       allReplyRecipientsSelected = false;
       replySearchController.clear();
     });
+  }
+
+  Set<int> _replyExcludedIdsFor(String type) {
+    final Set<int> excluded = {};
+
+    if (type != 'to') {
+      excluded.addAll(
+        replyRecipientUsers.map(getRecipientId).whereType<int>(),
+      );
+    }
+
+    if (type != 'cc') {
+      excluded.addAll(
+        replyCcRecipientUsers.map(getRecipientId).whereType<int>(),
+      );
+    }
+
+    if (type != 'bcc') {
+      excluded.addAll(
+        replyBccRecipientUsers.map(getRecipientId).whereType<int>(),
+      );
+    }
+
+    return excluded;
+  }
+
+  Future<List<Map<String, dynamic>>> _eligibleReplyRecipients(
+    String type,
+  ) async {
+    List<Map<String, dynamic>> completeList = allRecipientStaffs;
+
+    if (completeList.isEmpty) {
+      completeList = await fetchAllRecipientStaffs();
+    }
+
+    final int? currentUserId = await getCurrentUserId();
+    final Set<int> excludedIds = _replyExcludedIdsFor(type);
+    final Map<int, Map<String, dynamic>> uniqueRecipients = {};
+
+    for (final Map<String, dynamic> staff in completeList) {
+      final int? recipientId = getRecipientId(staff);
+
+      if (recipientId != null &&
+          recipientId > 0 &&
+          recipientId != currentUserId &&
+          isApprovedRecipient(staff) &&
+          !excludedIds.contains(recipientId)) {
+        uniqueRecipients[recipientId] = staff;
+      }
+    }
+
+    return uniqueRecipients.values.toList();
+  }
+
+  Future<void> selectAllReplyRecipientsFor(String type) async {
+    final List<Map<String, dynamic>> eligible =
+        await _eligibleReplyRecipients(type);
+
+    if (eligible.isEmpty) {
+      showMsg('No approved recipients found');
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      final List<Map<String, dynamic>> target = _replyListFor(type);
+      target
+        ..clear()
+        ..addAll(eligible);
+
+      allReplyRecipientsSelected = type == 'to';
+      replySearchController.clear();
+    });
+
+    showMsg(
+      '${eligible.length} reply ${_recipientLabel(type)} recipients selected',
+      success: true,
+    );
+  }
+
+  void clearAllReplyRecipientsFor(String type) {
+    setState(() {
+      _replyListFor(type).clear();
+
+      if (type == 'to') {
+        allReplyRecipientsSelected = false;
+      }
+
+      replySearchController.clear();
+    });
+  }
+
+  bool areAllReplyRecipientsSelected(
+    String type,
+    List<Map<String, dynamic>> eligible,
+  ) {
+    if (eligible.isEmpty) return false;
+
+    final Set<int> eligibleIds =
+        eligible.map(getRecipientId).whereType<int>().toSet();
+
+    final Set<int> selectedIds =
+        _replyListFor(type).map(getRecipientId).whereType<int>().toSet();
+
+    return eligibleIds.isNotEmpty && selectedIds.containsAll(eligibleIds);
   }
 
   Future<void> fetchReplySelectorStaffs([
@@ -2959,13 +4081,14 @@ class _StaffMailPageState extends State<StaffMailPage>
     }
 
     final Set<int> recipientIds = replyRecipientUsers
-        .map(getRecipientId)
-        .whereType<int>()
-        .where((id) => id > 0)
-        .toSet();
+        .map(getRecipientId).whereType<int>().where((id) => id > 0).toSet();
+    final Set<int> ccRecipientIds = replyCcRecipientUsers
+        .map(getRecipientId).whereType<int>().where((id) => id > 0).toSet();
+    final Set<int> bccRecipientIds = replyBccRecipientUsers
+        .map(getRecipientId).whereType<int>().where((id) => id > 0).toSet();
 
-    if (recipientIds.isEmpty) {
-      showMsg('Select at least one reply recipient');
+    if (recipientIds.isEmpty && ccRecipientIds.isEmpty && bccRecipientIds.isEmpty) {
+      showMsg('Select at least one To, CC or BCC reply recipient');
       return false;
     }
 
@@ -3007,12 +4130,13 @@ class _StaffMailPageState extends State<StaffMailPage>
       request.fields['message'] = message;
 
       for (final int recipientId in recipientIds) {
-        request.files.add(
-          http.MultipartFile.fromString(
-            'recipients',
-            recipientId.toString(),
-          ),
-        );
+        request.files.add(http.MultipartFile.fromString('recipients', recipientId.toString()));
+      }
+      for (final int recipientId in ccRecipientIds) {
+        request.files.add(http.MultipartFile.fromString('cc_recipients', recipientId.toString()));
+      }
+      for (final int recipientId in bccRecipientIds) {
+        request.files.add(http.MultipartFile.fromString('bcc_recipients', recipientId.toString()));
       }
 
       for (final PlatformFile file in replyDocuments) {
@@ -3055,6 +4179,8 @@ class _StaffMailPageState extends State<StaffMailPage>
       if (mounted) {
         setState(() {
           replyDocuments = [];
+          replyCcRecipientUsers = [];
+          replyBccRecipientUsers = [];
         });
       }
 
@@ -3134,6 +4260,12 @@ class _StaffMailPageState extends State<StaffMailPage>
         threadMail?['recipients_data'] is List
             ? threadMail['recipients_data']
             : <dynamic>[];
+    final List ccRecipients = threadMail?['cc_recipients_data'] is List
+        ? threadMail['cc_recipients_data']
+        : <dynamic>[];
+    final List bccRecipients = threadMail?['bcc_recipients_data'] is List
+        ? threadMail['bcc_recipients_data']
+        : <dynamic>[];
 
     final bool replyMessage = isReplyMail(threadMail);
 
@@ -3141,6 +4273,12 @@ class _StaffMailPageState extends State<StaffMailPage>
         .map((user) => user?['name']?.toString() ?? '')
         .where((name) => name.isNotEmpty)
         .join(', ');
+    final String ccNames = ccRecipients
+        .map((user) => user?['name']?.toString() ?? '')
+        .where((name) => name.isNotEmpty).join(', ');
+    final String bccNames = bccRecipients
+        .map((user) => user?['name']?.toString() ?? '')
+        .where((name) => name.isNotEmpty).join(', ');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -3223,13 +4361,23 @@ class _StaffMailPageState extends State<StaffMailPage>
                     const SizedBox(height: 2),
                     Text(
                       'To: ${recipientNames.isEmpty ? 'Unknown' : recipientNames}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF64748B),
-                        fontSize: 12,
-                      ),
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
                     ),
+                    if (ccNames.isNotEmpty)
+                      Text('CC: $ccNames', maxLines: 2, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                    if (bccNames.isNotEmpty)
+                      Text('BCC: $bccNames', maxLines: 2, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                    if (threadMail?['current_user_recipient_type']?.toString().toLowerCase() == 'bcc')
+                      Container(
+                        margin: const EdgeInsets.only(top: 5),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(999)),
+                        child: const Text('You received this mail as BCC',
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF475569))),
+                      ),
                   ],
                 ),
               ),
@@ -3737,6 +4885,10 @@ class _StaffMailPageState extends State<StaffMailPage>
                                       ),
                                     ],
                                     const SizedBox(height: 14),
+                                    _buildReplyRecipientField('cc', replyCcRecipientUsers, refreshSheet),
+                                    const SizedBox(height: 14),
+                                    _buildReplyRecipientField('bcc', replyBccRecipientUsers, refreshSheet),
+                                    const SizedBox(height: 14),
                                     SizedBox(
                                       height: 140,
                                       child: TextField(
@@ -3962,6 +5114,103 @@ class _StaffMailPageState extends State<StaffMailPage>
     }
   }
 
+  Widget _buildComposeRecipientField(
+    String type,
+    List<Map<String, dynamic>> users,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => openComposeRecipientSelector(type),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(children: [
+              Icon(type == 'bcc' ? Icons.visibility_off_rounded : Icons.people_outline_rounded),
+              const SizedBox(width: 10),
+              Expanded(child: Text(
+                users.isEmpty ? 'Select ${_recipientLabel(type)} recipients' : '${users.length} ${_recipientLabel(type)} recipients selected',
+                style: const TextStyle(fontWeight: FontWeight.w800))),
+              const Icon(Icons.keyboard_arrow_down_rounded),
+            ]),
+          ),
+        ),
+        if (users.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: users.map((user) => Chip(
+              label: Text(staffName(user)),
+              deleteIcon: const Icon(Icons.close_rounded, size: 18),
+              onDeleted: () => setState(() {
+                users.removeWhere((item) => getRecipientId(item) == getRecipientId(user));
+                allRecipientsSelected = false;
+              }),
+            )).toList(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildReplyRecipientField(
+    String type,
+    List<Map<String, dynamic>> users,
+    VoidCallback refreshSheet,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => openReplyGroupSelector(type, refreshSheet),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(children: [
+              Icon(type == 'bcc' ? Icons.visibility_off_rounded : Icons.people_alt_rounded,
+                color: const Color(0xFF475569)),
+              const SizedBox(width: 10),
+              Expanded(child: Text(
+                users.isEmpty ? 'Select reply ${_recipientLabel(type)}' : '${users.length} reply ${_recipientLabel(type)} selected',
+                style: TextStyle(
+                  color: users.isEmpty ? const Color(0xFF64748B) : const Color(0xFF0F172A),
+                  fontWeight: FontWeight.w800))),
+              const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B)),
+            ]),
+          ),
+        ),
+        if (users.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: users.map((user) => Chip(
+              label: Text(staffName(user)),
+              deleteIcon: const Icon(Icons.close_rounded, size: 18),
+              onDeleted: () {
+                setState(() => users.removeWhere((item) => getRecipientId(item) == getRecipientId(user)));
+                refreshSheet();
+              },
+            )).toList(),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget buildComposePage() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -4024,6 +5273,10 @@ class _StaffMailPageState extends State<StaffMailPage>
                 }),
               ),
             ],
+            const SizedBox(height: 14),
+            _buildComposeRecipientField('cc', selectedCcStaffs),
+            const SizedBox(height: 14),
+            _buildComposeRecipientField('bcc', selectedBccStaffs),
             const SizedBox(height: 16),
             TextField(
               controller: subjectController,
