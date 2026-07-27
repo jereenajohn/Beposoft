@@ -11,6 +11,7 @@ import 'package:beposoft/pages/ACCOUNTS/add_country_code.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_currency.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_daily_sales_report.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_district.dart';
+import 'package:beposoft/pages/ACCOUNTS/add_main_category.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_purpose_of_payment.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
@@ -19,6 +20,8 @@ import 'package:beposoft/pages/ACCOUNTS/add_team.dart';
 import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
 import 'package:beposoft/pages/ADMIN/add_staffwise_department.dart';
 import 'package:beposoft/pages/ADMIN/admin_add_attendance.dart';
+import 'package:beposoft/pages/ADMIN/all_local_purchases_screen.dart';
+import 'package:beposoft/pages/ADMIN/localpurchaseorderscreen.dart';
 import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
 import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
 import 'package:beposoft/pages/auth_status_checker.dart';
@@ -1043,7 +1046,8 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                   'Advance Recipt',
                   'Order Recipt',
                   'COD Transfer',
-                  'COD Transfer List'
+                  'COD Transfer List',
+                  'Add Commission Recipt',
                 ]),
                 _buildDropdownTile(context, 'Refund', [
                   'Add Refund',
@@ -1110,6 +1114,40 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                 _buildDropdownTile(context, 'Daily Sales Reports',
                     ['Add Team', 'Team wise Report']),
 
+                           ListTile(
+                    leading: Icon(Icons.dashboard),
+                    title: Text('Local Purchase Order'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  LocalPurchaseOrderScreen()));
+                    },
+                  ),
+                                ListTile(
+                    leading: Icon(Icons.dashboard),
+                    title: Text('All Local Purchase Orders'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  AllLocalPurchaseOrderScreen()));
+                    },
+                  ),
+     ListTile(
+                  leading: Icon(Icons.category),
+                  title: Text('Add Main Category'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) =>
+                                MainCategoryManagementPage()));
+                    // Navigate to the Settings page or perform any other action
+                  },
+                ),
                 ListTile(
                   leading: Icon(Icons.person),
                   title: Text('Purchase Invoice'),

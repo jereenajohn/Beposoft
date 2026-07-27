@@ -24,11 +24,7 @@ import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
 import 'package:beposoft/pages/ADMIN/add_staffwise_department.dart';
 import 'package:beposoft/pages/ADMIN/admin_add_attendance.dart';
 import 'package:beposoft/pages/ADMIN/admin_add_team_staff.dart';
-import 'package:beposoft/pages/ADMIN/all_local_purchases_screen.dart';
-import 'package:beposoft/pages/ADMIN/ceo_dashboard_all_sections_single_page.dart';
 import 'package:beposoft/pages/ADMIN/grv_sales_return_summary.dart';
-import 'package:beposoft/pages/ADMIN/localpurchaseorderscreen.dart';
-
 import 'package:beposoft/pages/auth_status_checker.dart';
 import 'package:beposoft/pages/ACCOUNTS/assetmanegment2.dart';
 import 'package:beposoft/pages/ACCOUNTS/bulk_customer_upload.dart';
@@ -97,12 +93,12 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:math' as math;
 
-class ceo_dashboard extends StatefulWidget {
+class summaryceo_dashboard extends StatefulWidget {
   @override
-  State<ceo_dashboard> createState() => _ceo_dashboardState();
+  State<summaryceo_dashboard> createState() => _summaryceo_dashboardState();
 }
 
-class _ceo_dashboardState extends State<ceo_dashboard>
+class _summaryceo_dashboardState extends State<summaryceo_dashboard>
     with WidgetsBindingObserver {
   List<String> statusOptions = ["pending", "approved", "rejected"];
   final _currency =
@@ -231,13 +227,7 @@ class _ceo_dashboardState extends State<ceo_dashboard>
   int teamWiseTotalHalfDay = 0;
 
   List<Map<String, dynamic>> departmentAttendanceCards = [];
-  double dashboardTotalAssets = 0.0;
-  double dashboardTotalLiabilities = 0.0;
-  double dashboardCapital = 0.0;
 
-  bool assetDashboardLoading = false;
-
-  bool assetLoading = false;
   // int getFamilyPresentCount(String familyName) {
   //   return familyAttendanceData.where((item) {
   //     final family =
@@ -321,8 +311,6 @@ class _ceo_dashboardState extends State<ceo_dashboard>
     getCategoryWiseProducts();
     fetchBdmOverallFamilyReport();
     getstaff();
-    getAssetDashboardData();
-    fetchAssetSummaryForDashboard();
     fetchOrdersSummaryFamilyData();
     fetchBeposoftSummary();
     fetchDashboardInventorySummary();
@@ -379,170 +367,6 @@ class _ceo_dashboardState extends State<ceo_dashboard>
     await getsalescount();
     // fetchorders();
     await fetchReport();
-  }
-
-  Future<void> getAssetDashboardData() async {
-    try {
-      final token = await getTokenFromPrefs();
-
-      final response = await http.get(
-        Uri.parse('$api/apis/get/asset/report/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-
-        double totalAssets = 0;
-
-        List assets = parsed['assets'] ?? [];
-
-        for (var category in assets) {
-          List products = category['products'] ?? [];
-
-          for (var product in products) {
-            int stock = product['stock'] ?? product['quantity'] ?? 0;
-
-            double price = 0;
-
-            if (product['landing_cost'] != null) {
-              price = double.tryParse(product['landing_cost'].toString()) ?? 0;
-            } else if (product['amount'] != null) {
-              price = double.tryParse(product['amount'].toString()) ?? 0;
-            }
-
-            totalAssets += stock * price;
-          }
-        }
-
-        // liabilities API
-        final liabilityResponse = await http.get(
-          Uri.parse('$api/apis/liability/get/'),
-          headers: {
-            'Authorization': 'Bearer $token',
-            'Content-Type': 'application/json',
-          },
-        );
-
-        double liabilities = 0;
-
-        if (liabilityResponse.statusCode == 200) {
-          final liabilityData = jsonDecode(liabilityResponse.body);
-
-          for (var item in liabilityData['liabilities'] ?? []) {
-            liabilities +=
-                double.tryParse(item['pending_amount'].toString()) ?? 0;
-          }
-        }
-
-        if (mounted) {
-          setState(() {
-            dashboardTotalAssets = totalAssets;
-
-            dashboardTotalLiabilities = liabilities;
-
-            dashboardCapital = totalAssets - liabilities;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint("ASSET DASHBOARD ERROR : $e");
-    }
-  }
-
-  Future<void> fetchAssetSummaryForDashboard() async {
-    try {
-      final token = await getTokenFromPrefs();
-
-      if (token == null) return;
-
-      setState(() {
-        assetDashboardLoading = true;
-      });
-
-      double totalAssets = 0.0;
-      double totalLiabilities = 0.0;
-
-      // ASSETS
-      final assetResponse = await http.get(
-        Uri.parse('$api/apis/get/asset/report/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (assetResponse.statusCode == 200) {
-        final assetData = jsonDecode(assetResponse.body);
-
-        final List assets = assetData['assets'] ?? [];
-
-        for (final category in assets) {
-          final products = category['products'] ?? [];
-
-          for (final product in products) {
-            final stock = double.tryParse(
-                    (product['stock'] ?? product['quantity'] ?? 0)
-                        .toString()) ??
-                0;
-
-            double price = 0;
-
-            if (product['landing_cost'] != null) {
-              price = double.tryParse(product['landing_cost'].toString()) ?? 0;
-            } else if (product['amount'] != null) {
-              price = double.tryParse(product['amount'].toString()) ?? 0;
-            }
-
-            totalAssets += stock * price;
-          }
-        }
-      }
-
-      // LIABILITIES
-
-      final liabilityResponse = await http.get(
-        Uri.parse('$api/apis/liability/get/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (liabilityResponse.statusCode == 200) {
-        final liabilityData = jsonDecode(liabilityResponse.body);
-
-        final List liabilities = liabilityData['liabilities'] ?? [];
-
-        for (final item in liabilities) {
-          totalLiabilities +=
-              double.tryParse(item['pending_amount'].toString()) ?? 0;
-        }
-      }
-
-      if (!mounted) return;
-
-      setState(() {
-        dashboardTotalAssets = totalAssets;
-
-        dashboardTotalLiabilities = totalLiabilities;
-
-        dashboardCapital = totalAssets - totalLiabilities;
-
-        assetDashboardLoading = false;
-      });
-    } catch (e) {
-      debugPrint("ASSET DASHBOARD ERROR : $e");
-
-      if (mounted) {
-        setState(() {
-          assetDashboardLoading = false;
-        });
-      }
-    }
   }
 
   Future<void> fetchMainCategoryInventorySummary() async {
@@ -3364,128 +3188,128 @@ class _ceo_dashboardState extends State<ceo_dashboard>
     );
   }
 
-  Widget _buildMarketingExpenseItem({
-    required String expenseType,
-    required double amount,
-    required double grandTotal,
-  }) {
-    final double percentage =
-        grandTotal <= 0 ? 0 : (amount / grandTotal).clamp(0.0, 1.0);
-    final String normalizedType = expenseType.trim().toUpperCase();
+Widget _buildMarketingExpenseItem({
+  required String expenseType,
+  required double amount,
+  required double grandTotal,
+}) {
+  final double percentage = grandTotal <= 0
+      ? 0
+      : (amount / grandTotal).clamp(0.0, 1.0);
+      final String normalizedType = expenseType.trim().toUpperCase();
 
-    final String displayExpenseType = switch (normalizedType) {
-      'EMI' => 'EMI EX',
-      'PERMANENT' => 'PM EX',
-      'MISCELLANEOUS' => 'MISC EX',
-      'CARGO' => 'CARGO EX',
-      _ => normalizedType,
-    };
+final String displayExpenseType = switch (normalizedType) {
+  'EMI' => 'EMI EX',
+  'PERMANENT' => 'PM EX',
+  'MISCELLANEOUS' => 'MISC EX',
+  'CARGO' => 'CARGO EX',
+  _ => normalizedType,
+};
 
-    return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => expence_list_type(
-              type: expenseType,
-              fromDate: monthlyExpenseFrom,
-              toDate: monthlyExpenseTo,
-            ),
-          ),
-        );
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(
-          horizontal: 9,
-          vertical: 8,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.14),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.22),
+  return InkWell(
+    onTap: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => expence_list_type(
+            type: expenseType,
+            fromDate: monthlyExpenseFrom,
+            toDate: monthlyExpenseTo,
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    displayExpenseType,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '${(percentage * 100).toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.88),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            Text(
-              _formatDashboardAmount(amount),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 7),
-            LayoutBuilder(
-              builder: (
-                BuildContext context,
-                BoxConstraints constraints,
-              ) {
-                final double availableWidth = constraints.maxWidth;
-
-                return Stack(
-                  children: [
-                    Container(
-                      width: availableWidth,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.25),
-                        borderRadius: BorderRadius.circular(100),
-                      ),
-                    ),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 350),
-                      curve: Curves.easeOutCubic,
-                      width: availableWidth * percentage,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(100),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ],
+      );
+    },
+    borderRadius: BorderRadius.circular(12),
+    child: Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 9,
+        vertical: 8,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.22),
         ),
       ),
-    );
-  }
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+displayExpenseType,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '${(percentage * 100).toStringAsFixed(1)}%',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.88),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            _formatDashboardAmount(amount),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 7),
+          LayoutBuilder(
+            builder: (
+              BuildContext context,
+              BoxConstraints constraints,
+            ) {
+              final double availableWidth = constraints.maxWidth;
 
+              return Stack(
+                children: [
+                  Container(
+                    width: availableWidth,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.25),
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                  ),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeOutCubic,
+                    width: availableWidth * percentage,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
   Widget dashboardCards() {
     final bankSummary = _asMap(beposoftSummary['bank_summary']);
     final todayData = _asMap(bankSummary['today_data']);
@@ -3618,18 +3442,18 @@ class _ceo_dashboardState extends State<ceo_dashboard>
     final monthPaid = _asMap(monthPayment['paid']);
     final monthCod = _asMap(monthPayment['COD']);
     final List<MapEntry<String, double>> marketingExpenseEntries =
-        expenseTypeWiseTotals.entries.toList()
-          ..sort(
-            (a, b) => b.value.compareTo(a.value),
-          );
+    expenseTypeWiseTotals.entries.toList()
+      ..sort(
+        (a, b) => b.value.compareTo(a.value),
+      );
 
-    final double marketingExpenseGrandTotal =
-        marketingExpenseEntries.fold<double>(
-      0.0,
-      (double total, MapEntry<String, double> entry) {
-        return total + entry.value;
-      },
-    );
+final double marketingExpenseGrandTotal =
+    marketingExpenseEntries.fold<double>(
+  0.0,
+  (double total, MapEntry<String, double> entry) {
+    return total + entry.value;
+  },
+);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
@@ -3864,19 +3688,16 @@ class _ceo_dashboardState extends State<ceo_dashboard>
             },
           ),
           _buildDashboardCard(
-            title: "Assets & Liabilities",
-            value: '',
-            titleBottomSpacing: 18,
+            title: "Assets",
+            value: _formatDashboardAmount(assetAmount),
             lines: [
-              "Assets: ${_formatDashboardAmount(dashboardTotalAssets)}",
-              "Liabilities: ${_formatDashboardAmount(dashboardTotalLiabilities)}",
+              "Count: $assetCount",
+              "Asset management",
             ],
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => AssetManegment(),
-                ),
+                MaterialPageRoute(builder: (context) => AssetManegment()),
               );
             },
           ),
@@ -4052,114 +3873,116 @@ class _ceo_dashboardState extends State<ceo_dashboard>
             },
           ),
           _buildDashboardCard(
-            title:
-                "CO EX Analysis\n(${DateFormat('MMM yyyy').format(DateTime.now())})",
-            value: marketingExpenseGrandTotal <= 0
-                ? "₹0.00"
-                : _formatDashboardAmount(
-                    marketingExpenseGrandTotal,
-                  ),
-            valueLabel: "Total",
-            lines: const [],
-            bottomTopSpacing: 2,
-            bottom: expenseTypeWiseTotals.isEmpty
-                ? Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.14),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.22),
-                      ),
-                    ),
-                    child: const Column(
-                      children: [
-                        Icon(
-                          Icons.receipt_long_outlined,
-                          color: Colors.white70,
-                          size: 24,
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          "No expense data",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : Column(
-                    children: [
-                      ...marketingExpenseEntries.map(
-                        (MapEntry<String, double> entry) {
-                          return _buildMarketingExpenseItem(
-                            expenseType: entry.key,
-                            amount: entry.value,
-                            grandTotal: marketingExpenseGrandTotal,
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 2),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 9,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.green,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.35),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                "GT",
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerRight,
-                                child: Text(
-                                  _formatDashboardAmount(
-                                    marketingExpenseGrandTotal,
-                                  ),
-                                  maxLines: 1,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-            onTap: () {},
+  title:
+      "CO EX Analysis\n(${DateFormat('MMM yyyy').format(DateTime.now())})",
+  value: marketingExpenseGrandTotal <= 0
+      ? "₹0.00"
+      : _formatDashboardAmount(
+          marketingExpenseGrandTotal,
+        ),
+  valueLabel: "Total",
+  lines: const [],
+  bottomTopSpacing: 2,
+  bottom: expenseTypeWiseTotals.isEmpty
+      ? Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 16,
           ),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.14),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.22),
+            ),
+          ),
+          child: const Column(
+            children: [
+              Icon(
+                Icons.receipt_long_outlined,
+                color: Colors.white70,
+                size: 24,
+              ),
+              SizedBox(height: 8),
+              Text(
+                "No expense data",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        )
+      : Column(
+          children: [
+            ...marketingExpenseEntries.map(
+              (MapEntry<String, double> entry) {
+                return _buildMarketingExpenseItem(
+                  expenseType: entry.key,
+                  amount: entry.value,
+                  grandTotal: marketingExpenseGrandTotal,
+                );
+              },
+            ),
+
+            const SizedBox(height: 2),
+
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 9,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.green,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.35),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      "GT",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        _formatDashboardAmount(
+                          marketingExpenseGrandTotal,
+                        ),
+                        maxLines: 1,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+  onTap: () {},
+),
           _buildDashboardCard(
             title: "Sales Analysis(DSR)",
             value: "",
@@ -4313,7 +4136,6 @@ class _ceo_dashboardState extends State<ceo_dashboard>
     Widget? bottom,
     bool enableSeeMore = false,
     double bottomTopSpacing = 8,
-    double titleBottomSpacing = 8,
   }) {
     final bool isExpanded = dashboardCardExpanded[title] ?? false;
 
@@ -4404,22 +4226,21 @@ class _ceo_dashboardState extends State<ceo_dashboard>
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          height: 1.25,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child:Text(
+  title,
+  style: const TextStyle(
+    color: Colors.white,
+    fontSize: 13,
+    height: 1.25,
+    fontWeight: FontWeight.w700,
+  ),
+  maxLines: 2,
+  overflow: TextOverflow.ellipsis,
+),
                     ),
                   ],
                 ),
-                SizedBox(height: titleBottomSpacing),
-                const SizedBox(height: 5),
+                const SizedBox(height: 8),
                 if (value.isNotEmpty) ...[
                   SizedBox(
                     width: double.infinity,
@@ -7232,26 +7053,6 @@ class _ceo_dashboardState extends State<ceo_dashboard>
     );
   }
 
-  Widget _buildDashboardSectionDrawerTile(
-    BuildContext context, {
-    required String title,
-    required IconData icon,
-    required Widget page,
-  }) {
-    return ListTile(
-      contentPadding: const EdgeInsets.only(left: 32, right: 16),
-      leading: Icon(icon, size: 21),
-      title: Text(title),
-      onTap: () {
-        Navigator.pop(context);
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => page),
-        );
-      },
-    );
-  }
-
   Widget buildFilteredCategoryProductCard() {
     if (filteredCategoryLoading) {
       return const Padding(
@@ -7481,62 +7282,71 @@ class _ceo_dashboardState extends State<ceo_dashboard>
           appBar: AppBar(
             elevation: 0,
             backgroundColor: Colors.white,
-            // leading: Icon(Icons.arrow_back, color: Colors.black),
+            leading: IconButton(
+              tooltip: 'Back',
+              icon: const Icon(
+                Icons.arrow_back_rounded,
+                color: Colors.black,
+              ),
+              onPressed: () {
+                Navigator.of(context).maybePop();
+              },
+            ),
             actions: [
               Padding(
                 padding: const EdgeInsets.only(right: 12),
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.mail_outline_rounded,
-                        color: Colors.black,
-                        size: 28,
-                      ),
-                      onPressed: () async {
-                        await Navigator.push<void>(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const StaffMailPage(),
-                          ),
-                        );
+                    // IconButton(
+                    //   icon: const Icon(
+                    //     Icons.mail_outline_rounded,
+                    //     color: Colors.black,
+                    //     size: 28,
+                    //   ),
+                    //   onPressed: () async {
+                    //     await Navigator.push<void>(
+                    //       context,
+                    //       MaterialPageRoute(
+                    //         builder: (_) => const StaffMailPage(),
+                    //       ),
+                    //     );
 
-                        if (!mounted) return;
+                    //     if (!mounted) return;
 
-                        await fetchInboxMailCount();
-                      },
-                    ),
-                    if (inboxMailCount > 0)
-                      Positioned(
-                        right: 4,
-                        top: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          constraints: const BoxConstraints(
-                            minWidth: 18,
-                            minHeight: 18,
-                          ),
-                          child: Text(
-                            inboxMailCount > 99
-                                ? '99+'
-                                : inboxMailCount.toString(),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
+                    //     await fetchInboxMailCount();
+                    //   },
+                    // ),
+                    // if (inboxMailCount > 0)
+                    //   Positioned(
+                    //     right: 4,
+                    //     top: 6,
+                    //     child: Container(
+                    //       padding: const EdgeInsets.symmetric(
+                    //         horizontal: 6,
+                    //         vertical: 2,
+                    //       ),
+                    //       decoration: BoxDecoration(
+                    //         color: Colors.red,
+                    //         borderRadius: BorderRadius.circular(20),
+                    //       ),
+                    //       constraints: const BoxConstraints(
+                    //         minWidth: 18,
+                    //         minHeight: 18,
+                    //       ),
+                    //       child: Text(
+                    //         inboxMailCount > 99
+                    //             ? '99+'
+                    //             : inboxMailCount.toString(),
+                    //         textAlign: TextAlign.center,
+                    //         style: const TextStyle(
+                    //           color: Colors.white,
+                    //           fontSize: 11,
+                    //           fontWeight: FontWeight.bold,
+                    //         ),
+                    //       ),
+                    //     ),
+                    //   ),
                   ],
                 ),
               ),
@@ -7613,7 +7423,7 @@ class _ceo_dashboardState extends State<ceo_dashboard>
                       await fetchInboxMailCount();
                     },
                   ),
-                  ListTile(
+    ListTile(
                     // leading: Icon(Icons.person),
                     title: Text('ALL Report Summary Section'),
                     onTap: () {
@@ -7624,113 +7434,6 @@ class _ceo_dashboardState extends State<ceo_dashboard>
                       // Navigate to the Settings page or perform any other action
                     },
                   ),
-                  //  ExpansionTile(
-                  //   leading: const Icon(Icons.dashboard_customize_outlined),
-                  //   title: const Text('Dashboard Sections'),
-                  //   backgroundColor: Colors.white,
-                  //   collapsedBackgroundColor: Colors.white,
-                  //   iconColor: Colors.black,
-                  //   collapsedIconColor: Colors.black,
-                  //   children: [
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: 'CEO Profile',
-                  //       icon: Icons.account_circle_outlined,
-                  //       page: CeoProfilePage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: "Today's Bills Summary",
-                  //       icon: Icons.receipt_long_outlined,
-                  //       page: TodayBillsSummaryPage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: 'COO Waiting Confirmation',
-                  //       icon: Icons.pending_actions_outlined,
-                  //       page: CooWaitingConfirmationPage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: "Today's Sales Report",
-                  //       icon: Icons.point_of_sale_outlined,
-                  //       page: TodaySalesReportPage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: 'Monthly Sales Status',
-                  //       icon: Icons.bar_chart_outlined,
-                  //       page: MonthlySalesStatusPage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: 'BDO Daily Statewise',
-                  //       icon: Icons.today_outlined,
-                  //       page: BdoDailyStatewisePage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: 'BDO Monthly Statewise',
-                  //       icon: Icons.calendar_month_outlined,
-                  //       page: BdoMonthlyStatewisePage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: 'Expense Type Totals',
-                  //       icon: Icons.payments_outlined,
-                  //       page: ExpenseTypeTotalsPage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: 'Daily Goods Movement',
-                  //       icon: Icons.local_shipping_outlined,
-                  //       page: DailyGoodsMovementSummaryPage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: 'Category Product Summary',
-                  //       icon: Icons.category_outlined,
-                  //       page: CategoryProductSummaryPage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: 'Family & Team Summary',
-                  //       icon: Icons.groups_outlined,
-                  //       page: FamilyTeamSummaryPage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: 'Bank Account Summary',
-                  //       icon: Icons.account_balance_outlined,
-                  //       page: BankAccountSummaryPage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: 'Daily Banking Report',
-                  //       icon: Icons.summarize_outlined,
-                  //       page: DailyBankingReportPage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: 'Monthly Banking Report',
-                  //       icon: Icons.assessment_outlined,
-                  //       page: MonthlyBankingReportPage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: 'Daily Banking + Transfers',
-                  //       icon: Icons.swap_horiz_outlined,
-                  //       page: DailyBankingTransfersPage(),
-                  //     ),
-                  //     _buildDashboardSectionDrawerTile(
-                  //       context,
-                  //       title: 'Monthly Banking + Transfers',
-                  //       icon: Icons.sync_alt_outlined,
-                  //       page: MonthlyBankingTransfersPage(),
-                  //     ),
-                  //   ],
-                  // ),
-              
                   _buildDropdownTile(context, 'Customers', [
                     'Add Customer',
                     'Customers',
@@ -7746,7 +7449,6 @@ class _ceo_dashboardState extends State<ceo_dashboard>
                     'Order Recipt',
                     'COD Transfer',
                     'COD Transfer List',
-                    'Add Commission Recipt',
                   ]),
 
                   // ListTile(
@@ -7815,29 +7517,6 @@ class _ceo_dashboardState extends State<ceo_dashboard>
                     'Employee Leave Requests',
                     'View Leave List',
                   ]),
-                      ListTile(
-                    leading: Icon(Icons.dashboard),
-                    title: Text('Local Purchase Order'),
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) =>
-                                  LocalPurchaseOrderScreen()));
-                    },
-                  ),
-
-                                ListTile(
-                    leading: Icon(Icons.dashboard),
-                    title: Text('All Local Purchase Orders'),
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) =>
-                                  AllLocalPurchaseOrderScreen()));
-                    },
-                  ),
                   Divider(),
                   ListTile(
                     leading: Icon(Icons.category),
@@ -8438,2052 +8117,2052 @@ class _ceo_dashboardState extends State<ceo_dashboard>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Profile Section
-                    Row(
+                    // Row(
+                    //   children: [
+                    //     GestureDetector(
+                    //       onTap: () {
+                    //         Navigator.push(
+                    //           context,
+                    //           MaterialPageRoute(
+                    //               builder: (context) => EditProfileScreen()),
+                    //         );
+                    //       },
+                    //       child: CircleAvatar(
+                    //         radius: 25,
+                    //         backgroundColor: const Color(0xFFE5E7EB),
+                    //         backgroundImage: getProfileImageUrl().isNotEmpty
+                    //             ? NetworkImage(getProfileImageUrl())
+                    //             : const AssetImage('lib/assets/female.jpeg')
+                    //                 as ImageProvider,
+                    //       ),
+                    //     ),
+                    //     SizedBox(width: 16),
+                    //     Text(
+                    //       '$username',
+                    //       style: TextStyle(
+                    //           fontSize: 15, fontWeight: FontWeight.bold),
+                    //     ),
+                    //   ],
+                    // ),
+
+                    // dashboardCards(),
+
+                    // SizedBox(height: 10),
+
+                    // Discount/Bonus Section
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.blueAccent, Colors.lightBlueAccent],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 10,
+                            offset: Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      padding:
+                          EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Date and Icon Row
+                          Row(
+                            children: [
+                              Icon(Icons.calendar_today,
+                                  color: Colors.white, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                DateFormat('EEEE, dd MMMM yyyy')
+                                    .format(DateTime.now()),
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white.withOpacity(0.95),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 12),
+
+                          // Divider
+                          Container(
+                              height: 1, color: Colors.white.withOpacity(0.3)),
+                          SizedBox(height: 16),
+
+                          // Table: Metric | Value
+                          Table(
+                            border:
+                                TableBorder.all(color: Colors.white, width: 1),
+                            columnWidths: const {
+                              0: FlexColumnWidth(2),
+                              1: FlexColumnWidth(2),
+                            },
+                            defaultVerticalAlignment:
+                                TableCellVerticalAlignment.middle,
+                            children: [
+                              // Header
+                              // TableRow(
+                              //   decoration: BoxDecoration(color: Colors.white24),
+                              //   children: [
+                              //     Padding(
+                              //       padding: EdgeInsets.all(10),
+                              //       child: Text(
+                              //         "Metric",
+                              //         style: TextStyle(
+                              //           color: Colors.white,
+                              //           fontWeight: FontWeight.bold,
+                              //         ),
+                              //       ),
+                              //     ),
+                              //     Padding(
+                              //       padding: EdgeInsets.all(10),
+                              //       child: Text(
+                              //         "Value",
+                              //         textAlign: TextAlign.right,
+                              //         style: TextStyle(
+                              //           color: Colors.white,
+                              //           fontWeight: FontWeight.bold,
+                              //         ),
+                              //       ),
+                              //     ),
+                              //   ],
+                              // ),
+
+                              // Today's Bills (tappable)
+                              TableRow(children: [
+                                Padding(
+                                  padding: EdgeInsets.all(10),
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              today_OrderList(status: null),
+                                        ),
+                                      );
+                                    },
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.receipt_long,
+                                            size: 18, color: Colors.white70),
+                                        SizedBox(width: 6),
+                                        Text("Today's Bills",
+                                            style:
+                                                TextStyle(color: Colors.white)),
+                                        SizedBox(width: 6),
+                                        Icon(Icons.open_in_new,
+                                            size: 14, color: Colors.white70),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.all(10),
+                                  child: Text(
+                                    todayCount.toString(),
+                                    textAlign: TextAlign.right,
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                              ]),
+
+                              // Total Volume
+                              TableRow(children: [
+                                Padding(
+                                  padding: EdgeInsets.all(10),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.stacked_bar_chart,
+                                          size: 18, color: Colors.white70),
+                                      SizedBox(width: 6),
+                                      Text("Total Volume",
+                                          style:
+                                              TextStyle(color: Colors.white)),
+                                    ],
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.all(10),
+                                  child: Text(
+                                    totalvolume.toString(),
+                                    textAlign: TextAlign.right,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ]),
+
+                              // Total Expense
+                              TableRow(children: [
+                                Padding(
+                                  padding: EdgeInsets.all(10),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.money_off_csred,
+                                          size: 18, color: Colors.white70),
+                                      SizedBox(width: 6),
+                                      Text("Total Expense",
+                                          style:
+                                              TextStyle(color: Colors.white)),
+                                    ],
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.all(10),
+                                  child: Text(
+                                    todayExpenseAmount.toString(),
+                                    textAlign: TextAlign.right,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ]),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: 10),
+
+                    if (department == "COO")
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => OrderList2(
+                                      status: "Waiting For Confirmation",
+                                    )),
+                          );
+                        },
+                        child: Container(
+                          margin:
+                              EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          padding: EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(
+                                255, 0, 148, 246), // Light red background
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color.fromARGB(255, 149, 205, 254)
+                                    .withOpacity(0.2),
+                                blurRadius: 6,
+                                offset: Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.production_quantity_limits,
+                                  color:
+                                      const Color.fromARGB(255, 255, 255, 255),
+                                  size: 28),
+                              SizedBox(width: 7),
+                              Text(
+                                "$waitingForConfirmationCount - Waiting for Confirmation",
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                    // if (todayFamilyWiseSummary.isNotEmpty) ...[
+                    //   /// COD + Paid Summary Box
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => ceo_family_summary()),
+                        );
+                      },
+                      child: Builder(builder: (context) {
+                        int codOrderCount = 0;
+                        double codTotalAmount = 0.0;
+                        int paidOrderCount = 0;
+                        double paidTotalAmount = 0.0;
+                        int creditOrderCount = 0;
+                        double creditTotalAmount = 0.0;
+
+                        todayFamilyWiseSummary.forEach((key, value) {
+                          codOrderCount += int.tryParse(
+                                  value['cod_order_count'].toString()) ??
+                              0;
+                          codTotalAmount += double.tryParse(
+                                  value['cod_total_amount'].toString()) ??
+                              0.0;
+
+                          paidOrderCount += int.tryParse(
+                                  value['paid_order_count'].toString()) ??
+                              0;
+                          paidTotalAmount += double.tryParse(
+                                  value['paid_total_amount'].toString()) ??
+                              0.0;
+
+                          creditOrderCount += int.tryParse(
+                                  value['credit_order_count'].toString()) ??
+                              0;
+                          creditTotalAmount += double.tryParse(
+                                  value['credit_total_amount'].toString()) ??
+                              0.0;
+                        });
+
+                        int grandTotalOrders =
+                            codOrderCount + paidOrderCount + creditOrderCount;
+                        double grandTotalAmount = codTotalAmount +
+                            paidTotalAmount +
+                            creditTotalAmount;
+
+                        return Container(
+                          margin: EdgeInsets.only(
+                              top: 8, left: 6, right: 6, bottom: 12),
+                          padding: EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Color(0xFF02347C), Color(0xFF82E49D)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.blue.shade100,
+                                blurRadius: 4,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              /// Header Row
+                              Row(
+                                children: [
+                                  Icon(Icons.payments,
+                                      color: Colors.white, size: 15),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    "Today's Sales report",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  Icon(Icons.date_range,
+                                      color: Colors.white, size: 15),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    "${DateFormat('dd/MM/yyyy').format(DateTime.now())}",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Divider(color: Colors.white60),
+                              SizedBox(height: 6),
+
+                              /// Table Layout
+                              Table(
+                                border: TableBorder.all(
+                                    color: Colors.white, width: 1),
+                                columnWidths: const {
+                                  0: FlexColumnWidth(2),
+                                  1: FlexColumnWidth(1),
+                                  2: FlexColumnWidth(2),
+                                },
+                                children: [
+                                  /// Table Header
+                                  TableRow(
+                                    decoration:
+                                        BoxDecoration(color: Colors.black26),
+                                    children: [
+                                      Padding(
+                                        padding: EdgeInsets.all(6),
+                                        child: Text("Type",
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white)),
+                                      ),
+                                      Padding(
+                                        padding: EdgeInsets.all(6),
+                                        child: Text("Count",
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white)),
+                                      ),
+                                      Padding(
+                                        padding: EdgeInsets.all(6),
+                                        child: Text("Amount",
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white)),
+                                      ),
+                                    ],
+                                  ),
+
+                                  /// COD Row
+                                  TableRow(children: [
+                                    Padding(
+                                      padding: EdgeInsets.all(6),
+                                      child: Text("COD Orders",
+                                          style:
+                                              TextStyle(color: Colors.white)),
+                                    ),
+                                    Padding(
+                                      padding: EdgeInsets.all(6),
+                                      child: Text("$todaycod",
+                                          textAlign: TextAlign.center,
+                                          style:
+                                              TextStyle(color: Colors.white)),
+                                    ),
+                                    Padding(
+                                      padding: EdgeInsets.all(6),
+                                      child: Text(
+                                          "₹${todaycodamount.toStringAsFixed(2)}",
+                                          textAlign: TextAlign.right,
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white)),
+                                    ),
+                                  ]),
+
+                                  /// Cash Row
+                                  TableRow(children: [
+                                    Padding(
+                                      padding: EdgeInsets.all(6),
+                                      child: Text("Cash Orders",
+                                          style:
+                                              TextStyle(color: Colors.white)),
+                                    ),
+                                    Padding(
+                                      padding: EdgeInsets.all(6),
+                                      child: Text("$todaypaid",
+                                          textAlign: TextAlign.center,
+                                          style:
+                                              TextStyle(color: Colors.white)),
+                                    ),
+                                    Padding(
+                                      padding: EdgeInsets.all(6),
+                                      child: Text(
+                                          "₹${todaypaidamount.toStringAsFixed(2)}",
+                                          textAlign: TextAlign.right,
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white)),
+                                    ),
+                                  ]),
+
+                                  /// Credit Row
+                                  TableRow(children: [
+                                    Padding(
+                                      padding: EdgeInsets.all(6),
+                                      child: Text("Credit Orders",
+                                          style:
+                                              TextStyle(color: Colors.white)),
+                                    ),
+                                    Padding(
+                                      padding: EdgeInsets.all(6),
+                                      child: Text("$creditOrderCount",
+                                          textAlign: TextAlign.center,
+                                          style:
+                                              TextStyle(color: Colors.white)),
+                                    ),
+                                    Padding(
+                                      padding: EdgeInsets.all(6),
+                                      child: Text(
+                                          "₹${todaycreditamount.toStringAsFixed(2)}",
+                                          textAlign: TextAlign.right,
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white)),
+                                    ),
+                                  ]),
+
+                                  /// Grand Total Row
+                                  TableRow(
+                                    decoration:
+                                        BoxDecoration(color: Colors.black26),
+                                    children: [
+                                      Padding(
+                                        padding: EdgeInsets.all(6),
+                                        child: Text("Grand Total",
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white)),
+                                      ),
+                                      Padding(
+                                        padding: EdgeInsets.all(6),
+                                        child: Text("$todayCount",
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white)),
+                                      ),
+                                      Padding(
+                                        padding: EdgeInsets.all(6),
+                                        child: Text(
+                                            "₹${totalvolume.toStringAsFixed(2)}",
+                                            textAlign: TextAlign.right,
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white)),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ),
+
+                    // Column(
+                    //   crossAxisAlignment: CrossAxisAlignment.start,
+                    //   children: [
+                    //     GestureDetector(
+                    //       onTap: () {
+                    //         Navigator.push(
+                    //           context,
+                    //           MaterialPageRoute(
+                    //               builder: (context) => today_OrderList(
+                    //                     status: null,
+                    //                   )),
+                    //         );
+                    //       },
+                    //       child: Builder(
+                    //         builder: (context) {
+                    //           return TweenAnimationBuilder<Offset>(
+                    //               duration: Duration(milliseconds: 300),
+                    //               tween: Tween<Offset>(
+                    //                   begin: Offset(1, 0), end: Offset(0, 0)),
+                    //               curve: Curves.easeOut,
+                    //               builder: (context, offset, child) {
+                    //                 return Transform.translate(
+                    //                     offset: offset * 10, child: child);
+                    //               },
+                    //               child: Container(
+                    //                 margin: EdgeInsets.symmetric(
+                    //                     vertical: 5, horizontal: 6),
+                    //                 padding: EdgeInsets.all(12),
+                    //                 decoration: BoxDecoration(
+                    //                   borderRadius: BorderRadius.circular(16),
+                    //                   gradient: LinearGradient(
+                    //                     colors: [
+                    //                       Color(0xFF02347C),
+                    //                       Color(0xFF82E49D)
+                    //                     ],
+                    //                     begin: Alignment.topLeft,
+                    //                     end: Alignment.bottomRight,
+                    //                   ),
+                    //                   boxShadow: [
+                    //                     BoxShadow(
+                    //                       color: Colors.black26,
+                    //                       blurRadius: 6,
+                    //                       offset: Offset(0, 2),
+                    //                     ),
+                    //                   ],
+                    //                 ),
+                    //                 child: Column(
+                    //                   crossAxisAlignment:
+                    //                       CrossAxisAlignment.start,
+                    //                   children: [
+                    //                     Text(
+                    //                       "Today's Sales report (Date Wise)",
+                    //                       style: TextStyle(
+                    //                         fontSize: 15,
+                    //                         fontWeight: FontWeight.bold,
+                    //                         color: Colors.white,
+                    //                       ),
+                    //                     ),
+                    //                     Divider(color: Colors.white54),
+                    //                     SizedBox(height: 6),
+
+                    //                     /// Actual table
+                    //                     Table(
+                    //                       border: TableBorder.all(
+                    //                           color: Colors.white, width: 1),
+                    //                       columnWidths: const {
+                    //                         0: FlexColumnWidth(1),
+                    //                         1: FlexColumnWidth(2),
+                    //                       },
+                    //                       children: [
+                    //                         /// Header row
+                    //                         TableRow(
+                    //                           decoration: BoxDecoration(
+                    //                               color: Colors.black26),
+                    //                           children: [
+                    //                             Padding(
+                    //                               padding: EdgeInsets.all(6),
+                    //                               child: Text("Count",
+                    //                                   style: TextStyle(
+                    //                                       fontWeight:
+                    //                                           FontWeight.bold,
+                    //                                       color: Colors.white)),
+                    //                             ),
+                    //                             Padding(
+                    //                               padding: EdgeInsets.all(6),
+                    //                               child: Text("Amount",
+                    //                                   textAlign: TextAlign.center,
+                    //                                   style: TextStyle(
+                    //                                       fontWeight:
+                    //                                           FontWeight.bold,
+                    //                                       color: Colors.white)),
+                    //                             ),
+                    //                           ],
+                    //                         ),
+
+                    //                         /// COD Row
+                    //                         TableRow(children: [
+                    //                           Padding(
+                    //                             padding: EdgeInsets.all(6),
+                    //                             child: Text(
+                    //                                 "${summary['non_rejected_orders']?['count'] ?? 0}",
+                    //                                 style: TextStyle(
+                    //                                     color: Colors.white),
+                    //                                 textAlign: TextAlign.center),
+                    //                           ),
+                    //                           Padding(
+                    //                             padding: EdgeInsets.all(6),
+                    //                             child: Text(
+                    //                                 "₹${(summary['non_rejected_orders']?['amount'] ?? 0).toStringAsFixed(2)}",
+                    //                                 style: TextStyle(
+                    //                                     fontWeight:
+                    //                                         FontWeight.bold,
+                    //                                     color: Colors.white),
+                    //                                 textAlign: TextAlign.right),
+                    //                           ),
+                    //                         ]),
+
+                    //                         /// Grand Total Row
+                    //                       ],
+                    //                     ),
+                    //                   ],
+                    //                 ),
+                    //               ));
+                    //         },
+                    //       ),
+                    //     ),
+                    //   ],
+                    // ),
+
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         GestureDetector(
                           onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (context) => EditProfileScreen()),
+                                  builder: (context) =>
+                                      ceo_family_summary_monthly()),
                             );
                           },
-                          child: CircleAvatar(
-                            radius: 25,
-                            backgroundColor: const Color(0xFFE5E7EB),
-                            backgroundImage: getProfileImageUrl().isNotEmpty
-                                ? NetworkImage(getProfileImageUrl())
-                                : const AssetImage('lib/assets/female.jpeg')
-                                    as ImageProvider,
+                          child: Builder(
+                            builder: (context) {
+                              return TweenAnimationBuilder<Offset>(
+                                  duration: Duration(milliseconds: 300),
+                                  tween: Tween<Offset>(
+                                      begin: Offset(1, 0), end: Offset(0, 0)),
+                                  curve: Curves.easeOut,
+                                  builder: (context, offset, child) {
+                                    return Transform.translate(
+                                        offset: offset * 10, child: child);
+                                  },
+                                  child: Container(
+                                    margin: EdgeInsets.symmetric(
+                                        vertical: 5, horizontal: 6),
+                                    padding: EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(16),
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Color(0xFF02347C),
+                                          Color(0xFF82E49D)
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black26,
+                                          blurRadius: 6,
+                                          offset: Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          "Month Total",
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        Divider(color: Colors.white54),
+                                        SizedBox(height: 6),
+
+                                        /// Actual table
+                                        Table(
+                                          border: TableBorder.all(
+                                              color: Colors.white, width: 1),
+                                          columnWidths: const {
+                                            0: FlexColumnWidth(2),
+                                            1: FlexColumnWidth(1),
+                                            2: FlexColumnWidth(2),
+                                          },
+                                          children: [
+                                            /// Header row
+                                            TableRow(
+                                              decoration: BoxDecoration(
+                                                  color: Colors.black26),
+                                              children: [
+                                                Padding(
+                                                  padding: EdgeInsets.all(6),
+                                                  child: Text("Type",
+                                                      style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Colors.white)),
+                                                ),
+                                                Padding(
+                                                  padding: EdgeInsets.all(6),
+                                                  child: Text("Count",
+                                                      style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Colors.white)),
+                                                ),
+                                                Padding(
+                                                  padding: EdgeInsets.all(6),
+                                                  child: Text("Amount",
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                      style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Colors.white)),
+                                                ),
+                                              ],
+                                            ),
+
+                                            /// COD Row
+                                            TableRow(children: [
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Row(
+                                                  children: [
+                                                    Icon(Icons.delivery_dining,
+                                                        size: 14,
+                                                        color: Colors.white70),
+                                                    SizedBox(width: 4),
+                                                    Text("COD",
+                                                        style: TextStyle(
+                                                            color:
+                                                                Colors.white)),
+                                                  ],
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Text("$monthcod",
+                                                    style: TextStyle(
+                                                        color: Colors.white),
+                                                    textAlign:
+                                                        TextAlign.center),
+                                              ),
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Text(
+                                                    "₹${monthcodamount.toStringAsFixed(2)}",
+                                                    style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: Colors.white),
+                                                    textAlign: TextAlign.right),
+                                              ),
+                                            ]),
+
+                                            /// Cash Row
+                                            TableRow(children: [
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                        Icons.payments_outlined,
+                                                        size: 14,
+                                                        color: Colors.white70),
+                                                    SizedBox(width: 4),
+                                                    Text("Cash",
+                                                        style: TextStyle(
+                                                            color:
+                                                                Colors.white)),
+                                                  ],
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Text("$monthpaid",
+                                                    style: TextStyle(
+                                                        color: Colors.white),
+                                                    textAlign:
+                                                        TextAlign.center),
+                                              ),
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Text(
+                                                    "₹${monthpaidamount.toStringAsFixed(2)}",
+                                                    style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: Colors.white),
+                                                    textAlign: TextAlign.right),
+                                              ),
+                                            ]),
+
+                                            /// Credit Row
+                                            TableRow(children: [
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                        Icons
+                                                            .credit_card_outlined,
+                                                        size: 14,
+                                                        color: Colors.white70),
+                                                    SizedBox(width: 4),
+                                                    Text("Credit",
+                                                        style: TextStyle(
+                                                            color:
+                                                                Colors.white)),
+                                                  ],
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Text("$monthcredit",
+                                                    style: TextStyle(
+                                                        color: Colors.white),
+                                                    textAlign:
+                                                        TextAlign.center),
+                                              ),
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Text(
+                                                    "₹${monthcreditamount.toStringAsFixed(2)}",
+                                                    style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: Colors.white),
+                                                    textAlign: TextAlign.right),
+                                              ),
+                                            ]),
+
+                                            /// Grand Total Row
+                                            TableRow(
+                                              decoration: BoxDecoration(
+                                                  color: Colors.black26),
+                                              children: [
+                                                Padding(
+                                                  padding: EdgeInsets.all(6),
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(Icons.shopping_bag,
+                                                          size: 14,
+                                                          color:
+                                                              Colors.white70),
+                                                      SizedBox(width: 4),
+                                                      Text("Grand Total",
+                                                          style: TextStyle(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                              color: Colors
+                                                                  .white)),
+                                                    ],
+                                                  ),
+                                                ),
+                                                Padding(
+                                                  padding: EdgeInsets.all(6),
+                                                  child: Text("$monthcount",
+                                                      style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Colors.white),
+                                                      textAlign:
+                                                          TextAlign.center),
+                                                ),
+                                                Padding(
+                                                  padding: EdgeInsets.all(6),
+                                                  child: Text(
+                                                      "₹${monthtotalamount.toStringAsFixed(2)}",
+                                                      style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Colors.white),
+                                                      textAlign:
+                                                          TextAlign.right),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ));
+                            },
                           ),
-                        ),
-                        SizedBox(width: 16),
-                        Text(
-                          '$username',
-                          style: TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
 
-                    dashboardCards(),
-//
-                    // SizedBox(height: 10),
-//
-                    // // Discount/Bonus Section
-                    // Container(
-                    // decoration: BoxDecoration(
-                    // gradient: LinearGradient(
-                    // colors: [Colors.blueAccent, Colors.lightBlueAccent],
-                    // begin: Alignment.topLeft,
-                    // end: Alignment.bottomRight,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            // Navigator.push(
+                            //   context,
+                            //   MaterialPageRoute(
+                            //       builder: (context) =>
+                            //           ceo_family_summary_monthly()),
+                            // );
+                          },
+                          child: Builder(
+                            builder: (context) {
+                              return TweenAnimationBuilder<Offset>(
+                                  duration: Duration(milliseconds: 300),
+                                  tween: Tween<Offset>(
+                                      begin: Offset(1, 0), end: Offset(0, 0)),
+                                  curve: Curves.easeOut,
+                                  builder: (context, offset, child) {
+                                    return Transform.translate(
+                                        offset: offset * 10, child: child);
+                                  },
+                                  child: Container(
+                                    margin: EdgeInsets.symmetric(
+                                        vertical: 5, horizontal: 6),
+                                    padding: EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(16),
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Color(0xFF02347C),
+                                          Color(0xFF82E49D)
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black26,
+                                          blurRadius: 6,
+                                          offset: Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          "Status Wise Total",
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        Divider(color: Colors.white54),
+                                        SizedBox(height: 6),
+
+                                        /// Actual table
+                                        Table(
+                                          border: TableBorder.all(
+                                              color: Colors.white, width: 1),
+                                          columnWidths: const {
+                                            0: FlexColumnWidth(2),
+                                            1: FlexColumnWidth(1),
+                                          },
+                                          children: [
+                                            /// Header row
+                                            TableRow(
+                                              decoration: BoxDecoration(
+                                                  color: Colors.black26),
+                                              children: [
+                                                Padding(
+                                                  padding: EdgeInsets.all(6),
+                                                  child: Text("Type",
+                                                      style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Colors.white)),
+                                                ),
+                                                Padding(
+                                                  padding: EdgeInsets.all(6),
+                                                  child: Text("Count",
+                                                      style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Colors.white)),
+                                                ),
+                                              ],
+                                            ),
+
+                                            /// COD Row
+                                            TableRow(children: [
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Row(
+                                                  children: [
+                                                    Icon(Icons.delivery_dining,
+                                                        size: 14,
+                                                        color: Colors.white70),
+                                                    SizedBox(width: 4),
+                                                    Text("Approved (ADO)",
+                                                        style: TextStyle(
+                                                            color:
+                                                                Colors.white)),
+                                                  ],
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Text("$toprint",
+                                                    style: TextStyle(
+                                                        color: Colors.white),
+                                                    textAlign:
+                                                        TextAlign.center),
+                                              ),
+                                            ]),
+
+                                            /// Cash Row
+                                            TableRow(children: [
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                        Icons.payments_outlined,
+                                                        size: 14,
+                                                        color: Colors.white70),
+                                                    SizedBox(width: 4),
+                                                    Text("Dispatched (DDO)",
+                                                        style: TextStyle(
+                                                            color:
+                                                                Colors.white)),
+                                                  ],
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Text("$readtoship",
+                                                    style: TextStyle(
+                                                        color: Colors.white),
+                                                    textAlign:
+                                                        TextAlign.center),
+                                              ),
+                                            ]),
+
+                                            /// Credit Row
+                                            TableRow(children: [
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                        Icons
+                                                            .credit_card_outlined,
+                                                        size: 14,
+                                                        color: Colors.white70),
+                                                    SizedBox(width: 4),
+                                                    Text("PDO",
+                                                        style: TextStyle(
+                                                            color:
+                                                                Colors.white)),
+                                                  ],
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: EdgeInsets.all(6),
+                                                child: Text("$shipped",
+                                                    style: TextStyle(
+                                                        color: Colors.white),
+                                                    textAlign:
+                                                        TextAlign.center),
+                                              ),
+                                            ]),
+
+                                            /// Grand Total Row
+                                            // TableRow(
+                                            //   decoration: BoxDecoration(
+                                            //       color: Colors.black26),
+                                            //   children: [
+                                            //     Padding(
+                                            //       padding: EdgeInsets.all(6),
+                                            //       child: Row(
+                                            //         children: [
+                                            //           Icon(Icons.shopping_bag,
+                                            //               size: 14,
+                                            //               color: Colors.white70),
+                                            //           SizedBox(width: 4),
+                                            //           Text("Grand Total",
+                                            //               style: TextStyle(
+                                            //                   fontWeight:
+                                            //                       FontWeight.bold,
+                                            //                   color:
+                                            //                       Colors.white)),
+                                            //         ],
+                                            //       ),
+                                            //     ),
+                                            //     Padding(
+                                            //       padding: EdgeInsets.all(6),
+                                            //       child: Text("$monthcount",
+                                            //           style: TextStyle(
+                                            //               fontWeight:
+                                            //                   FontWeight.bold,
+                                            //               color: Colors.white),
+                                            //           textAlign:
+                                            //               TextAlign.center),
+                                            //     ),
+
+                                            //   ],
+                                            // ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ));
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    buildBdoStatewiseCard(
+                      title: "BDO Daily Statewise Report",
+                      data: dailyBdoStatewiseData,
+                      loading: dailyBdoLoading,
+                      isDaily: true,
+                    ),
+
+                    buildBdoStatewiseCard(
+                      title: "BDO Monthly Statewise Report",
+                      data: monthlyBdoStatewiseData,
+                      loading: monthlyBdoLoading,
+                      isDaily: false,
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    SizedBox(
+                      height: 10,
+                    ),
+                    buildExpenseTypeTotalsCard(expenseTypeWiseTotals),
+                    // buildFamilyAnalysisCards(),
+                    // buildBdmFamilyCards(),
+                    const SizedBox(height: 10),
+                    buildDailyGoodsMovementTableCard(),
+                    buildFilteredCategoryProductCard(),
+                    buildFamilySummaryTeamCards(),
+
+                    SizedBox(
+                      height: 10,
+                    ),
+                    // buildParcelServiceReportTable(
+                    //   context,
+                    //   parcelData,
+                    //   totalvolumee,
+                    //   totalbox,
+                    //   monthTotalActualWeight,
+                    //   monthTotalWeight,
+                    //   monthTotalParcelAmount,
+                    //   monthAverage,
                     // ),
-                    // borderRadius: BorderRadius.circular(20),
-                    // boxShadow: [
-                    // BoxShadow(
-                    // color: Colors.black12,
-                    // blurRadius: 10,
-                    // offset: Offset(0, 6),
-                    // ),
-                    // ],
-                    // ),
-                    // padding:
-                    // EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-                    // child: Column(
-                    // crossAxisAlignment: CrossAxisAlignment.start,
-                    // children: [
-                    // // Date and Icon Row
-                    // Row(
-                    // children: [
-                    // Icon(Icons.calendar_today,
-                    // color: Colors.white, size: 20),
-                    // SizedBox(width: 8),
-                    // Text(
-                    // DateFormat('EEEE, dd MMMM yyyy')
-                    // .format(DateTime.now()),
-                    // style: TextStyle(
-                    // fontSize: 15,
-                    // fontWeight: FontWeight.w600,
-                    // color: Colors.white.withOpacity(0.95),
-                    // ),
-                    // ),
-                    // ],
-                    // ),
-                    // SizedBox(height: 12),
-//
-                    // // Divider
-                    // Container(
-                    // height: 1, color: Colors.white.withOpacity(0.3)),
-                    // SizedBox(height: 16),
-//
-                    // // Table: Metric | Value
-                    // Table(
-                    // border:
-                    // TableBorder.all(color: Colors.white, width: 1),
-                    // columnWidths: const {
-                    // 0: FlexColumnWidth(2),
-                    // 1: FlexColumnWidth(2),
-                    // },
-                    // defaultVerticalAlignment:
-                    // TableCellVerticalAlignment.middle,
-                    // children: [
-                    // // Header
-                    // // TableRow(
-                    // //   decoration: BoxDecoration(color: Colors.white24),
-                    // //   children: [
-                    // //     Padding(
-                    // //       padding: EdgeInsets.all(10),
-                    // //       child: Text(
-                    // //         "Metric",
-                    // //         style: TextStyle(
-                    // //           color: Colors.white,
-                    // //           fontWeight: FontWeight.bold,
-                    // //         ),
-                    // //       ),
-                    // //     ),
-                    // //     Padding(
-                    // //       padding: EdgeInsets.all(10),
-                    // //       child: Text(
-                    // //         "Value",
-                    // //         textAlign: TextAlign.right,
-                    // //         style: TextStyle(
-                    // //           color: Colors.white,
-                    // //           fontWeight: FontWeight.bold,
-                    // //         ),
-                    // //       ),
-                    // //     ),
-                    // //   ],
-                    // // ),
-//
-                    // // Today's Bills (tappable)
-                    // TableRow(children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(10),
-                    // child: GestureDetector(
-                    // onTap: () {
-                    // Navigator.push(
-                    // context,
-                    // MaterialPageRoute(
-                    // builder: (context) =>
-                    // today_OrderList(status: null),
-                    // ),
-                    // );
-                    // },
-                    // child: Row(
-                    // children: [
-                    // Icon(Icons.receipt_long,
-                    // size: 18, color: Colors.white70),
-                    // SizedBox(width: 6),
-                    // Text("Today's Bills",
-                    // style:
-                    // TextStyle(color: Colors.white)),
-                    // SizedBox(width: 6),
-                    // Icon(Icons.open_in_new,
-                    // size: 14, color: Colors.white70),
-                    // ],
-                    // ),
-                    // ),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(10),
-                    // child: Text(
-                    // todayCount.toString(),
-                    // textAlign: TextAlign.right,
-                    // style: TextStyle(color: Colors.white),
-                    // ),
-                    // ),
-                    // ]),
-//
-                    // // Total Volume
-                    // TableRow(children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(10),
-                    // child: Row(
-                    // children: [
-                    // Icon(Icons.stacked_bar_chart,
-                    // size: 18, color: Colors.white70),
-                    // SizedBox(width: 6),
-                    // Text("Total Volume",
-                    // style:
-                    // TextStyle(color: Colors.white)),
-                    // ],
-                    // ),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(10),
-                    // child: Text(
-                    // totalvolume.toString(),
-                    // textAlign: TextAlign.right,
-                    // style: TextStyle(
-                    // color: Colors.white,
-                    // fontWeight: FontWeight.w600,
-                    // ),
-                    // ),
-                    // ),
-                    // ]),
-//
-                    // // Total Expense
-                    // TableRow(children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(10),
-                    // child: Row(
-                    // children: [
-                    // Icon(Icons.money_off_csred,
-                    // size: 18, color: Colors.white70),
-                    // SizedBox(width: 6),
-                    // Text("Total Expense",
-                    // style:
-                    // TextStyle(color: Colors.white)),
-                    // ],
-                    // ),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(10),
-                    // child: Text(
-                    // todayExpenseAmount.toString(),
-                    // textAlign: TextAlign.right,
-                    // style: TextStyle(
-                    // color: Colors.white,
-                    // fontWeight: FontWeight.w600,
-                    // ),
-                    // ),
-                    // ),
-                    // ]),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ),
-                    // SizedBox(height: 10),
-//
-                    // if (department == "COO")
-                    // GestureDetector(
-                    // onTap: () {
-                    // Navigator.push(
-                    // context,
-                    // MaterialPageRoute(
-                    // builder: (context) => OrderList2(
-                    // status: "Waiting For Confirmation",
-                    // )),
-                    // );
-                    // },
-                    // child: Container(
-                    // margin:
-                    // EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    // padding: EdgeInsets.all(16),
-                    // decoration: BoxDecoration(
-                    // color: const Color.fromARGB(
-                    // 255, 0, 148, 246), // Light red background
-                    // borderRadius: BorderRadius.circular(12),
-                    // boxShadow: [
-                    // BoxShadow(
-                    // color: const Color.fromARGB(255, 149, 205, 254)
-                    // .withOpacity(0.2),
-                    // blurRadius: 6,
-                    // offset: Offset(0, 3),
-                    // ),
-                    // ],
-                    // ),
-                    // child: Row(
-                    // mainAxisAlignment: MainAxisAlignment.center,
-                    // children: [
-                    // Icon(Icons.production_quantity_limits,
-                    // color:
-                    // const Color.fromARGB(255, 255, 255, 255),
-                    // size: 28),
-                    // SizedBox(width: 7),
-                    // Text(
-                    // "$waitingForConfirmationCount - Waiting for Confirmation",
-                    // style: const TextStyle(
-                    // fontSize: 15,
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors.white,
-                    // ),
-                    // ),
-                    // ],
-                    // ),
-                    // ),
-                    // ),
-//
-                    // // if (todayFamilyWiseSummary.isNotEmpty) ...[
-                    // //   /// COD + Paid Summary Box
-                    // GestureDetector(
-                    // onTap: () {
-                    // Navigator.push(
-                    // context,
-                    // MaterialPageRoute(
-                    // builder: (context) => ceo_family_summary()),
-                    // );
-                    // },
-                    // child: Builder(builder: (context) {
-                    // int codOrderCount = 0;
-                    // double codTotalAmount = 0.0;
-                    // int paidOrderCount = 0;
-                    // double paidTotalAmount = 0.0;
-                    // int creditOrderCount = 0;
-                    // double creditTotalAmount = 0.0;
-//
-                    // todayFamilyWiseSummary.forEach((key, value) {
-                    // codOrderCount += int.tryParse(
-                    // value['cod_order_count'].toString()) ??
-                    // 0;
-                    // codTotalAmount += double.tryParse(
-                    // value['cod_total_amount'].toString()) ??
-                    // 0.0;
-//
-                    // paidOrderCount += int.tryParse(
-                    // value['paid_order_count'].toString()) ??
-                    // 0;
-                    // paidTotalAmount += double.tryParse(
-                    // value['paid_total_amount'].toString()) ??
-                    // 0.0;
-//
-                    // creditOrderCount += int.tryParse(
-                    // value['credit_order_count'].toString()) ??
-                    // 0;
-                    // creditTotalAmount += double.tryParse(
-                    // value['credit_total_amount'].toString()) ??
-                    // 0.0;
-                    // });
-//
-                    // int grandTotalOrders =
-                    // codOrderCount + paidOrderCount + creditOrderCount;
-                    // double grandTotalAmount = codTotalAmount +
-                    // paidTotalAmount +
-                    // creditTotalAmount;
-//
-                    // return Container(
-                    // margin: EdgeInsets.only(
-                    // top: 8, left: 6, right: 6, bottom: 12),
-                    // padding: EdgeInsets.all(12),
-                    // decoration: BoxDecoration(
-                    // gradient: LinearGradient(
-                    // colors: [Color(0xFF02347C), Color(0xFF82E49D)],
-                    // begin: Alignment.topLeft,
-                    // end: Alignment.bottomRight,
-                    // ),
-                    // borderRadius: BorderRadius.circular(16),
-                    // boxShadow: [
-                    // BoxShadow(
-                    // color: Colors.blue.shade100,
-                    // blurRadius: 4,
-                    // offset: Offset(0, 2),
-                    // ),
-                    // ],
-                    // ),
-                    // child: Column(
-                    // crossAxisAlignment: CrossAxisAlignment.start,
-                    // children: [
-                    // /// Header Row
-                    // Row(
-                    // children: [
-                    // Icon(Icons.payments,
-                    // color: Colors.white, size: 15),
-                    // SizedBox(width: 8),
-                    // Text(
-                    // "Today's Sales report",
-                    // style: TextStyle(
-                    // fontWeight: FontWeight.bold,
-                    // fontSize: 14,
-                    // color: Colors.white,
-                    // ),
-                    // ),
-                    // ],
-                    // ),
-                    // Row(
-                    // children: [
-                    // Icon(Icons.date_range,
-                    // color: Colors.white, size: 15),
-                    // SizedBox(width: 8),
-                    // Text(
-                    // "${DateFormat('dd/MM/yyyy').format(DateTime.now())}",
-                    // style: TextStyle(
-                    // fontWeight: FontWeight.bold,
-                    // fontSize: 14,
-                    // color: Colors.white,
-                    // ),
-                    // ),
-                    // ],
-                    // ),
-                    // Divider(color: Colors.white60),
-                    // SizedBox(height: 6),
-//
-                    // /// Table Layout
-                    // Table(
-                    // border: TableBorder.all(
-                    // color: Colors.white, width: 1),
-                    // columnWidths: const {
-                    // 0: FlexColumnWidth(2),
-                    // 1: FlexColumnWidth(1),
-                    // 2: FlexColumnWidth(2),
-                    // },
-                    // children: [
-                    // /// Table Header
-                    // TableRow(
-                    // decoration:
-                    // BoxDecoration(color: Colors.black26),
-                    // children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("Type",
-                    // style: TextStyle(
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors.white)),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("Count",
-                    // textAlign: TextAlign.center,
-                    // style: TextStyle(
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors.white)),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("Amount",
-                    // textAlign: TextAlign.center,
-                    // style: TextStyle(
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors.white)),
-                    // ),
-                    // ],
-                    // ),
-//
-                    // /// COD Row
-                    // TableRow(children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("COD Orders",
-                    // style:
-                    // TextStyle(color: Colors.white)),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("$todaycod",
-                    // textAlign: TextAlign.center,
-                    // style:
-                    // TextStyle(color: Colors.white)),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text(
-                    // "₹${todaycodamount.toStringAsFixed(2)}",
-                    // textAlign: TextAlign.right,
-                    // style: TextStyle(
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors.white)),
-                    // ),
-                    // ]),
-//
-                    // /// Cash Row
-                    // TableRow(children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("Cash Orders",
-                    // style:
-                    // TextStyle(color: Colors.white)),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("$todaypaid",
-                    // textAlign: TextAlign.center,
-                    // style:
-                    // TextStyle(color: Colors.white)),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text(
-                    // "₹${todaypaidamount.toStringAsFixed(2)}",
-                    // textAlign: TextAlign.right,
-                    // style: TextStyle(
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors.white)),
-                    // ),
-                    // ]),
-//
-                    // /// Credit Row
-                    // TableRow(children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("Credit Orders",
-                    // style:
-                    // TextStyle(color: Colors.white)),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("$creditOrderCount",
-                    // textAlign: TextAlign.center,
-                    // style:
-                    // TextStyle(color: Colors.white)),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text(
-                    // "₹${todaycreditamount.toStringAsFixed(2)}",
-                    // textAlign: TextAlign.right,
-                    // style: TextStyle(
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors.white)),
-                    // ),
-                    // ]),
-//
-                    // /// Grand Total Row
-                    // TableRow(
-                    // decoration:
-                    // BoxDecoration(color: Colors.black26),
-                    // children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("Grand Total",
-                    // style: TextStyle(
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors.white)),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("$todayCount",
-                    // textAlign: TextAlign.center,
-                    // style: TextStyle(
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors.white)),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text(
-                    // "₹${totalvolume.toStringAsFixed(2)}",
-                    // textAlign: TextAlign.right,
-                    // style: TextStyle(
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors.white)),
-                    // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // );
-                    // }),
-                    // ),
-//
-                    // // Column(
-                    // //   crossAxisAlignment: CrossAxisAlignment.start,
-                    // //   children: [
-                    // //     GestureDetector(
-                    // //       onTap: () {
-                    // //         Navigator.push(
-                    // //           context,
-                    // //           MaterialPageRoute(
-                    // //               builder: (context) => today_OrderList(
-                    // //                     status: null,
-                    // //                   )),
-                    // //         );
-                    // //       },
-                    // //       child: Builder(
-                    // //         builder: (context) {
-                    // //           return TweenAnimationBuilder<Offset>(
-                    // //               duration: Duration(milliseconds: 300),
-                    // //               tween: Tween<Offset>(
-                    // //                   begin: Offset(1, 0), end: Offset(0, 0)),
-                    // //               curve: Curves.easeOut,
-                    // //               builder: (context, offset, child) {
-                    // //                 return Transform.translate(
-                    // //                     offset: offset * 10, child: child);
-                    // //               },
-                    // //               child: Container(
-                    // //                 margin: EdgeInsets.symmetric(
-                    // //                     vertical: 5, horizontal: 6),
-                    // //                 padding: EdgeInsets.all(12),
-                    // //                 decoration: BoxDecoration(
-                    // //                   borderRadius: BorderRadius.circular(16),
-                    // //                   gradient: LinearGradient(
-                    // //                     colors: [
-                    // //                       Color(0xFF02347C),
-                    // //                       Color(0xFF82E49D)
-                    // //                     ],
-                    // //                     begin: Alignment.topLeft,
-                    // //                     end: Alignment.bottomRight,
-                    // //                   ),
-                    // //                   boxShadow: [
-                    // //                     BoxShadow(
-                    // //                       color: Colors.black26,
-                    // //                       blurRadius: 6,
-                    // //                       offset: Offset(0, 2),
-                    // //                     ),
-                    // //                   ],
-                    // //                 ),
-                    // //                 child: Column(
-                    // //                   crossAxisAlignment:
-                    // //                       CrossAxisAlignment.start,
-                    // //                   children: [
-                    // //                     Text(
-                    // //                       "Today's Sales report (Date Wise)",
-                    // //                       style: TextStyle(
-                    // //                         fontSize: 15,
-                    // //                         fontWeight: FontWeight.bold,
-                    // //                         color: Colors.white,
-                    // //                       ),
-                    // //                     ),
-                    // //                     Divider(color: Colors.white54),
-                    // //                     SizedBox(height: 6),
-//
-                    // //                     /// Actual table
-                    // //                     Table(
-                    // //                       border: TableBorder.all(
-                    // //                           color: Colors.white, width: 1),
-                    // //                       columnWidths: const {
-                    // //                         0: FlexColumnWidth(1),
-                    // //                         1: FlexColumnWidth(2),
-                    // //                       },
-                    // //                       children: [
-                    // //                         /// Header row
-                    // //                         TableRow(
-                    // //                           decoration: BoxDecoration(
-                    // //                               color: Colors.black26),
-                    // //                           children: [
-                    // //                             Padding(
-                    // //                               padding: EdgeInsets.all(6),
-                    // //                               child: Text("Count",
-                    // //                                   style: TextStyle(
-                    // //                                       fontWeight:
-                    // //                                           FontWeight.bold,
-                    // //                                       color: Colors.white)),
-                    // //                             ),
-                    // //                             Padding(
-                    // //                               padding: EdgeInsets.all(6),
-                    // //                               child: Text("Amount",
-                    // //                                   textAlign: TextAlign.center,
-                    // //                                   style: TextStyle(
-                    // //                                       fontWeight:
-                    // //                                           FontWeight.bold,
-                    // //                                       color: Colors.white)),
-                    // //                             ),
-                    // //                           ],
-                    // //                         ),
-//
-                    // //                         /// COD Row
-                    // //                         TableRow(children: [
-                    // //                           Padding(
-                    // //                             padding: EdgeInsets.all(6),
-                    // //                             child: Text(
-                    // //                                 "${summary['non_rejected_orders']?['count'] ?? 0}",
-                    // //                                 style: TextStyle(
-                    // //                                     color: Colors.white),
-                    // //                                 textAlign: TextAlign.center),
-                    // //                           ),
-                    // //                           Padding(
-                    // //                             padding: EdgeInsets.all(6),
-                    // //                             child: Text(
-                    // //                                 "₹${(summary['non_rejected_orders']?['amount'] ?? 0).toStringAsFixed(2)}",
-                    // //                                 style: TextStyle(
-                    // //                                     fontWeight:
-                    // //                                         FontWeight.bold,
-                    // //                                     color: Colors.white),
-                    // //                                 textAlign: TextAlign.right),
-                    // //                           ),
-                    // //                         ]),
-//
-                    // //                         /// Grand Total Row
-                    // //                       ],
-                    // //                     ),
-                    // //                   ],
-                    // //                 ),
-                    // //               ));
-                    // //         },
-                    // //       ),
-                    // //     ),
-                    // //   ],
-                    // // ),
-//
+
                     // Column(
-                    // crossAxisAlignment: CrossAxisAlignment.start,
-                    // children: [
-                    // GestureDetector(
-                    // onTap: () {
-                    // Navigator.push(
-                    // context,
-                    // MaterialPageRoute(
-                    // builder: (context) =>
-                    // ceo_family_summary_monthly()),
-                    // );
-                    // },
-                    // child: Builder(
-                    // builder: (context) {
-                    // return TweenAnimationBuilder<Offset>(
-                    // duration: Duration(milliseconds: 300),
-                    // tween: Tween<Offset>(
-                    // begin: Offset(1, 0), end: Offset(0, 0)),
-                    // curve: Curves.easeOut,
-                    // builder: (context, offset, child) {
-                    // return Transform.translate(
-                    // offset: offset * 10, child: child);
-                    // },
-                    // child: Container(
-                    // margin: EdgeInsets.symmetric(
-                    // vertical: 5, horizontal: 6),
-                    // padding: EdgeInsets.all(12),
-                    // decoration: BoxDecoration(
-                    // borderRadius: BorderRadius.circular(16),
-                    // gradient: LinearGradient(
-                    // colors: [
-                    // Color(0xFF02347C),
-                    // Color(0xFF82E49D)
-                    // ],
-                    // begin: Alignment.topLeft,
-                    // end: Alignment.bottomRight,
-                    // ),
-                    // boxShadow: [
-                    // BoxShadow(
-                    // color: Colors.black26,
-                    // blurRadius: 6,
-                    // offset: Offset(0, 2),
-                    // ),
-                    // ],
-                    // ),
-                    // child: Column(
-                    // crossAxisAlignment:
-                    // CrossAxisAlignment.start,
-                    // children: [
-                    // Text(
-                    // "Month Total",
-                    // style: TextStyle(
-                    // fontSize: 15,
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors.white,
-                    // ),
-                    // ),
-                    // Divider(color: Colors.white54),
-                    // SizedBox(height: 6),
-//
-                    // /// Actual table
-                    // Table(
-                    // border: TableBorder.all(
-                    // color: Colors.white, width: 1),
-                    // columnWidths: const {
-                    // 0: FlexColumnWidth(2),
-                    // 1: FlexColumnWidth(1),
-                    // 2: FlexColumnWidth(2),
-                    // },
-                    // children: [
-                    // /// Header row
-                    // TableRow(
-                    // decoration: BoxDecoration(
-                    // color: Colors.black26),
-                    // children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("Type",
-                    // style: TextStyle(
-                    // fontWeight:
-                    // FontWeight.bold,
-                    // color: Colors.white)),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("Count",
-                    // style: TextStyle(
-                    // fontWeight:
-                    // FontWeight.bold,
-                    // color: Colors.white)),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("Amount",
-                    // textAlign:
-                    // TextAlign.center,
-                    // style: TextStyle(
-                    // fontWeight:
-                    // FontWeight.bold,
-                    // color: Colors.white)),
-                    // ),
-                    // ],
-                    // ),
-//
-                    // /// COD Row
-                    // TableRow(children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Row(
-                    // children: [
-                    // Icon(Icons.delivery_dining,
-                    // size: 14,
-                    // color: Colors.white70),
-                    // SizedBox(width: 4),
-                    // Text("COD",
-                    // style: TextStyle(
-                    // color:
-                    // Colors.white)),
-                    // ],
-                    // ),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("$monthcod",
-                    // style: TextStyle(
-                    // color: Colors.white),
-                    // textAlign:
-                    // TextAlign.center),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text(
-                    // "₹${monthcodamount.toStringAsFixed(2)}",
-                    // style: TextStyle(
-                    // fontWeight:
-                    // FontWeight.bold,
-                    // color: Colors.white),
-                    // textAlign: TextAlign.right),
-                    // ),
-                    // ]),
-//
-                    // /// Cash Row
-                    // TableRow(children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Row(
-                    // children: [
-                    // Icon(
-                    // Icons.payments_outlined,
-                    // size: 14,
-                    // color: Colors.white70),
-                    // SizedBox(width: 4),
-                    // Text("Cash",
-                    // style: TextStyle(
-                    // color:
-                    // Colors.white)),
-                    // ],
-                    // ),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("$monthpaid",
-                    // style: TextStyle(
-                    // color: Colors.white),
-                    // textAlign:
-                    // TextAlign.center),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text(
-                    // "₹${monthpaidamount.toStringAsFixed(2)}",
-                    // style: TextStyle(
-                    // fontWeight:
-                    // FontWeight.bold,
-                    // color: Colors.white),
-                    // textAlign: TextAlign.right),
-                    // ),
-                    // ]),
-//
-                    // /// Credit Row
-                    // TableRow(children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Row(
-                    // children: [
-                    // Icon(
-                    // Icons
-                    // .credit_card_outlined,
-                    // size: 14,
-                    // color: Colors.white70),
-                    // SizedBox(width: 4),
-                    // Text("Credit",
-                    // style: TextStyle(
-                    // color:
-                    // Colors.white)),
-                    // ],
-                    // ),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("$monthcredit",
-                    // style: TextStyle(
-                    // color: Colors.white),
-                    // textAlign:
-                    // TextAlign.center),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text(
-                    // "₹${monthcreditamount.toStringAsFixed(2)}",
-                    // style: TextStyle(
-                    // fontWeight:
-                    // FontWeight.bold,
-                    // color: Colors.white),
-                    // textAlign: TextAlign.right),
-                    // ),
-                    // ]),
-//
-                    // /// Grand Total Row
-                    // TableRow(
-                    // decoration: BoxDecoration(
-                    // color: Colors.black26),
-                    // children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Row(
-                    // children: [
-                    // Icon(Icons.shopping_bag,
-                    // size: 14,
-                    // color:
-                    // Colors.white70),
-                    // SizedBox(width: 4),
-                    // Text("Grand Total",
-                    // style: TextStyle(
-                    // fontWeight:
-                    // FontWeight
-                    // .bold,
-                    // color: Colors
-                    // .white)),
-                    // ],
-                    // ),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("$monthcount",
-                    // style: TextStyle(
-                    // fontWeight:
-                    // FontWeight.bold,
-                    // color: Colors.white),
-                    // textAlign:
-                    // TextAlign.center),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text(
-                    // "₹${monthtotalamount.toStringAsFixed(2)}",
-                    // style: TextStyle(
-                    // fontWeight:
-                    // FontWeight.bold,
-                    // color: Colors.white),
-                    // textAlign:
-                    // TextAlign.right),
-                    // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ));
-                    // },
-                    // ),
-                    // ),
-                    // ],
-                    // ),
-//
-                    // Column(
-                    // crossAxisAlignment: CrossAxisAlignment.start,
-                    // children: [
-                    // GestureDetector(
-                    // onTap: () {
-                    // // Navigator.push(
-                    // //   context,
-                    // //   MaterialPageRoute(
-                    // //       builder: (context) =>
-                    // //           ceo_family_summary_monthly()),
-                    // // );
-                    // },
-                    // child: Builder(
-                    // builder: (context) {
-                    // return TweenAnimationBuilder<Offset>(
-                    // duration: Duration(milliseconds: 300),
-                    // tween: Tween<Offset>(
-                    // begin: Offset(1, 0), end: Offset(0, 0)),
-                    // curve: Curves.easeOut,
-                    // builder: (context, offset, child) {
-                    // return Transform.translate(
-                    // offset: offset * 10, child: child);
-                    // },
-                    // child: Container(
-                    // margin: EdgeInsets.symmetric(
-                    // vertical: 5, horizontal: 6),
-                    // padding: EdgeInsets.all(12),
-                    // decoration: BoxDecoration(
-                    // borderRadius: BorderRadius.circular(16),
-                    // gradient: LinearGradient(
-                    // colors: [
-                    // Color(0xFF02347C),
-                    // Color(0xFF82E49D)
-                    // ],
-                    // begin: Alignment.topLeft,
-                    // end: Alignment.bottomRight,
-                    // ),
-                    // boxShadow: [
-                    // BoxShadow(
-                    // color: Colors.black26,
-                    // blurRadius: 6,
-                    // offset: Offset(0, 2),
-                    // ),
-                    // ],
-                    // ),
-                    // child: Column(
-                    // crossAxisAlignment:
-                    // CrossAxisAlignment.start,
-                    // children: [
-                    // Text(
-                    // "Status Wise Total",
-                    // style: TextStyle(
-                    // fontSize: 15,
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors.white,
-                    // ),
-                    // ),
-                    // Divider(color: Colors.white54),
-                    // SizedBox(height: 6),
-//
-                    // /// Actual table
-                    // Table(
-                    // border: TableBorder.all(
-                    // color: Colors.white, width: 1),
-                    // columnWidths: const {
-                    // 0: FlexColumnWidth(2),
-                    // 1: FlexColumnWidth(1),
-                    // },
-                    // children: [
-                    // /// Header row
-                    // TableRow(
-                    // decoration: BoxDecoration(
-                    // color: Colors.black26),
-                    // children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("Type",
-                    // style: TextStyle(
-                    // fontWeight:
-                    // FontWeight.bold,
-                    // color: Colors.white)),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("Count",
-                    // style: TextStyle(
-                    // fontWeight:
-                    // FontWeight.bold,
-                    // color: Colors.white)),
-                    // ),
-                    // ],
-                    // ),
-//
-                    // /// COD Row
-                    // TableRow(children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Row(
-                    // children: [
-                    // Icon(Icons.delivery_dining,
-                    // size: 14,
-                    // color: Colors.white70),
-                    // SizedBox(width: 4),
-                    // Text("Approved (ADO)",
-                    // style: TextStyle(
-                    // color:
-                    // Colors.white)),
-                    // ],
-                    // ),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("$toprint",
-                    // style: TextStyle(
-                    // color: Colors.white),
-                    // textAlign:
-                    // TextAlign.center),
-                    // ),
-                    // ]),
-//
-                    // /// Cash Row
-                    // TableRow(children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Row(
-                    // children: [
-                    // Icon(
-                    // Icons.payments_outlined,
-                    // size: 14,
-                    // color: Colors.white70),
-                    // SizedBox(width: 4),
-                    // Text("Dispatched (DDO)",
-                    // style: TextStyle(
-                    // color:
-                    // Colors.white)),
-                    // ],
-                    // ),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("$readtoship",
-                    // style: TextStyle(
-                    // color: Colors.white),
-                    // textAlign:
-                    // TextAlign.center),
-                    // ),
-                    // ]),
-//
-                    // /// Credit Row
-                    // TableRow(children: [
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Row(
-                    // children: [
-                    // Icon(
-                    // Icons
-                    // .credit_card_outlined,
-                    // size: 14,
-                    // color: Colors.white70),
-                    // SizedBox(width: 4),
-                    // Text("PDO",
-                    // style: TextStyle(
-                    // color:
-                    // Colors.white)),
-                    // ],
-                    // ),
-                    // ),
-                    // Padding(
-                    // padding: EdgeInsets.all(6),
-                    // child: Text("$shipped",
-                    // style: TextStyle(
-                    // color: Colors.white),
-                    // textAlign:
-                    // TextAlign.center),
-                    // ),
-                    // ]),
-//
-                    // /// Grand Total Row
-                    // // TableRow(
-                    // //   decoration: BoxDecoration(
-                    // //       color: Colors.black26),
-                    // //   children: [
-                    // //     Padding(
-                    // //       padding: EdgeInsets.all(6),
-                    // //       child: Row(
-                    // //         children: [
-                    // //           Icon(Icons.shopping_bag,
-                    // //               size: 14,
-                    // //               color: Colors.white70),
-                    // //           SizedBox(width: 4),
-                    // //           Text("Grand Total",
-                    // //               style: TextStyle(
-                    // //                   fontWeight:
-                    // //                       FontWeight.bold,
-                    // //                   color:
-                    // //                       Colors.white)),
-                    // //         ],
-                    // //       ),
-                    // //     ),
-                    // //     Padding(
-                    // //       padding: EdgeInsets.all(6),
-                    // //       child: Text("$monthcount",
-                    // //           style: TextStyle(
-                    // //               fontWeight:
-                    // //                   FontWeight.bold,
-                    // //               color: Colors.white),
-                    // //           textAlign:
-                    // //               TextAlign.center),
-                    // //     ),
-//
-                    // //   ],
-                    // // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ));
-                    // },
-                    // ),
-                    // ),
-                    // ],
-                    // ),
-//
-                    // buildBdoStatewiseCard(
-                    // title: "BDO Daily Statewise Report",
-                    // data: dailyBdoStatewiseData,
-                    // loading: dailyBdoLoading,
-                    // isDaily: true,
-                    // ),
-//
-                    // buildBdoStatewiseCard(
-                    // title: "BDO Monthly Statewise Report",
-                    // data: monthlyBdoStatewiseData,
-                    // loading: monthlyBdoLoading,
-                    // isDaily: false,
-                    // ),
-//
-                    // const SizedBox(height: 10),
-//
-                    // SizedBox(
-                    // height: 10,
-                    // ),
-                    // buildExpenseTypeTotalsCard(expenseTypeWiseTotals),
-                    // // buildFamilyAnalysisCards(),
-                    // // buildBdmFamilyCards(),
-                    // const SizedBox(height: 10),
-                    // buildDailyGoodsMovementTableCard(),
-                    // buildFilteredCategoryProductCard(),
-                    // buildFamilySummaryTeamCards(),
-//
-                    // SizedBox(
-                    // height: 10,
-                    // ),
-                    // // buildParcelServiceReportTable(
-                    // //   context,
-                    // //   parcelData,
-                    // //   totalvolumee,
-                    // //   totalbox,
-                    // //   monthTotalActualWeight,
-                    // //   monthTotalWeight,
-                    // //   monthTotalParcelAmount,
-                    // //   monthAverage,
-                    // // ),
-//
-                    // // Column(
-                    // //   crossAxisAlignment: CrossAxisAlignment.start,
-                    // //   children: [
-                    // //     if (currentMonthFamilyWiseSummary
-                    // //         .containsKey('Month Total'))
-                    // //       GestureDetector(
-                    // //         onTap: () {
-                    // //           Navigator.push(
-                    // //             context,
-                    // //             MaterialPageRoute(
-                    // //                 builder: (context) =>
-                    // //                     PostofficeReport_monthly()),
-                    // //           );
-                    // //         },
-                    // //         child: Builder(
-                    // //           builder: (context) {
-                    // //             var summary =
-                    // //                 currentMonthFamilyWiseSummary['Month Total']!;
-                    // //             return TweenAnimationBuilder<Offset>(
-                    // //               duration: Duration(milliseconds: 300),
-                    // //               tween: Tween<Offset>(
-                    // //                   begin: Offset(1, 0), end: Offset(0, 0)),
-                    // //               curve: Curves.easeOut,
-                    // //               builder: (context, offset, child) {
-                    // //                 return Transform.translate(
-                    // //                     offset: offset * 10, child: child);
-                    // //               },
-                    // //               child: Container(
-                    // //                 margin: EdgeInsets.symmetric(
-                    // //                     vertical: 5, horizontal: 6),
-                    // //                 padding: EdgeInsets.all(12),
-                    // //                 decoration: BoxDecoration(
-                    // //                   borderRadius: BorderRadius.circular(16),
-                    // //                   gradient: LinearGradient(
-                    // //                     colors: [
-                    // //                       Color(0xFF02347C),
-                    // //                       Color(0xFF82E49D)
-                    // //                     ],
-                    // //                     begin: Alignment.topLeft,
-                    // //                     end: Alignment.bottomRight,
-                    // //                   ),
-                    // //                   boxShadow: [
-                    // //                     BoxShadow(
-                    // //                       color: Colors.black26,
-                    // //                       blurRadius: 6,
-                    // //                       offset: Offset(0, 2),
-                    // //                     ),
-                    // //                   ],
-                    // //                 ),
-                    // //                 child: Column(
-                    // //                   crossAxisAlignment:
-                    // //                       CrossAxisAlignment.start,
-                    // //                   children: [
-                    // //                     Text(
-                    // //                       "Monthly Goods Movement (MGM)",
-                    // //                       style: TextStyle(
-                    // //                         fontSize: 15,
-                    // //                         fontWeight: FontWeight.bold,
-                    // //                         color: Colors.white,
-                    // //                       ),
-                    // //                     ),
-                    // //                     Divider(color: Colors.white60),
-                    // //                     SizedBox(height: 6),
-//
-                    // //                     // === TABLE: Metric | Value ===
-                    // //                     Table(
-                    // //                       border: TableBorder.all(
-                    // //                           color: Colors.white60, width: 1),
-                    // //                       columnWidths: const {
-                    // //                         0: FlexColumnWidth(3), // Metric
-                    // //                         1: FlexColumnWidth(2), // Value
-                    // //                       },
-                    // //                       defaultVerticalAlignment:
-                    // //                           TableCellVerticalAlignment.middle,
-                    // //                       children: [
-                    // //                         // Header
-                    // //                         // TableRow(
-                    // //                         //   decoration: BoxDecoration(color: Colors.white24),
-                    // //                         //   children: [
-                    // //                         //     Padding(
-                    // //                         //       padding: EdgeInsets.all(8),
-                    // //                         //       child: Text(
-                    // //                         //         "Metric",
-                    // //                         //         style: TextStyle(
-                    // //                         //           color: Colors.white,
-                    // //                         //           fontWeight: FontWeight.bold,
-                    // //                         //         ),
-                    // //                         //       ),
-                    // //                         //     ),
-                    // //                         //     Padding(
-                    // //                         //       padding: EdgeInsets.all(8),
-                    // //                         //       child: Text(
-                    // //                         //         "Value",
-                    // //                         //         textAlign: TextAlign.right,
-                    // //                         //         style: TextStyle(
-                    // //                         //           color: Colors.white,
-                    // //                         //           fontWeight: FontWeight.bold,
-                    // //                         //         ),
-                    // //                         //       ),
-                    // //                         //     ),
-                    // //                         //   ],
-                    // //                         // ),
-//
-                    // //                         // Total Actual Weight
-                    // //                         TableRow(children: [
-                    // //                           Padding(
-                    // //                             padding: EdgeInsets.all(8),
-                    // //                             child: Row(
-                    // //                               children: [
-                    // //                                 Icon(Icons.scale,
-                    // //                                     size: 16,
-                    // //                                     color: Colors.white70),
-                    // //                                 SizedBox(width: 6),
-                    // //                                 Text("Total Actual Wt.",
-                    // //                                     style: TextStyle(
-                    // //                                         color: Colors.white)),
-                    // //                               ],
-                    // //                             ),
-                    // //                           ),
-                    // //                           Padding(
-                    // //                             padding: EdgeInsets.all(8),
-                    // //                             child: Text(
-                    // //                               "${(monthTotalActualWeight / 1000).toStringAsFixed(2)} kg",
-                    // //                               textAlign: TextAlign.right,
-                    // //                               style: TextStyle(
-                    // //                                   color: Colors.white,
-                    // //                                   fontWeight:
-                    // //                                       FontWeight.bold),
-                    // //                             ),
-                    // //                           ),
-                    // //                         ]),
-//
-                    // //                         // Total Declared Weight
-                    // //                         TableRow(children: [
-                    // //                           Padding(
-                    // //                             padding: EdgeInsets.all(8),
-                    // //                             child: Row(
-                    // //                               children: [
-                    // //                                 Icon(Icons.monitor_weight,
-                    // //                                     size: 16,
-                    // //                                     color: Colors.white70),
-                    // //                                 SizedBox(width: 6),
-                    // //                                 Text("Total Wt.",
-                    // //                                     style: TextStyle(
-                    // //                                         color: Colors.white)),
-                    // //                               ],
-                    // //                             ),
-                    // //                           ),
-                    // //                           Padding(
-                    // //                             padding: EdgeInsets.all(8),
-                    // //                             child: Text(
-                    // //                               "${(monthTotalWeight / 1000).toStringAsFixed(2)} kg",
-                    // //                               textAlign: TextAlign.right,
-                    // //                               style: TextStyle(
-                    // //                                   color: Colors.white,
-                    // //                                   fontWeight:
-                    // //                                       FontWeight.bold),
-                    // //                             ),
-                    // //                           ),
-                    // //                         ]),
-//
-                    // //                         // Total Parcel Amount
-                    // //                         TableRow(children: [
-                    // //                           Padding(
-                    // //                             padding: EdgeInsets.all(8),
-                    // //                             child: Row(
-                    // //                               children: [
-                    // //                                 Icon(
-                    // //                                     Icons
-                    // //                                         .local_shipping_outlined,
-                    // //                                     size: 16,
-                    // //                                     color: Colors.white70),
-                    // //                                 SizedBox(width: 6),
-                    // //                                 Text("Total Parcel Amount",
-                    // //                                     style: TextStyle(
-                    // //                                         color: Colors.white)),
-                    // //                               ],
-                    // //                             ),
-                    // //                           ),
-                    // //                           Padding(
-                    // //                             padding: EdgeInsets.all(8),
-                    // //                             child: Text(
-                    // //                               "₹${monthTotalParcelAmount.toStringAsFixed(2)}",
-                    // //                               textAlign: TextAlign.right,
-                    // //                               style: TextStyle(
-                    // //                                   color: Colors.white,
-                    // //                                   fontWeight:
-                    // //                                       FontWeight.bold),
-                    // //                             ),
-                    // //                           ),
-                    // //                         ]),
-//
-                    // //                         // Average (₹ per kg)
-                    // //                         TableRow(
-                    // //                           decoration: BoxDecoration(
-                    // //                               color: Colors.black26),
-                    // //                           children: [
-                    // //                             Padding(
-                    // //                               padding: EdgeInsets.all(8),
-                    // //                               child: Row(
-                    // //                                 children: [
-                    // //                                   Icon(Icons.shopping_bag,
-                    // //                                       size: 16,
-                    // //                                       color: Colors.white70),
-                    // //                                   SizedBox(width: 6),
-                    // //                                   Text("Average (₹/kg)",
-                    // //                                       style: TextStyle(
-                    // //                                           color: Colors.white,
-                    // //                                           fontWeight:
-                    // //                                               FontWeight
-                    // //                                                   .w600)),
-                    // //                                 ],
-                    // //                               ),
-                    // //                             ),
-                    // //                             Padding(
-                    // //                               padding: EdgeInsets.all(8),
-                    // //                               child: Text(
-                    // //                                 (monthTotalActualWeight > 0
-                    // //                                         ? (monthTotalParcelAmount /
-                    // //                                             (monthTotalActualWeight /
-                    // //                                                 1000.0))
-                    // //                                         : 0.0)
-                    // //                                     .toStringAsFixed(2),
-                    // //                                 textAlign: TextAlign.right,
-                    // //                                 style: TextStyle(
-                    // //                                     color: Colors.white,
-                    // //                                     fontWeight:
-                    // //                                         FontWeight.bold),
-                    // //                               ),
-                    // //                             ),
-                    // //                           ],
-                    // //                         ),
-                    // //                       ],
-                    // //                     ),
-                    // //                   ],
-                    // //                 ),
-                    // //               ),
-                    // //             );
-                    // //           },
-                    // //         ),
-                    // //       ),
-                    // //   ],
-                    // // ),
-//
-                    // if (categoryWiseProducts.isNotEmpty)
-                    // buildCategoryWiseCard(),
-//
-                    // dbrLoading
-                    // ? const Center(child: CircularProgressIndicator())
-                    // : ListView.builder(
-                    // shrinkWrap: true,
-                    // physics: const NeverScrollableScrollPhysics(),
-                    // itemCount: todayBankReports.length,
-                    // itemBuilder: (context, index) {
-                    // final bank = todayBankReports[index];
-//
-                    // return GestureDetector(
-                    // onTap: () {
-                    // Navigator.push(
-                    // context,
-                    // MaterialPageRoute(
-                    // builder: (context) =>
-                    // BankMonthlyReportPage(
-                    // bankId: int.tryParse(
-                    // bank["bank_id"].toString()) ??
-                    // 0,
-                    // bankData: bank,
-                    // ),
-                    // ),
-                    // );
-                    // },
-                    // child: Card(
-                    // elevation: 4,
-                    // margin:
-                    // const EdgeInsets.symmetric(vertical: 10),
-                    // shape: RoundedRectangleBorder(
-                    // borderRadius: BorderRadius.circular(12),
-                    // ),
-                    // child: Container(
-                    // decoration: BoxDecoration(
-                    // gradient: const LinearGradient(
-                    // colors: [
-                    // Color(0xFF02347C),
-                    // Color(0xFF82E49D),
-                    // ],
-                    // begin: Alignment.topLeft,
-                    // end: Alignment.bottomRight,
-                    // ),
-                    // borderRadius: BorderRadius.circular(12),
-                    // ),
-                    // child: Padding(
-                    // padding: const EdgeInsets.all(12),
-                    // child: Column(
-                    // crossAxisAlignment:
-                    // CrossAxisAlignment.start,
-                    // children: [
-                    // Text(
-                    // "${bank["bank_name"]} (OD Account)",
-                    // style: const TextStyle(
-                    // fontSize: 14,
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors.white,
-                    // ),
-                    // ),
-                    // const SizedBox(height: 10),
-                    // Table(
-                    // border: TableBorder.all(
-                    // color: Colors.white,
-                    // width: 1.2,
-                    // ),
-                    // children: [
-                    // TableRow(
-                    // decoration: const BoxDecoration(
-                    // color: Colors.black26),
-                    // children: [
-                    // _buildTableHeader(
-                    // 'Opening Balance'),
-                    // _buildTableHeader(
-                    // 'Closing Balance'),
-                    // ],
-                    // ),
-                    // TableRow(
-                    // children: [
-                    // _buildTableCell(
-                    // "₹${bank["opening_balance"].toStringAsFixed(2)}",
-                    // Colors.white,
-                    // ),
-                    // _buildTableCell(
-                    // "₹${bank["closing_balance"].toStringAsFixed(2)}",
-                    // Colors.white,
-                    // ),
-                    // ],
-                    // ),
-                    // TableRow(
-                    // decoration: const BoxDecoration(
-                    // color: Colors.black26),
-                    // children: [
-                    // _buildTableHeader(
-                    // 'Today Credit'),
-                    // _buildTableHeader(
-                    // 'Today Debit'),
-                    // ],
-                    // ),
-                    // TableRow(
-                    // children: [
-                    // _buildTableCell(
-                    // "₹${bank["today_credit"].toStringAsFixed(2)}",
-                    // Colors.white,
-                    // ),
-                    // _buildTableCell(
-                    // "₹${bank["today_debit"].toStringAsFixed(2)}",
-                    // Colors.white,
-                    // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ),
-                    // ),
-                    // ),
-                    // );
-                    // },
-                    // ),
-//
-                    // SizedBox(height: 4),
-                    // Card(
-                    // elevation: 4,
-                    // margin: const EdgeInsets.symmetric(vertical: 14),
-                    // shape: RoundedRectangleBorder(
-                    // borderRadius: BorderRadius.circular(12),
-                    // ),
-                    // child: Container(
-                    // decoration: BoxDecoration(
-                    // gradient: const LinearGradient(
-                    // colors: [
-                    // Color(0xFF02347C), // deep blue
-                    // Color(0xFF82E49D), // turquoise green
-                    // ],
-                    // begin: Alignment.topLeft,
-                    // end: Alignment.bottomRight,
-                    // ),
-                    // borderRadius: BorderRadius.circular(12),
-                    // ),
-                    // child: Padding(
-                    // padding: const EdgeInsets.all(12),
-                    // child: Column(
-                    // crossAxisAlignment: CrossAxisAlignment.start,
-                    // children: [
-                    // // Heading inside card
-                    // const Padding(
-                    // padding: EdgeInsets.only(bottom: 8),
-                    // child: Text(
-                    // "Daily Banking Report (DBR)",
-                    // style: TextStyle(
-                    // fontSize: 14,
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors
-                    // .white, // white text for visibility
-                    // ),
-                    // ),
-                    // ),
-//
-                    // Table(
-                    // border: TableBorder.all(
-                    // color: Colors.white,
-                    // width: 1.2,
-                    // ),
-                    // columnWidths: const {
-                    // 0: FlexColumnWidth(),
-                    // 1: FlexColumnWidth(),
-                    // },
-                    // children: [
-                    // TableRow(
-                    // decoration:
-                    // BoxDecoration(color: Colors.black26),
-                    // children: [
-                    // _buildTableHeader('Opening Balance'),
-                    // _buildTableHeader('Closing Balance'),
-                    // ],
-                    // ),
-                    // TableRow(
-                    // children: [
-                    // _buildTableCell(
-                    // '₹${totalAdjustedOpeningBalance1.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // _buildTableCell(
-                    // '₹${totalClosingBalance1.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // ],
-                    // ),
-                    // TableRow(
-                    // decoration:
-                    // BoxDecoration(color: Colors.black26),
-                    // children: [
-                    // _buildTableHeader('Today Credit'),
-                    // _buildTableHeader('Today Debit'),
-                    // ],
-                    // ),
-                    // TableRow(
-                    // children: [
-                    // _buildTableCell(
-                    // '₹${totalTodayPayments1.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // _buildTableCell(
-                    // '₹${totalTodayBanksAmount1.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ),
-                    // ),
-                    // ),
-                    // SizedBox(height: 4),
-                    // Card(
-                    // elevation: 4,
-                    // margin: const EdgeInsets.symmetric(vertical: 14),
-                    // shape: RoundedRectangleBorder(
-                    // borderRadius: BorderRadius.circular(12),
-                    // ),
-                    // child: Container(
-                    // decoration: BoxDecoration(
-                    // gradient: const LinearGradient(
-                    // colors: [
-                    // Color(0xFF02347C), // deep blue
-                    // Color(0xFF82E49D), // turquoise green
-                    // ],
-                    // begin: Alignment.topLeft,
-                    // end: Alignment.bottomRight,
-                    // ),
-                    // borderRadius: BorderRadius.circular(12),
-                    // ),
-                    // child: Padding(
-                    // padding: const EdgeInsets.all(12),
-                    // child: Column(
-                    // crossAxisAlignment: CrossAxisAlignment.start,
-                    // children: [
-                    // // Heading inside card
-                    // const Padding(
-                    // padding: EdgeInsets.only(bottom: 8),
-                    // child: Text(
-                    // "Monthly Banking Report (MBR)",
-                    // style: TextStyle(
-                    // fontSize: 14,
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors
-                    // .white, // white text for visibility
-                    // ),
-                    // ),
-                    // ),
-//
-                    // Table(
-                    // border: TableBorder.all(
-                    // color: Colors.white,
-                    // width: 1.2,
-                    // ),
-                    // columnWidths: const {
-                    // 0: FlexColumnWidth(),
-                    // 1: FlexColumnWidth(),
-                    // },
-                    // children: [
-                    // TableRow(
-                    // decoration:
-                    // BoxDecoration(color: Colors.black26),
-                    // children: [
-                    // _buildTableHeader('Opening Balance'),
-                    // _buildTableHeader('Closing Balance'),
-                    // ],
-                    // ),
-                    // TableRow(
-                    // children: [
-                    // _buildTableCell(
-                    // '₹${totalCurrentMonthOpeningBalance.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // _buildTableCell(
-                    // '₹${totalCurrentMonthClosingBalance.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // ],
-                    // ),
-                    // TableRow(
-                    // decoration:
-                    // BoxDecoration(color: Colors.black26),
-                    // children: [
-                    // _buildTableHeader('Monthly Credit'),
-                    // _buildTableHeader('Monthly Debit'),
-                    // ],
-                    // ),
-                    // TableRow(
-                    // children: [
-                    // _buildTableCell(
-                    // '₹${totalCurrentMonthPayments.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // _buildTableCell(
-                    // '₹${totalCurrentMonthExpenses.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ),
-                    // ),
-                    // ),
-//
-                    // Card(
-                    // elevation: 4,
-                    // margin: const EdgeInsets.symmetric(vertical: 14),
-                    // shape: RoundedRectangleBorder(
-                    // borderRadius: BorderRadius.circular(12),
-                    // ),
-                    // child: Container(
-                    // decoration: BoxDecoration(
-                    // gradient: const LinearGradient(
-                    // colors: [
-                    // Color(0xFF02347C), // deep blue
-                    // Color(0xFF82E49D), // turquoise green
-                    // ],
-                    // begin: Alignment.topLeft,
-                    // end: Alignment.bottomRight,
-                    // ),
-                    // borderRadius: BorderRadius.circular(12),
-                    // ),
-                    // child: Padding(
-                    // padding: const EdgeInsets.all(12),
-                    // child: Column(
-                    // crossAxisAlignment: CrossAxisAlignment.start,
-                    // children: [
-                    // // Heading inside card
-                    // const Padding(
-                    // padding: EdgeInsets.only(bottom: 8),
-                    // child: Text(
-                    // "DBR Including Transfers",
-                    // style: TextStyle(
-                    // fontSize: 14,
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors.white, // white for visibility
-                    // ),
-                    // ),
-                    // ),
-//
-                    // Table(
-                    // border: TableBorder.all(
-                    // color: Colors.white,
-                    // width: 1.2,
-                    // ),
-                    // columnWidths: const {
-                    // 0: FlexColumnWidth(),
-                    // 1: FlexColumnWidth(),
-                    // },
-                    // children: [
-                    // // Row 1: Opening | Closing
-                    // TableRow(
-                    // decoration:
-                    // BoxDecoration(color: Colors.black26),
-                    // children: [
-                    // _buildTableHeader('Opening Balance'),
-                    // _buildTableHeader('Closing Balance'),
-                    // ],
-                    // ),
-                    // TableRow(
-                    // children: [
-                    // _buildTableCell(
-                    // '₹${totalAdjustedOpeningBalance.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // _buildTableCell(
-                    // '₹${totalClosingBalance.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // ],
-                    // ),
-//
-                    // // Row 2: Credit | Debit
-                    // TableRow(
-                    // decoration:
-                    // BoxDecoration(color: Colors.black26),
-                    // children: [
-                    // _buildTableHeader('Today Credit'),
-                    // _buildTableHeader('Today Debit'),
-                    // ],
-                    // ),
-                    // TableRow(
-                    // children: [
-                    // _buildTableCell(
-                    // '₹${totalTodayPayments.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // _buildTableCell(
-                    // '₹${totalTodayBanksAmount.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ),
-                    // ),
-                    // ),
-                    // SizedBox(height: 4),
-                    // Card(
-                    // elevation: 4,
-                    // margin: const EdgeInsets.symmetric(vertical: 14),
-                    // shape: RoundedRectangleBorder(
-                    // borderRadius: BorderRadius.circular(12),
-                    // ),
-                    // child: Container(
-                    // decoration: BoxDecoration(
-                    // gradient: const LinearGradient(
-                    // colors: [
-                    // Color(0xFF02347C), // deep blue
-                    // Color(0xFF82E49D), // turquoise green
-                    // ],
-                    // begin: Alignment.topLeft,
-                    // end: Alignment.bottomRight,
-                    // ),
-                    // borderRadius: BorderRadius.circular(12),
-                    // ),
-                    // child: Padding(
-                    // padding: const EdgeInsets.all(12),
-                    // child: Column(
-                    // crossAxisAlignment: CrossAxisAlignment.start,
-                    // children: [
-                    // // Heading inside card
-                    // const Padding(
-                    // padding: EdgeInsets.only(bottom: 8),
-                    // child: Text(
-                    // "Monthly Banking Report Including Transfer (MBR)",
-                    // style: TextStyle(
-                    // fontSize: 14,
-                    // fontWeight: FontWeight.bold,
-                    // color: Colors
-                    // .white, // white text for visibility
-                    // ),
-                    // ),
-                    // ),
-//
-                    // Table(
-                    // border: TableBorder.all(
-                    // color: Colors.white,
-                    // width: 1.2,
-                    // ),
-                    // columnWidths: const {
-                    // 0: FlexColumnWidth(),
-                    // 1: FlexColumnWidth(),
-                    // },
-                    // children: [
-                    // TableRow(
-                    // decoration:
-                    // BoxDecoration(color: Colors.black26),
-                    // children: [
-                    // _buildTableHeader('Opening Balance'),
-                    // _buildTableHeader('Closing Balance'),
-                    // ],
-                    // ),
-                    // TableRow(
-                    // children: [
-                    // _buildTableCell(
-                    // '₹${currentMonthOpening.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // _buildTableCell(
-                    // '₹${currentMonthClosing.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // ],
-                    // ),
-                    // TableRow(
-                    // decoration:
-                    // BoxDecoration(color: Colors.black26),
-                    // children: [
-                    // _buildTableHeader('Monthly Credit'),
-                    // _buildTableHeader('Monthly Debit'),
-                    // ],
-                    // ),
-                    // TableRow(
-                    // children: [
-                    // _buildTableCell(
-                    // '₹${totalCurrentMonthPayments1.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // _buildTableCell(
-                    // '₹${totalCurrentMonthExpenses1.toStringAsFixed(2)}',
-                    // Colors.white,
-                    // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ],
-                    // ),
-                    // ),
-                    // ),
-                    // ),
-//
-                    // // Body// Header (only when there is data)
-                    // // if (parcelData.isNotEmpty)
-                    // //   const Padding(
-                    // //     padding: EdgeInsets.all(8.0),
-                    // //     child: Text(
-                    // //       "Parcel Service Report",
-                    // //       style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                    // //     ),
-                    // //   ),
-//
-                    // // // Body
-                    // // parcelData.isEmpty
-                    // //     ? Center(
-                    // //         child: Column(
-                    // //           mainAxisAlignment: MainAxisAlignment.center,
-                    // //           children: const [
-                    // //             Icon(Icons.error_outline,
-                    // //                 color: Color.fromARGB(255, 54, 184, 244), size: 50),
-                    // //             SizedBox(height: 10),
-                    // //             Text(
-                    // //               "data is Fetching....",
-                    // //               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    // //             ),
-                    // //           ],
-                    // //         ),
-                    // //       )
-                    // //     : ListView.separated(
-                    // //         shrinkWrap: true,
-                    // //         physics: const NeverScrollableScrollPhysics(), // 👈 outer page scrolls
-                    // //         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    // //         itemCount: parcelData.length,
-                    // //         separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    // //         itemBuilder: (context, index) {
-                    // //           final parcelService = parcelData.keys.elementAt(index);
-                    // //           final data = parcelData[parcelService] ?? {};
-                    // //           final totalWeightKg =
-                    // //               ((data['total_actual_weight'] ?? 0) as num).toDouble() / 1000.0;
-                    // //           final totWeightKg =
-                    // //               ((data['total_weight'] ?? 0) as num).toDouble() / 1000.0;
-                    // //           final double totalAmount =
-                    // //               ((data['total_parcel_amount'] ?? 0) as num).toDouble();
-                    // //           final double average =
-                    // //               totalWeightKg > 0 ? totalAmount / totalWeightKg : 0.0;
-//
-                    // //           String fmtKg(double v) => "${v.toStringAsFixed(2)} kg";
-                    // //           String fmtRs(double v) => "₹${v.toStringAsFixed(2)}";
-//
-                    // //           return Card(
-                    // //             elevation: 4,
-                    // //             shape:
-                    // //                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    // //             child: Container(
-                    // //               padding: const EdgeInsets.all(15),
-                    // //               decoration: BoxDecoration(
-                    // //                 borderRadius: BorderRadius.circular(12),
-                    // //                 gradient: const LinearGradient(
-                    // //                   colors: [
-                    // //                     Color.fromARGB(255, 100, 180, 216),
-                    // //                     Color.fromARGB(255, 64, 170, 251),
-                    // //                   ],
-                    // //                   begin: Alignment.topLeft,
-                    // //                   end: Alignment.bottomRight,
-                    // //                 ),
-                    // //               ),
-                    // //               child: Column(
-                    // //                 crossAxisAlignment: CrossAxisAlignment.start,
-                    // //                 children: [
-                    // //                   Row(children: const [
-                    // //                     Icon(Icons.local_shipping, color: Colors.white, size: 20),
-                    // //                     SizedBox(width: 10),
-                    // //                   ]),
-                    // //                   Row(children: [
-                    // //                     const SizedBox(width: 30),
-                    // //                     Text(
-                    // //                       parcelService.toUpperCase(),
-                    // //                       style: const TextStyle(
-                    // //                         fontSize: 14,
-                    // //                         fontWeight: FontWeight.bold,
-                    // //                         color: Colors.white,
-                    // //                       ),
-                    // //                     ),
-                    // //                   ]),
-                    // //                   const Divider(color: Colors.white70),
-                    // //                   const SizedBox(height: 10),
-                    // //                   Row(
-                    // //                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    // //                     children: [
-                    // //                       _buildInfoColumn("A/W", fmtKg(totalWeightKg)),
-                    // //                       _buildInfoColumn("Amount", fmtRs(totalAmount)),
-                    // //                       _buildInfoColumn("T/W", fmtKg(totWeightKg)),
-                    // //                       _buildInfoColumn(
-                    // //                           "Average", "${average.toStringAsFixed(2)} Rs"),
-                    // //                     ],
-                    // //                   ),
-                    // //                 ],
-                    // //               ),
-                    // //             ),
-                    // //           );
-                    // //         },
-                    // //       ),
+                    //   crossAxisAlignment: CrossAxisAlignment.start,
+                    //   children: [
+                    //     if (currentMonthFamilyWiseSummary
+                    //         .containsKey('Month Total'))
+                    //       GestureDetector(
+                    //         onTap: () {
+                    //           Navigator.push(
+                    //             context,
+                    //             MaterialPageRoute(
+                    //                 builder: (context) =>
+                    //                     PostofficeReport_monthly()),
+                    //           );
+                    //         },
+                    //         child: Builder(
+                    //           builder: (context) {
+                    //             var summary =
+                    //                 currentMonthFamilyWiseSummary['Month Total']!;
+                    //             return TweenAnimationBuilder<Offset>(
+                    //               duration: Duration(milliseconds: 300),
+                    //               tween: Tween<Offset>(
+                    //                   begin: Offset(1, 0), end: Offset(0, 0)),
+                    //               curve: Curves.easeOut,
+                    //               builder: (context, offset, child) {
+                    //                 return Transform.translate(
+                    //                     offset: offset * 10, child: child);
+                    //               },
+                    //               child: Container(
+                    //                 margin: EdgeInsets.symmetric(
+                    //                     vertical: 5, horizontal: 6),
+                    //                 padding: EdgeInsets.all(12),
+                    //                 decoration: BoxDecoration(
+                    //                   borderRadius: BorderRadius.circular(16),
+                    //                   gradient: LinearGradient(
+                    //                     colors: [
+                    //                       Color(0xFF02347C),
+                    //                       Color(0xFF82E49D)
+                    //                     ],
+                    //                     begin: Alignment.topLeft,
+                    //                     end: Alignment.bottomRight,
+                    //                   ),
+                    //                   boxShadow: [
+                    //                     BoxShadow(
+                    //                       color: Colors.black26,
+                    //                       blurRadius: 6,
+                    //                       offset: Offset(0, 2),
+                    //                     ),
+                    //                   ],
+                    //                 ),
+                    //                 child: Column(
+                    //                   crossAxisAlignment:
+                    //                       CrossAxisAlignment.start,
+                    //                   children: [
+                    //                     Text(
+                    //                       "Monthly Goods Movement (MGM)",
+                    //                       style: TextStyle(
+                    //                         fontSize: 15,
+                    //                         fontWeight: FontWeight.bold,
+                    //                         color: Colors.white,
+                    //                       ),
+                    //                     ),
+                    //                     Divider(color: Colors.white60),
+                    //                     SizedBox(height: 6),
+
+                    //                     // === TABLE: Metric | Value ===
+                    //                     Table(
+                    //                       border: TableBorder.all(
+                    //                           color: Colors.white60, width: 1),
+                    //                       columnWidths: const {
+                    //                         0: FlexColumnWidth(3), // Metric
+                    //                         1: FlexColumnWidth(2), // Value
+                    //                       },
+                    //                       defaultVerticalAlignment:
+                    //                           TableCellVerticalAlignment.middle,
+                    //                       children: [
+                    //                         // Header
+                    //                         // TableRow(
+                    //                         //   decoration: BoxDecoration(color: Colors.white24),
+                    //                         //   children: [
+                    //                         //     Padding(
+                    //                         //       padding: EdgeInsets.all(8),
+                    //                         //       child: Text(
+                    //                         //         "Metric",
+                    //                         //         style: TextStyle(
+                    //                         //           color: Colors.white,
+                    //                         //           fontWeight: FontWeight.bold,
+                    //                         //         ),
+                    //                         //       ),
+                    //                         //     ),
+                    //                         //     Padding(
+                    //                         //       padding: EdgeInsets.all(8),
+                    //                         //       child: Text(
+                    //                         //         "Value",
+                    //                         //         textAlign: TextAlign.right,
+                    //                         //         style: TextStyle(
+                    //                         //           color: Colors.white,
+                    //                         //           fontWeight: FontWeight.bold,
+                    //                         //         ),
+                    //                         //       ),
+                    //                         //     ),
+                    //                         //   ],
+                    //                         // ),
+
+                    //                         // Total Actual Weight
+                    //                         TableRow(children: [
+                    //                           Padding(
+                    //                             padding: EdgeInsets.all(8),
+                    //                             child: Row(
+                    //                               children: [
+                    //                                 Icon(Icons.scale,
+                    //                                     size: 16,
+                    //                                     color: Colors.white70),
+                    //                                 SizedBox(width: 6),
+                    //                                 Text("Total Actual Wt.",
+                    //                                     style: TextStyle(
+                    //                                         color: Colors.white)),
+                    //                               ],
+                    //                             ),
+                    //                           ),
+                    //                           Padding(
+                    //                             padding: EdgeInsets.all(8),
+                    //                             child: Text(
+                    //                               "${(monthTotalActualWeight / 1000).toStringAsFixed(2)} kg",
+                    //                               textAlign: TextAlign.right,
+                    //                               style: TextStyle(
+                    //                                   color: Colors.white,
+                    //                                   fontWeight:
+                    //                                       FontWeight.bold),
+                    //                             ),
+                    //                           ),
+                    //                         ]),
+
+                    //                         // Total Declared Weight
+                    //                         TableRow(children: [
+                    //                           Padding(
+                    //                             padding: EdgeInsets.all(8),
+                    //                             child: Row(
+                    //                               children: [
+                    //                                 Icon(Icons.monitor_weight,
+                    //                                     size: 16,
+                    //                                     color: Colors.white70),
+                    //                                 SizedBox(width: 6),
+                    //                                 Text("Total Wt.",
+                    //                                     style: TextStyle(
+                    //                                         color: Colors.white)),
+                    //                               ],
+                    //                             ),
+                    //                           ),
+                    //                           Padding(
+                    //                             padding: EdgeInsets.all(8),
+                    //                             child: Text(
+                    //                               "${(monthTotalWeight / 1000).toStringAsFixed(2)} kg",
+                    //                               textAlign: TextAlign.right,
+                    //                               style: TextStyle(
+                    //                                   color: Colors.white,
+                    //                                   fontWeight:
+                    //                                       FontWeight.bold),
+                    //                             ),
+                    //                           ),
+                    //                         ]),
+
+                    //                         // Total Parcel Amount
+                    //                         TableRow(children: [
+                    //                           Padding(
+                    //                             padding: EdgeInsets.all(8),
+                    //                             child: Row(
+                    //                               children: [
+                    //                                 Icon(
+                    //                                     Icons
+                    //                                         .local_shipping_outlined,
+                    //                                     size: 16,
+                    //                                     color: Colors.white70),
+                    //                                 SizedBox(width: 6),
+                    //                                 Text("Total Parcel Amount",
+                    //                                     style: TextStyle(
+                    //                                         color: Colors.white)),
+                    //                               ],
+                    //                             ),
+                    //                           ),
+                    //                           Padding(
+                    //                             padding: EdgeInsets.all(8),
+                    //                             child: Text(
+                    //                               "₹${monthTotalParcelAmount.toStringAsFixed(2)}",
+                    //                               textAlign: TextAlign.right,
+                    //                               style: TextStyle(
+                    //                                   color: Colors.white,
+                    //                                   fontWeight:
+                    //                                       FontWeight.bold),
+                    //                             ),
+                    //                           ),
+                    //                         ]),
+
+                    //                         // Average (₹ per kg)
+                    //                         TableRow(
+                    //                           decoration: BoxDecoration(
+                    //                               color: Colors.black26),
+                    //                           children: [
+                    //                             Padding(
+                    //                               padding: EdgeInsets.all(8),
+                    //                               child: Row(
+                    //                                 children: [
+                    //                                   Icon(Icons.shopping_bag,
+                    //                                       size: 16,
+                    //                                       color: Colors.white70),
+                    //                                   SizedBox(width: 6),
+                    //                                   Text("Average (₹/kg)",
+                    //                                       style: TextStyle(
+                    //                                           color: Colors.white,
+                    //                                           fontWeight:
+                    //                                               FontWeight
+                    //                                                   .w600)),
+                    //                                 ],
+                    //                               ),
+                    //                             ),
+                    //                             Padding(
+                    //                               padding: EdgeInsets.all(8),
+                    //                               child: Text(
+                    //                                 (monthTotalActualWeight > 0
+                    //                                         ? (monthTotalParcelAmount /
+                    //                                             (monthTotalActualWeight /
+                    //                                                 1000.0))
+                    //                                         : 0.0)
+                    //                                     .toStringAsFixed(2),
+                    //                                 textAlign: TextAlign.right,
+                    //                                 style: TextStyle(
+                    //                                     color: Colors.white,
+                    //                                     fontWeight:
+                    //                                         FontWeight.bold),
+                    //                               ),
+                    //                             ),
+                    //                           ],
+                    //                         ),
+                    //                       ],
+                    //                     ),
+                    //                   ],
+                    //                 ),
+                    //               ),
+                    //             );
+                    //           },
+                    //         ),
+                    //       ),
+                    //   ],
+                    // ),
+
+                    if (categoryWiseProducts.isNotEmpty)
+                      buildCategoryWiseCard(),
+
+                    dbrLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: todayBankReports.length,
+                            itemBuilder: (context, index) {
+                              final bank = todayBankReports[index];
+
+                              return GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          BankMonthlyReportPage(
+                                        bankId: int.tryParse(
+                                                bank["bank_id"].toString()) ??
+                                            0,
+                                        bankData: bank,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Card(
+                                  elevation: 4,
+                                  margin:
+                                      const EdgeInsets.symmetric(vertical: 10),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Color(0xFF02347C),
+                                          Color(0xFF82E49D),
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            "${bank["bank_name"]} (OD Account)",
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          Table(
+                                            border: TableBorder.all(
+                                              color: Colors.white,
+                                              width: 1.2,
+                                            ),
+                                            children: [
+                                              TableRow(
+                                                decoration: const BoxDecoration(
+                                                    color: Colors.black26),
+                                                children: [
+                                                  _buildTableHeader(
+                                                      'Opening Balance'),
+                                                  _buildTableHeader(
+                                                      'Closing Balance'),
+                                                ],
+                                              ),
+                                              TableRow(
+                                                children: [
+                                                  _buildTableCell(
+                                                    "₹${bank["opening_balance"].toStringAsFixed(2)}",
+                                                    Colors.white,
+                                                  ),
+                                                  _buildTableCell(
+                                                    "₹${bank["closing_balance"].toStringAsFixed(2)}",
+                                                    Colors.white,
+                                                  ),
+                                                ],
+                                              ),
+                                              TableRow(
+                                                decoration: const BoxDecoration(
+                                                    color: Colors.black26),
+                                                children: [
+                                                  _buildTableHeader(
+                                                      'Today Credit'),
+                                                  _buildTableHeader(
+                                                      'Today Debit'),
+                                                ],
+                                              ),
+                                              TableRow(
+                                                children: [
+                                                  _buildTableCell(
+                                                    "₹${bank["today_credit"].toStringAsFixed(2)}",
+                                                    Colors.white,
+                                                  ),
+                                                  _buildTableCell(
+                                                    "₹${bank["today_debit"].toStringAsFixed(2)}",
+                                                    Colors.white,
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+
+                    SizedBox(height: 4),
+                    Card(
+                      elevation: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFF02347C), // deep blue
+                              Color(0xFF82E49D), // turquoise green
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Heading inside card
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                  "Daily Banking Report (DBR)",
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors
+                                        .white, // white text for visibility
+                                  ),
+                                ),
+                              ),
+
+                              Table(
+                                border: TableBorder.all(
+                                  color: Colors.white,
+                                  width: 1.2,
+                                ),
+                                columnWidths: const {
+                                  0: FlexColumnWidth(),
+                                  1: FlexColumnWidth(),
+                                },
+                                children: [
+                                  TableRow(
+                                    decoration:
+                                        BoxDecoration(color: Colors.black26),
+                                    children: [
+                                      _buildTableHeader('Opening Balance'),
+                                      _buildTableHeader('Closing Balance'),
+                                    ],
+                                  ),
+                                  TableRow(
+                                    children: [
+                                      _buildTableCell(
+                                        '₹${totalAdjustedOpeningBalance1.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                      _buildTableCell(
+                                        '₹${totalClosingBalance1.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                    ],
+                                  ),
+                                  TableRow(
+                                    decoration:
+                                        BoxDecoration(color: Colors.black26),
+                                    children: [
+                                      _buildTableHeader('Today Credit'),
+                                      _buildTableHeader('Today Debit'),
+                                    ],
+                                  ),
+                                  TableRow(
+                                    children: [
+                                      _buildTableCell(
+                                        '₹${totalTodayPayments1.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                      _buildTableCell(
+                                        '₹${totalTodayBanksAmount1.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Card(
+                      elevation: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFF02347C), // deep blue
+                              Color(0xFF82E49D), // turquoise green
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Heading inside card
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                  "Monthly Banking Report (MBR)",
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors
+                                        .white, // white text for visibility
+                                  ),
+                                ),
+                              ),
+
+                              Table(
+                                border: TableBorder.all(
+                                  color: Colors.white,
+                                  width: 1.2,
+                                ),
+                                columnWidths: const {
+                                  0: FlexColumnWidth(),
+                                  1: FlexColumnWidth(),
+                                },
+                                children: [
+                                  TableRow(
+                                    decoration:
+                                        BoxDecoration(color: Colors.black26),
+                                    children: [
+                                      _buildTableHeader('Opening Balance'),
+                                      _buildTableHeader('Closing Balance'),
+                                    ],
+                                  ),
+                                  TableRow(
+                                    children: [
+                                      _buildTableCell(
+                                        '₹${totalCurrentMonthOpeningBalance.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                      _buildTableCell(
+                                        '₹${totalCurrentMonthClosingBalance.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                    ],
+                                  ),
+                                  TableRow(
+                                    decoration:
+                                        BoxDecoration(color: Colors.black26),
+                                    children: [
+                                      _buildTableHeader('Monthly Credit'),
+                                      _buildTableHeader('Monthly Debit'),
+                                    ],
+                                  ),
+                                  TableRow(
+                                    children: [
+                                      _buildTableCell(
+                                        '₹${totalCurrentMonthPayments.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                      _buildTableCell(
+                                        '₹${totalCurrentMonthExpenses.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    Card(
+                      elevation: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFF02347C), // deep blue
+                              Color(0xFF82E49D), // turquoise green
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Heading inside card
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                  "DBR Including Transfers",
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white, // white for visibility
+                                  ),
+                                ),
+                              ),
+
+                              Table(
+                                border: TableBorder.all(
+                                  color: Colors.white,
+                                  width: 1.2,
+                                ),
+                                columnWidths: const {
+                                  0: FlexColumnWidth(),
+                                  1: FlexColumnWidth(),
+                                },
+                                children: [
+                                  // Row 1: Opening | Closing
+                                  TableRow(
+                                    decoration:
+                                        BoxDecoration(color: Colors.black26),
+                                    children: [
+                                      _buildTableHeader('Opening Balance'),
+                                      _buildTableHeader('Closing Balance'),
+                                    ],
+                                  ),
+                                  TableRow(
+                                    children: [
+                                      _buildTableCell(
+                                        '₹${totalAdjustedOpeningBalance.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                      _buildTableCell(
+                                        '₹${totalClosingBalance.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                    ],
+                                  ),
+
+                                  // Row 2: Credit | Debit
+                                  TableRow(
+                                    decoration:
+                                        BoxDecoration(color: Colors.black26),
+                                    children: [
+                                      _buildTableHeader('Today Credit'),
+                                      _buildTableHeader('Today Debit'),
+                                    ],
+                                  ),
+                                  TableRow(
+                                    children: [
+                                      _buildTableCell(
+                                        '₹${totalTodayPayments.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                      _buildTableCell(
+                                        '₹${totalTodayBanksAmount.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Card(
+                      elevation: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFF02347C), // deep blue
+                              Color(0xFF82E49D), // turquoise green
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Heading inside card
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                  "Monthly Banking Report Including Transfer (MBR)",
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors
+                                        .white, // white text for visibility
+                                  ),
+                                ),
+                              ),
+
+                              Table(
+                                border: TableBorder.all(
+                                  color: Colors.white,
+                                  width: 1.2,
+                                ),
+                                columnWidths: const {
+                                  0: FlexColumnWidth(),
+                                  1: FlexColumnWidth(),
+                                },
+                                children: [
+                                  TableRow(
+                                    decoration:
+                                        BoxDecoration(color: Colors.black26),
+                                    children: [
+                                      _buildTableHeader('Opening Balance'),
+                                      _buildTableHeader('Closing Balance'),
+                                    ],
+                                  ),
+                                  TableRow(
+                                    children: [
+                                      _buildTableCell(
+                                        '₹${currentMonthOpening.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                      _buildTableCell(
+                                        '₹${currentMonthClosing.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                    ],
+                                  ),
+                                  TableRow(
+                                    decoration:
+                                        BoxDecoration(color: Colors.black26),
+                                    children: [
+                                      _buildTableHeader('Monthly Credit'),
+                                      _buildTableHeader('Monthly Debit'),
+                                    ],
+                                  ),
+                                  TableRow(
+                                    children: [
+                                      _buildTableCell(
+                                        '₹${totalCurrentMonthPayments1.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                      _buildTableCell(
+                                        '₹${totalCurrentMonthExpenses1.toStringAsFixed(2)}',
+                                        Colors.white,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Body// Header (only when there is data)
+                    // if (parcelData.isNotEmpty)
+                    //   const Padding(
+                    //     padding: EdgeInsets.all(8.0),
+                    //     child: Text(
+                    //       "Parcel Service Report",
+                    //       style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    //     ),
+                    //   ),
+
+                    // // Body
+                    // parcelData.isEmpty
+                    //     ? Center(
+                    //         child: Column(
+                    //           mainAxisAlignment: MainAxisAlignment.center,
+                    //           children: const [
+                    //             Icon(Icons.error_outline,
+                    //                 color: Color.fromARGB(255, 54, 184, 244), size: 50),
+                    //             SizedBox(height: 10),
+                    //             Text(
+                    //               "data is Fetching....",
+                    //               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    //             ),
+                    //           ],
+                    //         ),
+                    //       )
+                    //     : ListView.separated(
+                    //         shrinkWrap: true,
+                    //         physics: const NeverScrollableScrollPhysics(), // 👈 outer page scrolls
+                    //         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    //         itemCount: parcelData.length,
+                    //         separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    //         itemBuilder: (context, index) {
+                    //           final parcelService = parcelData.keys.elementAt(index);
+                    //           final data = parcelData[parcelService] ?? {};
+                    //           final totalWeightKg =
+                    //               ((data['total_actual_weight'] ?? 0) as num).toDouble() / 1000.0;
+                    //           final totWeightKg =
+                    //               ((data['total_weight'] ?? 0) as num).toDouble() / 1000.0;
+                    //           final double totalAmount =
+                    //               ((data['total_parcel_amount'] ?? 0) as num).toDouble();
+                    //           final double average =
+                    //               totalWeightKg > 0 ? totalAmount / totalWeightKg : 0.0;
+
+                    //           String fmtKg(double v) => "${v.toStringAsFixed(2)} kg";
+                    //           String fmtRs(double v) => "₹${v.toStringAsFixed(2)}";
+
+                    //           return Card(
+                    //             elevation: 4,
+                    //             shape:
+                    //                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    //             child: Container(
+                    //               padding: const EdgeInsets.all(15),
+                    //               decoration: BoxDecoration(
+                    //                 borderRadius: BorderRadius.circular(12),
+                    //                 gradient: const LinearGradient(
+                    //                   colors: [
+                    //                     Color.fromARGB(255, 100, 180, 216),
+                    //                     Color.fromARGB(255, 64, 170, 251),
+                    //                   ],
+                    //                   begin: Alignment.topLeft,
+                    //                   end: Alignment.bottomRight,
+                    //                 ),
+                    //               ),
+                    //               child: Column(
+                    //                 crossAxisAlignment: CrossAxisAlignment.start,
+                    //                 children: [
+                    //                   Row(children: const [
+                    //                     Icon(Icons.local_shipping, color: Colors.white, size: 20),
+                    //                     SizedBox(width: 10),
+                    //                   ]),
+                    //                   Row(children: [
+                    //                     const SizedBox(width: 30),
+                    //                     Text(
+                    //                       parcelService.toUpperCase(),
+                    //                       style: const TextStyle(
+                    //                         fontSize: 14,
+                    //                         fontWeight: FontWeight.bold,
+                    //                         color: Colors.white,
+                    //                       ),
+                    //                     ),
+                    //                   ]),
+                    //                   const Divider(color: Colors.white70),
+                    //                   const SizedBox(height: 10),
+                    //                   Row(
+                    //                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    //                     children: [
+                    //                       _buildInfoColumn("A/W", fmtKg(totalWeightKg)),
+                    //                       _buildInfoColumn("Amount", fmtRs(totalAmount)),
+                    //                       _buildInfoColumn("T/W", fmtKg(totWeightKg)),
+                    //                       _buildInfoColumn(
+                    //                           "Average", "${average.toStringAsFixed(2)} Rs"),
+                    //                     ],
+                    //                   ),
+                    //                 ],
+                    //               ),
+                    //             ),
+                    //           );
+                    //         },
+                    //       ),
                   ],
                 ),
               ),

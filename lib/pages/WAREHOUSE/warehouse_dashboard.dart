@@ -5,6 +5,7 @@ import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_services.dart';
 import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
 import 'package:beposoft/pages/ACCOUNTS/order_list.dart';
+import 'package:beposoft/pages/ADMIN/localpurchaseorderscreen.dart';
 import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_order_view.dart';
 import 'package:beposoft/pages/logout_hekper.dart';
@@ -843,6 +844,13 @@ ListTile(
     await fetchInboxMailCount();
   },
 ),
+   _buildDropdownTile(context, 'Purchase', [
+                    'Product List',
+                    // 'Purchase request',
+                    // 'Purchase request List',
+                    'Product Add',
+                  ]),
+            
                 Divider(),
                 _buildDropdownTile(context, 'Delivery Note', [
                   'Delivery Note List(All)',
@@ -867,6 +875,42 @@ ListTile(
                   },
                 ),
                 Divider(),
+                    _buildDropdownTile(context, 'Reports', [
+                    // 'Sales Report',
+                    // 'Sales Report Excel',
+                    // 'GST Report',
+                    'Product Stock Report',
+                    // 'Order Items Excel Report',
+                    // 'Shipping Address Excel Report',
+                    // 'Daily Product Sold Report',
+                    // 'All Division Product Sale Report',
+                    // 'Cycling & Skating Monthly Excel',
+                    // 'Cycling & Skating Daily Excel',
+                    // 'Tracking Report',
+                    // 'Credit Sales Report',
+                    // 'COD Sales Report',
+                    // 'Statewise Sales Report',
+                    // 'Expence Report',
+                    // 'Delivery Report',
+                    'Product Sale Report',
+                    'Stock Report',
+                    'Damaged Stock',
+                    // 'Finance Report',
+                    // 'Actual Delivery Report',
+                    // 'Order Comparison Report',
+                  ]),
+
+                         ListTile(
+                    leading: Icon(Icons.dashboard),
+                    title: Text('Local Purchase Order'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  LocalPurchaseOrderScreen()));
+                    },
+                  ),
                 ListTile(
                   leading: const Icon(Icons.logout),
                   title: const Text('Logout'),

@@ -142,7 +142,7 @@ class _loginState extends State<login> {
             targetPage = bdo_dashbord();
             break;
           case 'COO':
-            targetPage = admin_dashboard();
+            targetPage = ceo_dashboard();
             break;
           case 'CEO':
             targetPage = ceo_dashboard();

@@ -71,7 +71,7 @@ class _OrderReviewState extends State<OrderReview> {
   bool showParcelServiceDropdown = false;
   final TextEditingController parcelServiceNoteController =
       TextEditingController();
-
+List<Map<String, dynamic>> commissionReceipts = [];
   String? currentOrderStatus; // REAL status from API
   bool statusSubmitted = false; // Track submit action
   String normalizePayStatus(String? value) {
@@ -3205,6 +3205,14 @@ if (dept == "BDM" || dept == "SD" || dept =="CSO") {
 
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
+        final List<Map<String, dynamic>> tempCommissionReceipts = [];
+
+for (final commission in parsed['commission_receipts'] ?? []) {
+  tempCommissionReceipts.add({
+    'amount': commission['amount'],
+    'payment_receipt': commission['payment_receipt'],
+  });
+}
         List<Map<String, dynamic>> tempGrvList = [];
 
         for (var grv in parsed['grv'] ?? []) {
@@ -3361,6 +3369,7 @@ if (dept == "BDM" || dept == "SD" || dept =="CSO") {
         if (remainingAmount < 0) remainingAmount = 0;
 
         setState(() {
+          commissionReceipts = tempCommissionReceipts;
           grvList = tempGrvList;
 
           items = orderList;
@@ -6858,6 +6867,122 @@ if (dept == "BDM" || dept == "SD" || dept =="CSO") {
                 ),
               ),
               SizedBox(height: 10),
+
+              Padding(
+  padding: const EdgeInsets.only(
+    left: 20,
+    right: 20,
+    top: 10,
+  ),
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (commissionReceipts.isNotEmpty)
+        const Text(
+          'Commission Receipt Details',
+          style: TextStyle(
+            color: Color.fromARGB(255, 0, 0, 0),
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      if (commissionReceipts.isNotEmpty)
+        const SizedBox(height: 10),
+      if (commissionReceipts.isNotEmpty)
+        Table(
+          border: TableBorder.all(color: Colors.grey),
+          columnWidths: const <int, TableColumnWidth>{
+            0: FlexColumnWidth(),
+            1: FlexColumnWidth(),
+          },
+          children: [
+            const TableRow(
+              children: [
+                Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text(
+                    'Receipt No',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text(
+                    'Amount',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            for (var commission in commissionReceipts)
+              TableRow(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Text(
+                      commission['payment_receipt']?.toString() ?? 'N/A',
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Text(
+                      commission['amount']?.toString() ?? 'N/A',
+                    ),
+                  ),
+                ],
+              ),
+            TableRow(
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+              ),
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text(
+                    'Total',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    commissionReceipts.fold<double>(
+                      0.0,
+                      (sum, item) {
+                        final amount = item['amount'];
+
+                        return sum +
+                            ((amount is num)
+                                ? amount.toDouble()
+                                : double.tryParse(
+                                      amount?.toString() ?? '0',
+                                    ) ??
+                                    0.0);
+                      },
+                    ).toStringAsFixed(2),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        )
+      else
+        const Text(
+          'No commission receipt details available.',
+          style: TextStyle(color: Colors.grey),
+        ),
+    ],
+  ),
+),
               Center(
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),

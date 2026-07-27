@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:beposoft/pages/ACCOUNTS/csodashboard.dart';
 import 'package:beposoft/pages/ACCOUNTS/dashboard.dart';
 import 'package:beposoft/pages/ADMIN/ceo_dashboard.dart';
 import 'package:beposoft/pages/BDM/bdm_dshboard.dart';
@@ -92,16 +93,16 @@ class _AllMembersPageState extends State<AllMembersPage> {
             );
 
 }
-else if(dep=="HR" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => HrDashboard()), // Replace AnotherPage with your target page
-            );
-}
 else if(dep=="BDM" ){
    Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => bdm_dashbord()), // Replace AnotherPage with your target page
+            );
+}
+else if(dep=="HR" ){
+   Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => HrDashboard()), // Replace AnotherPage with your target page
             );
 }
 else if(dep=="warehouse" ){
@@ -109,7 +110,18 @@ else if(dep=="warehouse" ){
               context,
               MaterialPageRoute(builder: (context) => WarehouseDashboard()), // Replace AnotherPage with your target page
             );
-}
+}else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
+      );
+    }
+    else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => cso_dashboard()),
+      );
+    }
 else if(dep=="CEO" ){
    Navigator.pushReplacement(
               context,
@@ -334,6 +346,61 @@ else if(dep=="Warehouse Admin" ){
       return [];
     }
   }
+
+  Future<void> deleteTeamMember(int memberId) async {
+  final bool? confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text("Delete Member"),
+      content: const Text(
+        "Are you sure you want to remove this team member?",
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text("Cancel"),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text("Delete"),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm != true) return;
+
+  try {
+    final token = await getToken();
+    if (token == null) throw Exception("Token missing");
+
+    final response = await http.delete(
+      Uri.parse(
+        "${baseUrl}staff/attendance/team/members/edit/$memberId/",
+      ),
+      headers: authHeaders(token),
+    );
+
+    final body =
+        response.body.isNotEmpty ? jsonDecode(response.body) : {};
+
+    if (response.statusCode == 200 ||
+        response.statusCode == 204) {
+      showSuccess("Member deleted successfully");
+      await fetchMembers();
+    } else {
+      showError(
+        body["message"]?.toString() ?? "Failed to delete member",
+      );
+    }
+  } catch (_) {
+    showError("Failed to delete member");
+  }
+}
 
   Future<void> addTeamMember() async {
     if (!addFormKey.currentState!.validate()) return;
@@ -892,49 +959,110 @@ else if(dep=="Warehouse Admin" ){
     );
   }
 
-  Widget buildMemberRow(Map<String, dynamic> member, int index) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: const Color(0xFFF1F5F9),
-            child: Text(
-              "${index + 1}",
-              style: const TextStyle(
-                color: Color(0xFF475569),
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-              ),
+ Widget buildMemberRow(Map<String, dynamic> member, int index) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    child: Row(
+      children: [
+        CircleAvatar(
+          radius: 16,
+          backgroundColor: const Color(0xFFF1F5F9),
+          child: Text(
+            "${index + 1}",
+            style: const TextStyle(
+              color: Color(0xFF475569),
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              member["member_name"]?.toString() ?? "-",
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFF1E293B),
-                fontWeight: FontWeight.w900,
-              ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            member["member_name"]?.toString() ?? "-",
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+            style: const TextStyle(
+              color: Color(0xFF1E293B),
+              fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(width: 8),
-          TextButton.icon(
-            onPressed: () => openEditModal(member),
-            icon: const Icon(Icons.edit_rounded, size: 17),
-            label: const Text("Edit"),
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFB45309),
-              textStyle: const TextStyle(fontWeight: FontWeight.w900),
-            ),
+        ),
+        const SizedBox(width: 8),
+        PopupMenuButton<String>(
+          tooltip: "Actions",
+          icon: const Icon(
+            Icons.more_vert_rounded,
+            color: Color(0xFF475569),
           ),
-        ],
-      ),
-    );
-  }
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          onSelected: (value) {
+            if (value == "edit") {
+              openEditModal(member);
+            } else if (value == "delete") {
+              final int? memberId = member["id"] is int
+                  ? member["id"]
+                  : int.tryParse(member["id"].toString());
 
+              if (memberId == null) {
+                showError("Member id missing");
+                return;
+              }
+
+              deleteTeamMember(memberId);
+            }
+          },
+          itemBuilder: (context) {
+            return [
+              const PopupMenuItem<String>(
+                value: "edit",
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.edit_rounded,
+                      size: 20,
+                      color: Color(0xFFB45309),
+                    ),
+                    SizedBox(width: 12),
+                    Text(
+                      "Edit",
+                      style: TextStyle(
+                        color: Color(0xFFB45309),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: "delete",
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.delete_rounded,
+                      size: 20,
+                      color: Colors.red,
+                    ),
+                    SizedBox(width: 12),
+                    Text(
+                      "Delete",
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ];
+          },
+        ),
+      ],
+    ),
+  );
+}
   Widget buildCountBadge(String value) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),

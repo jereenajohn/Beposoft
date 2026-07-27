@@ -64,6 +64,17 @@ class _Product_ListState extends State<Product_List>
   String selectedCategoryId = "";
   String selectedCategoryName = "All Categories";
 
+  List<Map<String, dynamic>> mainCategories = <Map<String, dynamic>>[
+    <String, dynamic>{
+      "id": "",
+      "name": "All Main Categories",
+    },
+  ];
+
+  String selectedMainCategoryId = "";
+  String selectedMainCategoryName = "All Main Categories";
+  bool isLoadingMainCategories = false;
+
   bool isLoading = false;
   bool isPageLoading = false;
   bool hasMoreData = true;
@@ -89,6 +100,7 @@ class _Product_ListState extends State<Product_List>
     _scrollController.addListener(_handlePaginationScroll);
 
     getFamily();
+    getMainCategories();
     initdata();
   }
 
@@ -589,6 +601,10 @@ Uri _buildProductListUri({
     queryParameters["category_id"] = selectedCategoryId;
   }
 
+  if (selectedMainCategoryId.isNotEmpty) {
+    queryParameters["main_category_id"] = selectedMainCategoryId;
+  }
+
   if (selectpurchasetype == "International" ||
       selectpurchasetype == "Local") {
     queryParameters["purchase_type"] = selectpurchasetype;
@@ -606,6 +622,190 @@ Uri _buildProductListUri({
     queryParameters: queryParameters.isEmpty ? null : queryParameters,
   );
 }
+
+  List<dynamic> _extractMainCategoryList(dynamic decoded) {
+    if (decoded is List) {
+      return decoded;
+    }
+
+    if (decoded is! Map) {
+      return <dynamic>[];
+    }
+
+    final dynamic data = decoded['data'];
+    final dynamic results = decoded['results'];
+    final dynamic categoriesData = decoded['categories'];
+
+    if (data is List) {
+      return data;
+    }
+
+    if (results is List) {
+      return results;
+    }
+
+    if (categoriesData is List) {
+      return categoriesData;
+    }
+
+    if (data is Map) {
+      final dynamic nested =
+          data['data'] ?? data['results'] ?? data['categories'];
+
+      if (nested is List) {
+        return nested;
+      }
+    }
+
+    if (results is Map) {
+      final dynamic nested =
+          results['data'] ?? results['results'] ?? results['categories'];
+
+      if (nested is List) {
+        return nested;
+      }
+    }
+
+    return <dynamic>[];
+  }
+
+  Future<void> getMainCategories() async {
+    if (isLoadingMainCategories) return;
+
+    if (mounted) {
+      setState(() {
+        isLoadingMainCategories = true;
+      });
+    }
+
+    try {
+      final String? token = await getTokenFromPrefs();
+
+      final http.Response response = await http.get(
+        Uri.parse('$api/api/main/categories/add/'),
+        headers: <String, String>{
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to load main categories (${response.statusCode})',
+            ),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+
+        return;
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      final List<dynamic> rawCategories =
+          _extractMainCategoryList(decoded);
+
+      final List<Map<String, dynamic>> loadedMainCategories =
+          <Map<String, dynamic>>[
+        <String, dynamic>{
+          'id': '',
+          'name': 'All Main Categories',
+        },
+      ];
+
+      for (final dynamic item in rawCategories) {
+        if (item is! Map) continue;
+
+        final dynamic rawId = item['id'];
+        final String id = rawId?.toString() ?? '';
+        final String name = item['name']?.toString().trim() ?? '';
+
+        if (id.isEmpty || name.isEmpty) continue;
+
+        loadedMainCategories.add(
+          <String, dynamic>{
+            'id': id,
+            'name': name,
+          },
+        );
+      }
+
+      loadedMainCategories.sort(
+        (Map<String, dynamic> a, Map<String, dynamic> b) {
+          if (a['id'].toString().isEmpty) return -1;
+          if (b['id'].toString().isEmpty) return 1;
+
+          return a['name']
+              .toString()
+              .toLowerCase()
+              .compareTo(
+                b['name'].toString().toLowerCase(),
+              );
+        },
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        mainCategories = loadedMainCategories;
+
+        final bool selectedStillExists =
+            mainCategories.any(
+          (Map<String, dynamic> category) =>
+              category['id'].toString() == selectedMainCategoryId,
+        );
+
+        if (!selectedStillExists) {
+          selectedMainCategoryId = '';
+          selectedMainCategoryName = 'All Main Categories';
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Something went wrong while loading main categories: $error',
+          ),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoadingMainCategories = false;
+        });
+      }
+    }
+  }
+
+  void filterByMainCategory(String mainCategoryId) {
+    final Map<String, dynamic> selectedMainCategory =
+        mainCategories.firstWhere(
+      (Map<String, dynamic> category) {
+        return category['id'].toString() == mainCategoryId;
+      },
+      orElse: () => <String, dynamic>{
+        'id': '',
+        'name': 'All Main Categories',
+      },
+    );
+
+    setState(() {
+      selectedMainCategoryId =
+          selectedMainCategory['id']?.toString() ?? '';
+      selectedMainCategoryName =
+          selectedMainCategory['name']?.toString() ??
+              'All Main Categories';
+    });
+
+    fetchProductList(refresh: true);
+  }
 
   Future<void> getFamily() async {
     try {
@@ -905,6 +1105,9 @@ Uri _buildProductListUri({
       selectedCategoryId = "";
       selectedCategoryName = "All Categories";
 
+      selectedMainCategoryId = "";
+      selectedMainCategoryName = "All Main Categories";
+
       categories = <Map<String, dynamic>>[
         <String, dynamic>{
           "id": "",
@@ -927,6 +1130,7 @@ Uri _buildProductListUri({
     });
 
     await getFamily();
+    await getMainCategories();
     await fetchProductList(refresh: true);
   }
 
@@ -1706,6 +1910,8 @@ Uri _buildProductListUri({
             ],
           ),
           const SizedBox(height: 10),
+          _buildMainCategoryDropdown(),
+          const SizedBox(height: 10),
           Row(
             children: <Widget>[
               Icon(
@@ -1918,6 +2124,155 @@ Uri _buildProductListUri({
                 },
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMainCategoryDropdown() {
+    final bool selectedExists = mainCategories.any(
+      (Map<String, dynamic> category) {
+        return category['id'].toString() ==
+            selectedMainCategoryId;
+      },
+    );
+
+    final String dropdownValue =
+        selectedExists ? selectedMainCategoryId : '';
+
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 11),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFFE5E7EB),
+        ),
+      ),
+      child: Row(
+        children: <Widget>[
+          const Icon(
+            Icons.account_tree_outlined,
+            color: primaryBlue,
+            size: 18,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: isLoadingMainCategories
+                ? const Row(
+                    children: <Widget>[
+                      SizedBox(
+                        width: 17,
+                        height: 17,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: primaryBlue,
+                        ),
+                      ),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Loading main categories...',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: dropdownValue,
+                      isExpanded: true,
+                      icon: const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: primaryBlue,
+                      ),
+                      dropdownColor: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      style: const TextStyle(
+                        color: darkText,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      selectedItemBuilder:
+                          (BuildContext context) {
+                        return mainCategories.map(
+                          (Map<String, dynamic> category) {
+                            final String name =
+                                category['name']?.toString() ??
+                                    'All Main Categories';
+
+                            return Column(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.center,
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  'Main Category',
+                                  maxLines: 1,
+                                  overflow:
+                                      TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color:
+                                        Colors.grey.shade500,
+                                    fontSize: 9.5,
+                                    fontWeight:
+                                        FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  name,
+                                  maxLines: 1,
+                                  overflow:
+                                      TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: darkText,
+                                    fontSize: 11.5,
+                                    fontWeight:
+                                        FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ).toList();
+                      },
+                      items: mainCategories.map(
+                        (Map<String, dynamic> category) {
+                          final String id =
+                              category['id']?.toString() ?? '';
+                          final String name =
+                              category['name']?.toString() ??
+                                  'All Main Categories';
+
+                          return DropdownMenuItem<String>(
+                            value: id,
+                            child: Text(
+                              name,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          );
+                        },
+                      ).toList(),
+                      onChanged: (String? value) {
+                        if (value != null) {
+                          filterByMainCategory(value);
+                        }
+                      },
+                    ),
+                  ),
           ),
         ],
       ),
