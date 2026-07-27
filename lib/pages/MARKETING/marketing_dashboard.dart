@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
+import 'package:beposoft/pages/ADMIN/localpurchaseorderscreen.dart';
 import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
 import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
 import 'package:beposoft/pages/MARKETING/bepocart_new_order_list.dart';
@@ -1061,6 +1062,17 @@ class _marketing_dashboardState extends State<marketing_dashboard>
                   },
                 ),
                 Divider(),
+                       ListTile(
+                    leading: Icon(Icons.dashboard),
+                    title: Text('Local Purchase Order'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  LocalPurchaseOrderScreen()));
+                    },
+                  ),
                 ListTile(
                   leading: const Icon(Icons.logout_rounded),
                   title: const Text('Logout'),

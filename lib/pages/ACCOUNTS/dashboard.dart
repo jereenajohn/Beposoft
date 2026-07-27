@@ -6,6 +6,8 @@ import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
 import 'package:beposoft/pages/ADMIN/add_attendance.dart';
 import 'package:beposoft/pages/ADMIN/add_staffwise_department.dart';
 import 'package:beposoft/pages/ADMIN/add_team_staff.dart';
+import 'package:beposoft/pages/ADMIN/all_local_purchases_screen.dart';
+import 'package:beposoft/pages/ADMIN/localpurchaseorderscreen.dart';
 import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
 import 'package:beposoft/pages/auth_status_checker.dart';
 
@@ -1041,6 +1043,7 @@ class _admin_dashboardState extends State<dashboard>
                   'Order Recipt',
                   'COD Transfer',
                   'COD Transfer List',
+                  'Add Commission Recipt',
                 ]),
                 _buildDropdownTile(context, 'Refund', [
                   'Add Refund',
@@ -1094,6 +1097,28 @@ class _admin_dashboardState extends State<dashboard>
                 _buildDropdownTile(context, 'Daily Sales Reports',
                     ['Add Team Members', 'Add Team', 'Team wise Report']),
 
+                           ListTile(
+                    leading: Icon(Icons.dashboard),
+                    title: Text('Local Purchase Order'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  LocalPurchaseOrderScreen()));
+                    },
+                  ),
+              ListTile(
+                    leading: Icon(Icons.dashboard),
+                    title: Text('All Local Purchase Orders'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  AllLocalPurchaseOrderScreen()));
+                    },
+                  ),
                 // if (isManager)
                 //   ListTile(
                 //     title: Text('Add Attendance Department'),

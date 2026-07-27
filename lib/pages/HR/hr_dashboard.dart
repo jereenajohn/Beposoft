@@ -4,6 +4,8 @@ import 'dart:async';
 import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
 import 'package:beposoft/pages/ADMIN/add_attendance.dart';
+import 'package:beposoft/pages/ADMIN/all_local_purchases_screen.dart';
+import 'package:beposoft/pages/ADMIN/localpurchaseorderscreen.dart';
 import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
 import 'package:beposoft/pages/api.dart';
 import 'package:beposoft/pages/auth_status_checker.dart';
@@ -605,6 +607,7 @@ void dispose() {
                     // 'View Leave List',
                   ]),
               // Divider(),
+                
               ListTile(
                 title: Text('Staffs'),
                 onTap: () {
@@ -686,6 +689,29 @@ void dispose() {
               //     Navigator.pop(context); // Close the drawer
               //   },
               // ),
+                   ListTile(
+                    leading: Icon(Icons.dashboard),
+                    title: Text('Add Local Purchase Order'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  LocalPurchaseOrderScreen()));
+                    },
+                  ),
+
+                            ListTile(
+                    leading: Icon(Icons.dashboard),
+                    title: Text('All Local Purchase Orders'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  AllLocalPurchaseOrderScreen()));
+                    },
+                  ),
               Divider(),
               ListTile(
                 leading: const Icon(Icons.logout),

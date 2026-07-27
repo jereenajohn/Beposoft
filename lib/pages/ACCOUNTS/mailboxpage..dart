@@ -100,26 +100,25 @@ class _StaffMailPageState extends State<StaffMailPage>
   bool isReplyMail(dynamic mail) {
     if (mail is! Map) return false;
 
-    final dynamic parentMail =
-        mail['parent_mail'] ??
+    final dynamic parentMail = mail['parent_mail'] ??
         mail['parent'] ??
         mail['reply_to'] ??
         mail['replied_to'] ??
         mail['original_mail'];
 
     if (parentMail != null) {
-    if (parentMail is int && parentMail > 0) return true;
+      if (parentMail is int && parentMail > 0) return true;
 
-    if (parentMail is String &&
-        parentMail.trim().isNotEmpty &&
-        parentMail.trim() != '0') {
-      return true;
-    }
+      if (parentMail is String &&
+          parentMail.trim().isNotEmpty &&
+          parentMail.trim() != '0') {
+        return true;
+      }
 
-    if (parentMail is Map && parentMail.isNotEmpty) {
-      return true;
+      if (parentMail is Map && parentMail.isNotEmpty) {
+        return true;
+      }
     }
-  }
 
     final String subject =
         (mail['subject'] ?? '').toString().trim().toLowerCase();
@@ -131,29 +130,32 @@ class _StaffMailPageState extends State<StaffMailPage>
     if (mail is! Map) return false;
 
     if (mail.containsKey('is_read')) {
-    return mail['is_read'] != true;
-  }
+      return mail['is_read'] != true;
+    }
 
-  if (mail.containsKey('read')) {
-    return mail['read'] != true;
-  }
+    if (mail.containsKey('read')) {
+      return mail['read'] != true;
+    }
 
-  if (mail.containsKey('read_at')) {
-    final dynamic readAt = mail['read_at'];
+    if (mail.containsKey('read_at')) {
+      final dynamic readAt = mail['read_at'];
 
-    return readAt == null || readAt.toString().trim().isEmpty;
-  }
+      return readAt == null || readAt.toString().trim().isEmpty;
+    }
 
     return false;
   }
 
   String getMailDisplaySubject(dynamic mail) {
-    final String subject =
-        (mail['subject'] ?? '').toString().trim();
+    if (mail == null || mail is! Map) {
+      return 'No subject';
+    }
+
+    final String subject = (mail['subject'] ?? '').toString().trim();
 
     if (subject.isEmpty) {
-    return isReplyMail(mail) ? 'Reply message' : 'No subject';
-  }
+      return isReplyMail(mail) ? 'Reply message' : 'No subject';
+    }
 
     return subject;
   }
@@ -210,8 +212,7 @@ class _StaffMailPageState extends State<StaffMailPage>
   }
 
   List<dynamic> extractStaffData(dynamic decoded) {
-    final dynamic possibleData =
-        decoded?['results']?['data'] ??
+    final dynamic possibleData = decoded?['results']?['data'] ??
         decoded?['data']?['data'] ??
         decoded?['results'] ??
         decoded?['data'];
@@ -220,8 +221,7 @@ class _StaffMailPageState extends State<StaffMailPage>
   }
 
   String? extractNextPageUrl(dynamic decoded) {
-    final dynamic next =
-        decoded?['next'] ??
+    final dynamic next = decoded?['next'] ??
         decoded?['results']?['next'] ??
         decoded?['links']?['next'];
 
@@ -235,17 +235,14 @@ class _StaffMailPageState extends State<StaffMailPage>
   }
 
   int? extractStaffTotalCount(dynamic decoded) {
-    final dynamic rawCount =
-        decoded?['count'] ??
+    final dynamic rawCount = decoded?['count'] ??
         decoded?['results']?['count'] ??
         decoded?['total'] ??
         decoded?['results']?['total'];
 
     if (rawCount == null) return null;
 
-    return rawCount is int
-        ? rawCount
-        : int.tryParse(rawCount.toString());
+    return rawCount is int ? rawCount : int.tryParse(rawCount.toString());
   }
 
   Future<void> fetchStaffs([String search = '']) async {
@@ -537,15 +534,15 @@ class _StaffMailPageState extends State<StaffMailPage>
 
       for (final int recipientId in toIds) {
         request.files.add(http.MultipartFile.fromString(
-          'recipients', recipientId.toString()));
+            'recipients', recipientId.toString()));
       }
       for (final int recipientId in ccIds) {
         request.files.add(http.MultipartFile.fromString(
-          'cc_recipients', recipientId.toString()));
+            'cc_recipients', recipientId.toString()));
       }
       for (final int recipientId in bccIds) {
         request.files.add(http.MultipartFile.fromString(
-          'bcc_recipients', recipientId.toString()));
+            'bcc_recipients', recipientId.toString()));
       }
 
       for (final file in selectedFiles) {
@@ -675,16 +672,14 @@ class _StaffMailPageState extends State<StaffMailPage>
   }
 
   int? getRecipientId(dynamic staff) {
-    final dynamic rawId =
-        staff?['user_id'] ??
+    final dynamic rawId = staff?['user_id'] ??
         staff?['user']?['id'] ??
         staff?['recipient_id'] ??
         staff?['id'];
 
     if (rawId == null) return null;
 
-    final int? parsedId =
-        rawId is int ? rawId : int.tryParse(rawId.toString());
+    final int? parsedId = rawId is int ? rawId : int.tryParse(rawId.toString());
 
     if (parsedId == null || parsedId <= 0) {
       return null;
@@ -712,8 +707,7 @@ class _StaffMailPageState extends State<StaffMailPage>
       return null;
     }
 
-    final Map<String, dynamic> normalized =
-        Map<String, dynamic>.from(staff);
+    final Map<String, dynamic> normalized = Map<String, dynamic>.from(staff);
 
     normalized['recipient_id'] = recipientId;
 
@@ -876,9 +870,8 @@ class _StaffMailPageState extends State<StaffMailPage>
           uniqueRecipients.values.toList();
 
       result.sort(
-        (a, b) => staffName(a)
-            .toLowerCase()
-            .compareTo(staffName(b).toLowerCase()),
+        (a, b) =>
+            staffName(a).toLowerCase().compareTo(staffName(b).toLowerCase()),
       );
 
       if (mounted) {
@@ -1133,17 +1126,13 @@ class _StaffMailPageState extends State<StaffMailPage>
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .where((user) {
-            final int? id = getRecipientId(user);
-            final Set<int> currentGroupIds = _composeListFor(type)
-                .map(getRecipientId)
-                .whereType<int>()
-                .toSet();
+        final int? id = getRecipientId(user);
+        final Set<int> currentGroupIds =
+            _composeListFor(type).map(getRecipientId).whereType<int>().toSet();
 
-            return id != null &&
-                (!composeRecipientIds.contains(id) ||
-                    currentGroupIds.contains(id));
-          })
-          .toList();
+        return id != null &&
+            (!composeRecipientIds.contains(id) || currentGroupIds.contains(id));
+      }).toList();
 
       loading = false;
 
@@ -1429,8 +1418,7 @@ class _StaffMailPageState extends State<StaffMailPage>
                                           ),
                                         ),
                                         subtitle: Text(
-                                          user['department_name']
-                                                  ?.toString() ??
+                                          user['department_name']?.toString() ??
                                               user['department']?.toString() ??
                                               'mexpo.org',
                                         ),
@@ -1450,21 +1438,17 @@ class _StaffMailPageState extends State<StaffMailPage>
                                           setState(() {
                                             if (selected) {
                                               list.removeWhere(
-                                                (e) =>
-                                                    getRecipientId(e) == id,
+                                                (e) => getRecipientId(e) == id,
                                               );
                                             } else {
                                               selectedStaffs.removeWhere(
-                                                (e) =>
-                                                    getRecipientId(e) == id,
+                                                (e) => getRecipientId(e) == id,
                                               );
                                               selectedCcStaffs.removeWhere(
-                                                (e) =>
-                                                    getRecipientId(e) == id,
+                                                (e) => getRecipientId(e) == id,
                                               );
                                               selectedBccStaffs.removeWhere(
-                                                (e) =>
-                                                    getRecipientId(e) == id,
+                                                (e) => getRecipientId(e) == id,
                                               );
                                               list.add(user);
                                             }
@@ -1518,9 +1502,11 @@ class _StaffMailPageState extends State<StaffMailPage>
   ) async {
     List<Map<String, dynamic>> visible = [];
     List<Map<String, dynamic>> eligibleAll = [];
+
     bool loading = true;
     bool sheetActive = true;
     bool initialLoadStarted = false;
+
     Timer? localDebounce;
 
     Future<void> load(
@@ -1530,29 +1516,42 @@ class _StaffMailPageState extends State<StaffMailPage>
     ) async {
       if (!sheetActive) return;
 
+      loading = true;
+
+      if (modalContext.mounted) {
+        modalSetState(() {});
+      }
+
       await fetchReplySelectorStaffs(search);
 
-      if (!sheetActive || !mounted || !modalContext.mounted) return;
+      if (!sheetActive || !mounted || !modalContext.mounted) {
+        return;
+      }
 
       eligibleAll = await _eligibleReplyRecipients(type);
 
-      if (!sheetActive || !mounted || !modalContext.mounted) return;
+      if (!sheetActive || !mounted || !modalContext.mounted) {
+        return;
+      }
+
+      final Set<int> currentGroupIds =
+          _replyListFor(type).map(getRecipientId).whereType<int>().toSet();
 
       visible = replyStaffs
           .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
+          .map(
+            (staff) => Map<String, dynamic>.from(staff),
+          )
           .where((user) {
-            final int? id = getRecipientId(user);
-            final Set<int> currentGroupIds = _replyListFor(type)
-                .map(getRecipientId)
-                .whereType<int>()
-                .toSet();
+        final int? recipientId = getRecipientId(user);
 
-            return id != null &&
-                (!replyAllRecipientIds.contains(id) ||
-                    currentGroupIds.contains(id));
-          })
-          .toList();
+        if (recipientId == null || recipientId <= 0) {
+          return false;
+        }
+
+        return !replyAllRecipientIds.contains(recipientId) ||
+            currentGroupIds.contains(recipientId);
+      }).toList();
 
       loading = false;
 
@@ -1564,7 +1563,9 @@ class _StaffMailPageState extends State<StaffMailPage>
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: false,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.45),
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (modalContext, modalSetState) {
@@ -1573,342 +1574,566 @@ class _StaffMailPageState extends State<StaffMailPage>
 
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (sheetActive && modalContext.mounted) {
-                  load('', modalSetState, modalContext);
+                  load(
+                    '',
+                    modalSetState,
+                    modalContext,
+                  );
                 }
               });
             }
 
-            return DraggableScrollableSheet(
-              initialChildSize: .88,
-              minChildSize: .5,
-              maxChildSize: .96,
-              builder: (_, scrollController) => Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(26),
-                  ),
-                ),
-                child: SafeArea(
-                  top: false,
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 12),
-                      Container(
-                        width: 48,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE2E8F0),
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(18, 18, 8, 12),
-                        child: Row(
+            final double keyboardHeight =
+                MediaQuery.viewInsetsOf(modalContext).bottom;
+
+            return AnimatedPadding(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              padding: EdgeInsets.only(
+                bottom: keyboardHeight,
+              ),
+              child: DraggableScrollableSheet(
+                initialChildSize: keyboardHeight > 0 ? 0.98 : 0.88,
+                minChildSize: keyboardHeight > 0 ? 0.70 : 0.50,
+                maxChildSize: 0.98,
+                expand: false,
+                snap: keyboardHeight == 0,
+                snapSizes: keyboardHeight == 0
+                    ? const [
+                        0.50,
+                        0.88,
+                        0.98,
+                      ]
+                    : null,
+                builder: (
+                  BuildContext draggableContext,
+                  ScrollController scrollController,
+                ) {
+                  return ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(26),
+                    ),
+                    child: Material(
+                      color: Colors.white,
+                      child: SafeArea(
+                        top: false,
+                        child: Column(
                           children: [
-                            Expanded(
-                              child: Text(
-                                'Select Reply ${_recipientLabel(type)}',
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w900,
-                                ),
+                            const SizedBox(height: 12),
+                            Container(
+                              width: 48,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE2E8F0),
+                                borderRadius: BorderRadius.circular(100),
                               ),
                             ),
-                            IconButton(
-                              onPressed: () => Navigator.pop(sheetContext),
-                              icon: const Icon(Icons.close_rounded),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 18),
-                        child: TextField(
-                          decoration: inputDecoration(
-                            hint: 'Search staff',
-                            icon: Icons.search_rounded,
-                          ),
-                          onChanged: (value) {
-                            localDebounce?.cancel();
-                            localDebounce = Timer(
-                              const Duration(milliseconds: 400),
-                              () {
-                                if (sheetActive && modalContext.mounted) {
-                                  load(
-                                    value.trim(),
-                                    modalSetState,
-                                    modalContext,
-                                  );
-                                }
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 18),
-                        child: Builder(
-                          builder: (_) {
-                            final bool allSelected =
-                                areAllReplyRecipientsSelected(
-                              type,
-                              eligibleAll,
-                            );
-
-                            return InkWell(
-                              onTap: isFetchingAllStaffs
-                                  ? null
-                                  : () async {
-                                      if (allSelected) {
-                                        clearAllReplyRecipientsFor(type);
-                                      } else {
-                                        await selectAllReplyRecipientsFor(
-                                          type,
-                                        );
-                                      }
-
-                                      eligibleAll =
-                                          await _eligibleReplyRecipients(type);
-
-                                      if (modalContext.mounted) {
-                                        modalSetState(() {});
-                                      }
-
-                                      refreshParent();
-                                    },
-                              borderRadius: BorderRadius.circular(14),
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: allSelected
-                                      ? const Color(0xFFEFF6FF)
-                                      : const Color(0xFFF8FAFC),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: allSelected
-                                        ? const Color(0xFF2563EB)
-                                        : const Color(0xFFE2E8F0),
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 48,
-                                      height: 48,
-                                      child: Center(
-                                        child: isFetchingAllStaffs
-                                            ? const SizedBox(
-                                                width: 23,
-                                                height: 23,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                  strokeWidth: 2.5,
-                                                ),
-                                              )
-                                            : Checkbox(
-                                                value: allSelected,
-                                                activeColor:
-                                                    const Color(0xFF2563EB),
-                                                onChanged: (_) async {
-                                                  if (allSelected) {
-                                                    clearAllReplyRecipientsFor(
-                                                      type,
-                                                    );
-                                                  } else {
-                                                    await selectAllReplyRecipientsFor(
-                                                      type,
-                                                    );
-                                                  }
-
-                                                  eligibleAll =
-                                                      await _eligibleReplyRecipients(
-                                                    type,
-                                                  );
-
-                                                  if (modalContext.mounted) {
-                                                    modalSetState(() {});
-                                                  }
-
-                                                  refreshParent();
-                                                },
-                                              ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                18,
+                                18,
+                                8,
+                                12,
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Select Reply ${_recipientLabel(type)}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Color(0xFF0F172A),
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w900,
                                       ),
                                     ),
-                                    const SizedBox(width: 2),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Close',
+                                    onPressed: () {
+                                      FocusScope.of(modalContext).unfocus();
+                                      Navigator.pop(sheetContext);
+                                    },
+                                    icon: const Icon(
+                                      Icons.close_rounded,
+                                      color: Color(0xFF334155),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                              ),
+                              child: TextField(
+                                textInputAction: TextInputAction.search,
+                                keyboardType: TextInputType.text,
+                                onTapOutside: (_) {
+                                  FocusScope.of(modalContext).unfocus();
+                                },
+                                decoration: inputDecoration(
+                                  hint: 'Search staff',
+                                  icon: Icons.search_rounded,
+                                ),
+                                onChanged: (value) {
+                                  localDebounce?.cancel();
+
+                                  localDebounce = Timer(
+                                    const Duration(milliseconds: 400),
+                                    () {
+                                      if (!sheetActive ||
+                                          !modalContext.mounted) {
+                                        return;
+                                      }
+
+                                      load(
+                                        value.trim(),
+                                        modalSetState,
+                                        modalContext,
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                              ),
+                              child: Builder(
+                                builder: (context) {
+                                  final bool allSelected =
+                                      areAllReplyRecipientsSelected(
+                                    type,
+                                    eligibleAll,
+                                  );
+
+                                  Future<void> handleSelectAll() async {
+                                    if (isFetchingAllStaffs) {
+                                      return;
+                                    }
+
+                                    if (allSelected) {
+                                      clearAllReplyRecipientsFor(type);
+                                    } else {
+                                      await selectAllReplyRecipientsFor(type);
+                                    }
+
+                                    if (!sheetActive ||
+                                        !mounted ||
+                                        !modalContext.mounted) {
+                                      return;
+                                    }
+
+                                    eligibleAll =
+                                        await _eligibleReplyRecipients(type);
+
+                                    final Set<int> currentGroupIds =
+                                        _replyListFor(type)
+                                            .map(getRecipientId)
+                                            .whereType<int>()
+                                            .toSet();
+
+                                    visible = replyStaffs
+                                        .whereType<Map>()
+                                        .map(
+                                          (staff) => Map<String, dynamic>.from(
+                                            staff,
+                                          ),
+                                        )
+                                        .where((user) {
+                                      final int? recipientId =
+                                          getRecipientId(user);
+
+                                      if (recipientId == null ||
+                                          recipientId <= 0) {
+                                        return false;
+                                      }
+
+                                      return !replyAllRecipientIds.contains(
+                                            recipientId,
+                                          ) ||
+                                          currentGroupIds.contains(
+                                            recipientId,
+                                          );
+                                    }).toList();
+
+                                    modalSetState(() {});
+                                    refreshParent();
+                                  }
+
+                                  return InkWell(
+                                    onTap: isFetchingAllStaffs
+                                        ? null
+                                        : handleSelectAll,
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: allSelected
+                                            ? const Color(0xFFEFF6FF)
+                                            : const Color(0xFFF8FAFC),
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(
+                                          color: allSelected
+                                              ? const Color(0xFF2563EB)
+                                              : const Color(0xFFE2E8F0),
+                                        ),
+                                      ),
+                                      child: Row(
                                         children: [
-                                          Text(
-                                            isFetchingAllStaffs
-                                                ? 'Loading all staff...'
-                                                : allSelected
-                                                    ? 'Clear All'
-                                                    : 'Select All',
-                                            style: const TextStyle(
-                                              color: Color(0xFF0F172A),
-                                              fontWeight: FontWeight.w900,
+                                          SizedBox(
+                                            width: 48,
+                                            height: 48,
+                                            child: Center(
+                                              child: isFetchingAllStaffs
+                                                  ? const SizedBox(
+                                                      width: 23,
+                                                      height: 23,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                        strokeWidth: 2.5,
+                                                      ),
+                                                    )
+                                                  : Checkbox(
+                                                      value: allSelected,
+                                                      activeColor: const Color(
+                                                        0xFF2563EB,
+                                                      ),
+                                                      onChanged: (_) {
+                                                        handleSelectAll();
+                                                      },
+                                                    ),
                                             ),
                                           ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            isFetchingAllStaffs
-                                                ? 'Fetching every staff page'
-                                                : allSelected
-                                                    ? 'All available reply ${_recipientLabel(type)} recipients selected'
-                                                    : 'Select approved staff from all pages',
-                                            style: const TextStyle(
-                                              color: Color(0xFF64748B),
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
+                                          const SizedBox(width: 2),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  isFetchingAllStaffs
+                                                      ? 'Loading all staff...'
+                                                      : allSelected
+                                                          ? 'Clear All'
+                                                          : 'Select All',
+                                                  style: const TextStyle(
+                                                    color: Color(0xFF0F172A),
+                                                    fontWeight: FontWeight.w900,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  isFetchingAllStaffs
+                                                      ? 'Fetching every staff page'
+                                                      : allSelected
+                                                          ? 'All available reply ${_recipientLabel(type)} recipients selected'
+                                                          : 'Select approved staff from all pages',
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    color: Color(0xFF64748B),
+                                                    fontSize: 12,
+                                                    height: 1.35,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 6,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFEFF6FF),
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                            ),
+                                            child: Text(
+                                              '${_replyListFor(type).length} selected',
+                                              style: const TextStyle(
+                                                color: Color(0xFF2563EB),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w800,
+                                              ),
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFEFF6FF),
-                                        borderRadius:
-                                            BorderRadius.circular(999),
-                                      ),
-                                      child: Text(
-                                        '${_replyListFor(type).length} selected',
-                                        style: const TextStyle(
-                                          color: Color(0xFF2563EB),
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Expanded(
+                              child: ClipRect(
+                                child: loading
+                                    ? const Center(
+                                        child: CircularProgressIndicator(),
+                                      )
+                                    : visible.isEmpty
+                                        ? const Center(
+                                            child: Padding(
+                                              padding: EdgeInsets.all(24),
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.person_search_rounded,
+                                                    size: 48,
+                                                    color: Color(0xFF94A3B8),
+                                                  ),
+                                                  SizedBox(height: 12),
+                                                  Text(
+                                                    'No staff found',
+                                                    style: TextStyle(
+                                                      color: Color(0xFF475569),
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          )
+                                        : Scrollbar(
+                                            controller: scrollController,
+                                            thumbVisibility: true,
+                                            child: ListView.separated(
+                                              controller: scrollController,
+                                              keyboardDismissBehavior:
+                                                  ScrollViewKeyboardDismissBehavior
+                                                      .onDrag,
+                                              physics:
+                                                  const AlwaysScrollableScrollPhysics(
+                                                parent: ClampingScrollPhysics(),
+                                              ),
+                                              clipBehavior: Clip.hardEdge,
+                                              padding:
+                                                  const EdgeInsets.fromLTRB(
+                                                18,
+                                                4,
+                                                18,
+                                                16,
+                                              ),
+                                              itemCount: visible.length,
+                                              separatorBuilder: (_, __) {
+                                                return const SizedBox(
+                                                  height: 8,
+                                                );
+                                              },
+                                              itemBuilder: (
+                                                BuildContext itemContext,
+                                                int index,
+                                              ) {
+                                                final Map<String, dynamic>
+                                                    user = visible[index];
+
+                                                final int? id =
+                                                    getRecipientId(user);
+
+                                                if (id == null || id <= 0) {
+                                                  return const SizedBox
+                                                      .shrink();
+                                                }
+
+                                                final List<Map<String, dynamic>>
+                                                    selectedList =
+                                                    _replyListFor(type);
+
+                                                final bool selected =
+                                                    selectedList.any(
+                                                  (item) =>
+                                                      getRecipientId(item) ==
+                                                      id,
+                                                );
+
+                                                return Material(
+                                                  color: Colors.transparent,
+                                                  child: CheckboxListTile(
+                                                    value: selected,
+                                                    activeColor:
+                                                        const Color(0xFF2563EB),
+                                                    checkColor: Colors.white,
+                                                    controlAffinity:
+                                                        ListTileControlAffinity
+                                                            .trailing,
+                                                    contentPadding:
+                                                        const EdgeInsets
+                                                            .symmetric(
+                                                      horizontal: 14,
+                                                      vertical: 5,
+                                                    ),
+                                                    title: Text(
+                                                      staffName(user),
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                        color:
+                                                            Color(0xFF0F172A),
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                      ),
+                                                    ),
+                                                    subtitle: Text(
+                                                      user['department_name']
+                                                              ?.toString() ??
+                                                          user['department']
+                                                              ?.toString() ??
+                                                          'mexpo.org',
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                        color:
+                                                            Color(0xFF64748B),
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        14,
+                                                      ),
+                                                      side: BorderSide(
+                                                        color: selected
+                                                            ? const Color(
+                                                                0xFF2563EB,
+                                                              )
+                                                            : const Color(
+                                                                0xFFE2E8F0,
+                                                              ),
+                                                        width:
+                                                            selected ? 1.3 : 1,
+                                                      ),
+                                                    ),
+                                                    tileColor: selected
+                                                        ? const Color(
+                                                            0xFFEFF6FF,
+                                                          )
+                                                        : Colors.white,
+                                                    selectedTileColor:
+                                                        const Color(
+                                                      0xFFEFF6FF,
+                                                    ),
+                                                    onChanged: (_) {
+                                                      if (!sheetActive ||
+                                                          !modalContext
+                                                              .mounted) {
+                                                        return;
+                                                      }
+
+                                                      setState(() {
+                                                        if (selected) {
+                                                          selectedList
+                                                              .removeWhere(
+                                                            (item) =>
+                                                                getRecipientId(
+                                                                  item,
+                                                                ) ==
+                                                                id,
+                                                          );
+                                                        } else {
+                                                          replyRecipientUsers
+                                                              .removeWhere(
+                                                            (item) =>
+                                                                getRecipientId(
+                                                                  item,
+                                                                ) ==
+                                                                id,
+                                                          );
+
+                                                          replyCcRecipientUsers
+                                                              .removeWhere(
+                                                            (item) =>
+                                                                getRecipientId(
+                                                                  item,
+                                                                ) ==
+                                                                id,
+                                                          );
+
+                                                          replyBccRecipientUsers
+                                                              .removeWhere(
+                                                            (item) =>
+                                                                getRecipientId(
+                                                                  item,
+                                                                ) ==
+                                                                id,
+                                                          );
+
+                                                          selectedList
+                                                              .add(user);
+                                                        }
+
+                                                        if (type == 'to') {
+                                                          allReplyRecipientsSelected =
+                                                              false;
+                                                        }
+                                                      });
+
+                                                      modalSetState(() {});
+                                                      refreshParent();
+                                                    },
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                              ),
+                            ),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.fromLTRB(
+                                18,
+                                12,
+                                18,
+                                18,
+                              ),
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                border: Border(
+                                  top: BorderSide(
+                                    color: Color(0xFFE2E8F0),
+                                  ),
                                 ),
                               ),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Expanded(
-                        child: loading
-                            ? const Center(
-                                child: CircularProgressIndicator(),
-                              )
-                            : visible.isEmpty
-                                ? const Center(
-                                    child: Text('No staff found'),
-                                  )
-                                : ListView.separated(
-                                    controller: scrollController,
-                                    padding: const EdgeInsets.fromLTRB(
-                                      18,
-                                      4,
-                                      18,
-                                      100,
-                                    ),
-                                    itemCount: visible.length,
-                                    separatorBuilder: (_, __) =>
-                                        const SizedBox(height: 8),
-                                    itemBuilder: (_, index) {
-                                      final Map<String, dynamic> user =
-                                          visible[index];
-                                      final int id = getRecipientId(user)!;
-                                      final List<Map<String, dynamic>> list =
-                                          _replyListFor(type);
-                                      final bool selected = list.any(
-                                        (e) => getRecipientId(e) == id,
-                                      );
-
-                                      return CheckboxListTile(
-                                        value: selected,
-                                        activeColor: const Color(0xFF2563EB),
-                                        title: Text(
-                                          staffName(user),
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                        subtitle: Text(
-                                          user['department_name']
-                                                  ?.toString() ??
-                                              user['department']?.toString() ??
-                                              'mexpo.org',
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(14),
-                                        ),
-                                        tileColor: selected
-                                            ? const Color(0xFFEFF6FF)
-                                            : const Color(0xFFF8FAFC),
-                                        onChanged: (_) {
-                                          if (!sheetActive ||
-                                              !modalContext.mounted) {
-                                            return;
-                                          }
-
-                                          setState(() {
-                                            if (selected) {
-                                              list.removeWhere(
-                                                (e) =>
-                                                    getRecipientId(e) == id,
-                                              );
-                                            } else {
-                                              replyRecipientUsers.removeWhere(
-                                                (e) =>
-                                                    getRecipientId(e) == id,
-                                              );
-                                              replyCcRecipientUsers.removeWhere(
-                                                (e) =>
-                                                    getRecipientId(e) == id,
-                                              );
-                                              replyBccRecipientUsers
-                                                  .removeWhere(
-                                                (e) =>
-                                                    getRecipientId(e) == id,
-                                              );
-                                              list.add(user);
-                                            }
-                                          });
-
-                                          if (modalContext.mounted) {
-                                            modalSetState(() {});
-                                          }
-
-                                          refreshParent();
-                                        },
-                                      );
-                                    },
+                              child: SizedBox(
+                                width: double.infinity,
+                                height: 52,
+                                child: ElevatedButton(
+                                  style: primaryButtonStyle(),
+                                  onPressed: () {
+                                    FocusScope.of(modalContext).unfocus();
+                                    Navigator.pop(sheetContext);
+                                  },
+                                  child: Text(
+                                    'Done (${_replyListFor(type).length})',
                                   ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: ElevatedButton(
-                            style: primaryButtonStyle(),
-                            onPressed: () => Navigator.pop(sheetContext),
-                            child: Text(
-                              'Done (${_replyListFor(type).length})',
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
             );
           },
@@ -2017,30 +2242,28 @@ class _StaffMailPageState extends State<StaffMailPage>
                               hint: 'Search staff',
                               icon: Icons.search_rounded,
                             ).copyWith(
-                              suffixIcon:
-                                  staffSearchController.text.isEmpty
-                                      ? null
-                                      : IconButton(
-                                          tooltip: 'Clear search',
-                                          onPressed: () async {
-                                            staffDebounce?.cancel();
-                                            staffSearchController.clear();
+                              suffixIcon: staffSearchController.text.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      tooltip: 'Clear search',
+                                      onPressed: () async {
+                                        staffDebounce?.cancel();
+                                        staffSearchController.clear();
 
-                                            modalSetState(() {});
+                                        modalSetState(() {});
 
-                                            await fetchStaffs();
+                                        await fetchStaffs();
 
-                                            if (!mounted ||
-                                                !modalContext.mounted) {
-                                              return;
-                                            }
+                                        if (!mounted || !modalContext.mounted) {
+                                          return;
+                                        }
 
-                                            modalSetState(() {});
-                                          },
-                                          icon: const Icon(
-                                            Icons.close_rounded,
-                                          ),
-                                        ),
+                                        modalSetState(() {});
+                                      },
+                                      icon: const Icon(
+                                        Icons.close_rounded,
+                                      ),
+                                    ),
                             ),
                           ),
                         ),
@@ -2088,14 +2311,12 @@ class _StaffMailPageState extends State<StaffMailPage>
                                           ? const SizedBox(
                                               width: 23,
                                               height: 23,
-                                              child:
-                                                  CircularProgressIndicator(
+                                              child: CircularProgressIndicator(
                                                 strokeWidth: 2.5,
                                               ),
                                             )
                                           : Checkbox(
-                                              value:
-                                                  allRecipientsSelected,
+                                              value: allRecipientsSelected,
                                               activeColor:
                                                   const Color(0xFF2563EB),
                                               onChanged: (_) async {
@@ -2152,8 +2373,7 @@ class _StaffMailPageState extends State<StaffMailPage>
                                     ),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFEFF6FF),
-                                      borderRadius:
-                                          BorderRadius.circular(999),
+                                      borderRadius: BorderRadius.circular(999),
                                     ),
                                     child: Text(
                                       '${selectedStaffs.length} selected',
@@ -2261,7 +2481,8 @@ class _StaffMailPageState extends State<StaffMailPage>
                                                 Expanded(
                                                   child: Column(
                                                     crossAxisAlignment:
-                                                        CrossAxisAlignment.start,
+                                                        CrossAxisAlignment
+                                                            .start,
                                                     children: [
                                                       Text(
                                                         staffName(staff),
@@ -2560,9 +2781,8 @@ class _StaffMailPageState extends State<StaffMailPage>
                     buildReadFilterChip(label: 'All', value: ''),
                     const SizedBox(width: 8),
                     buildReadFilterChip(
-                      label: unreadCount > 0
-                          ? 'Unread ($unreadCount)'
-                          : 'Unread',
+                      label:
+                          unreadCount > 0 ? 'Unread ($unreadCount)' : 'Unread',
                       value: 'unread',
                     ),
                     const SizedBox(width: 8),
@@ -2628,14 +2848,10 @@ class _StaffMailPageState extends State<StaffMailPage>
       selectedColor: const Color(0xFFDBEAFE),
       backgroundColor: Colors.white,
       side: BorderSide(
-        color: selected
-            ? const Color(0xFF2563EB)
-            : const Color(0xFFE2E8F0),
+        color: selected ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
       ),
       labelStyle: TextStyle(
-        color: selected
-            ? const Color(0xFF1D4ED8)
-            : const Color(0xFF475569),
+        color: selected ? const Color(0xFF1D4ED8) : const Color(0xFF475569),
         fontWeight: FontWeight.w800,
       ),
       shape: RoundedRectangleBorder(
@@ -2644,255 +2860,232 @@ class _StaffMailPageState extends State<StaffMailPage>
     );
   }
 
- Widget buildMailCard(dynamic mail, String type) {
-  final List attachments =
-      mail['attachments'] as List? ?? [];
+  Widget buildMailCard(dynamic mail, String type) {
+    final List attachments = mail['attachments'] as List? ?? [];
 
-  final List recipients =
-      mail['recipients_data'] as List? ?? [];
+    final List recipients = mail['recipients_data'] as List? ?? [];
 
-  final bool replyMail = isReplyMail(mail);
-  final bool unread = type == 'inbox' && isUnreadMail(mail);
+    final bool replyMail = isReplyMail(mail);
+    final bool unread = type == 'inbox' && isUnreadMail(mail);
 
-  return Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    decoration: BoxDecoration(
-      color: unread
-          ? const Color(0xFFEFF6FF)
-          : Colors.white,
-      borderRadius: BorderRadius.circular(22),
-      border: Border.all(
-        color: unread
-            ? const Color(0xFF2563EB)
-            : replyMail
-                ? const Color(0xFFBFDBFE)
-                : const Color(0xFFE2E8F0),
-        width: unread ? 1.4 : 1,
-      ),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.06),
-          blurRadius: 24,
-          offset: const Offset(0, 10),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: unread ? const Color(0xFFEFF6FF) : Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: unread
+              ? const Color(0xFF2563EB)
+              : replyMail
+                  ? const Color(0xFFBFDBFE)
+                  : const Color(0xFFE2E8F0),
+          width: unread ? 1.4 : 1,
         ),
-      ],
-    ),
-    child: InkWell(
-      borderRadius: BorderRadius.circular(22),
-      onTap: () => openMailDetail(mail, type),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                CircleAvatar(
-                  radius: 23,
-                  backgroundColor: replyMail
-                      ? const Color(0xFFDBEAFE)
-                      : const Color(0xFFEFF6FF),
-                  child: Icon(
-                    replyMail
-                        ? Icons.reply_rounded
-                        : type == 'inbox'
-                            ? Icons.inbox_rounded
-                            : Icons.send_rounded,
-                    color: const Color(0xFF2563EB),
-                  ),
-                ),
-
-                if (unread)
-                  Positioned(
-                    right: -1,
-                    top: -1,
-                    child: Container(
-                      width: 11,
-                      height: 11,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFEF4444),
-                        shape: BoxShape.circle,
-                      ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: () => openMailDetail(mail, type),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  CircleAvatar(
+                    radius: 23,
+                    backgroundColor: replyMail
+                        ? const Color(0xFFDBEAFE)
+                        : const Color(0xFFEFF6FF),
+                    child: Icon(
+                      replyMail
+                          ? Icons.reply_rounded
+                          : type == 'inbox'
+                              ? Icons.inbox_rounded
+                              : Icons.send_rounded,
+                      color: const Color(0xFF2563EB),
                     ),
                   ),
-              ],
-            ),
-
-            const SizedBox(width: 13),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      if (replyMail) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: unread
-                                ? const Color(0xFF2563EB)
-                                : const Color(0xFFDBEAFE),
-                            borderRadius:
-                                BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            unread ? 'NEW REPLY' : 'REPLY',
-                            style: TextStyle(
+                  if (unread)
+                    Positioned(
+                      right: -1,
+                      top: -1,
+                      child: Container(
+                        width: 11,
+                        height: 11,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFEF4444),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        if (replyMail) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
                               color: unread
-                                  ? Colors.white
-                                  : const Color(0xFF1D4ED8),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.4,
+                                  ? const Color(0xFF2563EB)
+                                  : const Color(0xFFDBEAFE),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              unread ? 'NEW REPLY' : 'REPLY',
+                              style: TextStyle(
+                                color: unread
+                                    ? Colors.white
+                                    : const Color(0xFF1D4ED8),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            getMailDisplaySubject(mail),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: const Color(0xFF0F172A),
+                              fontSize: 15,
+                              fontWeight:
+                                  unread ? FontWeight.w900 : FontWeight.w800,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
                       ],
-
-                      Expanded(
-                        child: Text(
-                          getMailDisplaySubject(mail),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: const Color(0xFF0F172A),
-                            fontSize: 15,
-                            fontWeight: unread
-                                ? FontWeight.w900
-                                : FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 7),
-
-                  Text(
-                    type == 'inbox'
-                        ? 'From: ${mail['sender_name'] ?? 'Unknown'}'
-                        : 'To: ${recipients.map(
-                            (e) => e['name'] ?? '',
-                          ).where(
-                            (name) =>
-                                name.toString().trim().isNotEmpty,
-                          ).join(', ')}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: const Color(0xFF475569),
-                      fontWeight: unread
-                          ? FontWeight.w700
-                          : FontWeight.w500,
                     ),
-                  ),
-
-                  const SizedBox(height: 5),
-
-                  Text(
-                    (mail['message'] ?? '').toString().trim().isEmpty
-                        ? 'No message'
-                        : mail['message'].toString(),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF64748B),
-                      height: 1.35,
+                    const SizedBox(height: 7),
+                    Text(
+                      type == 'inbox'
+                          ? 'From: ${mail['sender_name'] ?? 'Unknown'}'
+                          : 'To: ${recipients.map(
+                                (e) => e['name'] ?? '',
+                              ).where(
+                                (name) => name.toString().trim().isNotEmpty,
+                              ).join(', ')}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: const Color(0xFF475569),
+                        fontWeight: unread ? FontWeight.w700 : FontWeight.w500,
+                      ),
                     ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  Row(
-                    children: [
-                      Icon(
-                        replyMail
-                            ? Icons.forum_outlined
-                            : Icons.schedule_rounded,
-                        size: 15,
-                        color: const Color(0xFF94A3B8),
+                    const SizedBox(height: 5),
+                    Text(
+                      (mail['message'] ?? '').toString().trim().isEmpty
+                          ? 'No message'
+                          : mail['message'].toString(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        height: 1.35,
                       ),
-                      const SizedBox(width: 5),
-
-                      Expanded(
-                        child: Text(
-                          formatDateTimeIndian(
-                            mail['created_at']?.toString(),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFF94A3B8),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          replyMail
+                              ? Icons.forum_outlined
+                              : Icons.schedule_rounded,
+                          size: 15,
+                          color: const Color(0xFF94A3B8),
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            formatDateTimeIndian(
+                              mail['created_at']?.toString(),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF94A3B8),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-
-                      if ((int.tryParse(mail['reply_count']?.toString() ?? '0') ?? 0) > 0) ...[
-                        const Icon(
-                          Icons.reply_all_rounded,
-                          size: 16,
-                          color: Color(0xFF2563EB),
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          '${mail['reply_count']}',
-                          style: const TextStyle(
+                        if ((int.tryParse(
+                                    mail['reply_count']?.toString() ?? '0') ??
+                                0) >
+                            0) ...[
+                          const Icon(
+                            Icons.reply_all_rounded,
+                            size: 16,
                             color: Color(0xFF2563EB),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-
-                      if (attachments.isNotEmpty) ...[
-                        const Icon(
-                          Icons.attach_file_rounded,
-                          size: 16,
-                          color: Color(0xFF64748B),
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          '${attachments.length}',
-                          style: const TextStyle(
+                          const SizedBox(width: 2),
+                          Text(
+                            '${mail['reply_count']}',
+                            style: const TextStyle(
+                              color: Color(0xFF2563EB),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        if (attachments.isNotEmpty) ...[
+                          const Icon(
+                            Icons.attach_file_rounded,
+                            size: 16,
                             color: Color(0xFF64748B),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
                           ),
-                        ),
+                          const SizedBox(width: 2),
+                          Text(
+                            '${attachments.length}',
+                            style: const TextStyle(
+                              color: Color(0xFF64748B),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-
-            const SizedBox(width: 4),
-
-            IconButton(
-              tooltip: 'Delete',
-              onPressed: isDeleting
-                  ? null
-                  : () => confirmDelete(mail, type),
-              icon: const Icon(
-                Icons.delete_outline_rounded,
-                color: Colors.red,
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'Delete',
+                onPressed: isDeleting ? null : () => confirmDelete(mail, type),
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.red,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   void confirmDelete(dynamic mail, String type) {
     showDialog(
@@ -2924,17 +3117,14 @@ class _StaffMailPageState extends State<StaffMailPage>
   Future<int?> getCurrentUserId() async {
     final prefs = await SharedPreferences.getInstance();
 
-    final dynamic rawId =
-        prefs.getInt('user_id') ??
+    final dynamic rawId = prefs.getInt('user_id') ??
         prefs.getString('user_id') ??
         prefs.getInt('id') ??
         prefs.getString('id');
 
     if (rawId == null) return null;
 
-    return rawId is int
-        ? rawId
-        : int.tryParse(rawId.toString());
+    return rawId is int ? rawId : int.tryParse(rawId.toString());
   }
 
   void resetReplyForm() {
@@ -2952,50 +3142,153 @@ class _StaffMailPageState extends State<StaffMailPage>
     });
   }
 
-  Future<void> prepareDefaultReplyRecipients(dynamic mailData) async {
+  Future<void> prepareDefaultReplyRecipients(
+    dynamic mailData, {
+    List<dynamic> threadData = const [],
+  }) async {
+    if (mailData is! Map) {
+      return;
+    }
+
     final int? currentUserId = await getCurrentUserId();
 
-    final Map<int, Map<String, dynamic>> uniqueUsers = {};
+    final Map<int, Map<String, dynamic>> toUsers = {};
+    final Map<int, Map<String, dynamic>> ccUsers = {};
+    final Map<int, Map<String, dynamic>> bccUsers = {};
 
-    void addUser(dynamic rawUser) {
-      if (rawUser is! Map) return;
+    Map<String, dynamic>? normalizeReplyUser(dynamic rawUser) {
+      if (rawUser is! Map) {
+        return null;
+      }
 
-      final Map<String, dynamic> user =
-          Map<String, dynamic>.from(rawUser);
+      final Map<String, dynamic> user = Map<String, dynamic>.from(rawUser);
 
-      final int? id = getRecipientId(user);
+      final int? recipientId = getRecipientId(user);
 
-      if (id == null || id <= 0 || id == currentUserId) {
+      if (recipientId == null ||
+          recipientId <= 0 ||
+          recipientId == currentUserId) {
+        return null;
+      }
+
+      user['recipient_id'] = recipientId;
+
+      return user;
+    }
+
+    void addToUser(dynamic rawUser) {
+      final Map<String, dynamic>? user = normalizeReplyUser(rawUser);
+
+      if (user == null) {
         return;
       }
 
-      user['recipient_id'] = id;
-      uniqueUsers[id] = user;
+      final int recipientId = user['recipient_id'] as int;
+
+      // To has the highest priority.
+      ccUsers.remove(recipientId);
+      bccUsers.remove(recipientId);
+      toUsers[recipientId] = user;
     }
 
-    final dynamic senderId = mailData?['sender'];
+    void addCcUser(dynamic rawUser) {
+      final Map<String, dynamic>? user = normalizeReplyUser(rawUser);
+
+      if (user == null) {
+        return;
+      }
+
+      final int recipientId = user['recipient_id'] as int;
+
+      // Keep existing CC recipients in the CC section.
+      toUsers.remove(recipientId);
+      bccUsers.remove(recipientId);
+      ccUsers[recipientId] = user;
+    }
+
+    void addBccUser(dynamic rawUser) {
+      final Map<String, dynamic>? user = normalizeReplyUser(rawUser);
+
+      if (user == null) {
+        return;
+      }
+
+      final int recipientId = user['recipient_id'] as int;
+
+      // Do not duplicate somebody already present in To or CC.
+      if (toUsers.containsKey(recipientId) ||
+          ccUsers.containsKey(recipientId)) {
+        return;
+      }
+
+      bccUsers[recipientId] = user;
+    }
+
+    /*
+   * Add the original sender as a reply To recipient.
+   */
+    final dynamic senderId = mailData['sender'];
 
     if (senderId != null) {
-      addUser({
+      addToUser({
         'id': senderId,
         'recipient_id': senderId,
-        'name': mailData?['sender_name'] ?? 'Sender',
+        'name': mailData['sender_name'] ?? 'Sender',
+        'email': mailData['sender_data']?['email'],
+        'department': mailData['sender_data']?['department'],
       });
     }
 
-    final List recipients =
-        mailData?['recipients_data'] is List
-            ? mailData['recipients_data']
-            : <dynamic>[];
+    /*
+   * Preserve the original To recipients.
+   */
+    final List<dynamic> originalRecipients = mailData['recipients_data'] is List
+        ? List<dynamic>.from(mailData['recipients_data'])
+        : <dynamic>[];
 
-    for (final dynamic recipient in recipients) {
-      addUser(recipient);
+    for (final dynamic recipient in originalRecipients) {
+      addToUser(recipient);
     }
 
-    if (!mounted) return;
+/*
+ * Preserve all existing CC recipients from the complete conversation.
+ */
+    final List<dynamic> ccSourceMails =
+        threadData.isNotEmpty ? threadData : <dynamic>[mailData];
+
+    for (final dynamic threadMail in ccSourceMails) {
+      if (threadMail is! Map) continue;
+
+      final dynamic rawCcRecipients = threadMail['cc_recipients_data'];
+
+      if (rawCcRecipients is! List) continue;
+
+      for (final dynamic recipient in rawCcRecipients) {
+        addCcUser(recipient);
+      }
+    }
+
+    /*
+   * Preserve the original BCC recipients.
+   */
+    final List<dynamic> originalBccRecipients =
+        mailData['bcc_recipients_data'] is List
+            ? List<dynamic>.from(mailData['bcc_recipients_data'])
+            : <dynamic>[];
+
+    for (final dynamic recipient in originalBccRecipients) {
+      addBccUser(recipient);
+    }
+
+    if (!mounted) {
+      return;
+    }
 
     setState(() {
-      replyRecipientUsers = uniqueUsers.values.toList();
+      replyRecipientUsers = toUsers.values.toList();
+      replyCcRecipientUsers = ccUsers.values.toList();
+      replyBccRecipientUsers = bccUsers.values.toList();
+
       allReplyRecipientsSelected = false;
     });
   }
@@ -3034,15 +3327,13 @@ class _StaffMailPageState extends State<StaffMailPage>
 
       final dynamic decoded = jsonDecode(response.body);
 
-      final dynamic mailData =
-          decoded['data'] ?? decoded['mail'] ?? decoded;
+      final dynamic mailData = decoded['data'] ?? decoded['mail'] ?? decoded;
 
-      final List<dynamic> threadData =
-          decoded['thread'] is List
-              ? List<dynamic>.from(decoded['thread'])
-              : mailData != null
-                  ? <dynamic>[mailData]
-                  : <dynamic>[];
+      final List<dynamic> threadData = decoded['thread'] is List
+          ? List<dynamic>.from(decoded['thread'])
+          : mailData != null
+              ? <dynamic>[mailData]
+              : <dynamic>[];
 
       if (!mounted) return false;
 
@@ -3051,8 +3342,10 @@ class _StaffMailPageState extends State<StaffMailPage>
         mailThread = threadData;
       });
 
-      await prepareDefaultReplyRecipients(mailData);
-
+      await prepareDefaultReplyRecipients(
+        mailData,
+        threadData: threadData,
+      );
       return true;
     } catch (e) {
       debugPrint('OPEN MAIL ERROR: $e');
@@ -3121,17 +3414,14 @@ class _StaffMailPageState extends State<StaffMailPage>
       final List<Map<String, dynamic>> validStaffs = [];
 
       for (final dynamic staff in receivedStaffs) {
-        final Map<String, dynamic>? normalized =
-            normalizeRecipient(staff);
+        final Map<String, dynamic>? normalized = normalizeRecipient(staff);
 
         if (normalized == null) continue;
 
         final int? recipientId = getRecipientId(normalized);
 
-        final bool alreadySelected =
-            replyRecipientUsers.any(
-          (selected) =>
-              getRecipientId(selected) == recipientId,
+        final bool alreadySelected = replyRecipientUsers.any(
+          (selected) => getRecipientId(selected) == recipientId,
         );
 
         if (!alreadySelected) {
@@ -3157,8 +3447,7 @@ class _StaffMailPageState extends State<StaffMailPage>
   }
 
   void addReplyRecipient(dynamic staff) {
-    final Map<String, dynamic>? normalized =
-        normalizeRecipient(staff);
+    final Map<String, dynamic>? normalized = normalizeRecipient(staff);
 
     if (normalized == null) {
       showMsg(
@@ -3205,7 +3494,6 @@ class _StaffMailPageState extends State<StaffMailPage>
     });
   }
 
-
   bool isReplyRecipientSelected(dynamic staff) {
     final int? recipientId = getRecipientId(staff);
 
@@ -3217,8 +3505,7 @@ class _StaffMailPageState extends State<StaffMailPage>
   }
 
   void toggleReplyRecipient(dynamic staff) {
-    final Map<String, dynamic>? normalized =
-        normalizeRecipient(staff);
+    final Map<String, dynamic>? normalized = normalizeRecipient(staff);
 
     if (normalized == null) {
       showMsg(
@@ -3233,14 +3520,12 @@ class _StaffMailPageState extends State<StaffMailPage>
 
     setState(() {
       final bool alreadySelected = replyRecipientUsers.any(
-        (selected) =>
-            getRecipientId(selected) == recipientId,
+        (selected) => getRecipientId(selected) == recipientId,
       );
 
       if (alreadySelected) {
         replyRecipientUsers.removeWhere(
-          (selected) =>
-              getRecipientId(selected) == recipientId,
+          (selected) => getRecipientId(selected) == recipientId,
         );
       } else {
         replyCcRecipientUsers.removeWhere(
@@ -3257,8 +3542,7 @@ class _StaffMailPageState extends State<StaffMailPage>
   }
 
   Future<void> selectAllReplyRecipients() async {
-    List<Map<String, dynamic>> completeList =
-        allRecipientStaffs;
+    List<Map<String, dynamic>> completeList = allRecipientStaffs;
 
     if (completeList.isEmpty) {
       completeList = await fetchAllRecipientStaffs();
@@ -3464,14 +3748,12 @@ class _StaffMailPageState extends State<StaffMailPage>
       }
 
       final dynamic decoded = jsonDecode(response.body);
-      final List<dynamic> receivedStaffs =
-          extractStaffData(decoded);
+      final List<dynamic> receivedStaffs = extractStaffData(decoded);
 
       final List<Map<String, dynamic>> validStaffs = [];
 
       for (final dynamic staff in receivedStaffs) {
-        final Map<String, dynamic>? normalized =
-            normalizeRecipient(staff);
+        final Map<String, dynamic>? normalized = normalizeRecipient(staff);
 
         if (normalized != null) {
           validStaffs.add(normalized);
@@ -3546,8 +3828,7 @@ class _StaffMailPageState extends State<StaffMailPage>
                           height: 5,
                           decoration: BoxDecoration(
                             color: const Color(0xFFE2E8F0),
-                            borderRadius:
-                                BorderRadius.circular(100),
+                            borderRadius: BorderRadius.circular(100),
                           ),
                         ),
                         Padding(
@@ -3589,8 +3870,7 @@ class _StaffMailPageState extends State<StaffMailPage>
                           ),
                           child: TextField(
                             controller: replySearchController,
-                            textInputAction:
-                                TextInputAction.search,
+                            textInputAction: TextInputAction.search,
                             onChanged: (value) {
                               modalSetState(() {});
                               replySearchDebounce?.cancel();
@@ -3610,23 +3890,20 @@ class _StaffMailPageState extends State<StaffMailPage>
                               hint: 'Search staff',
                               icon: Icons.search_rounded,
                             ).copyWith(
-                              suffixIcon:
-                                  replySearchController.text.isEmpty
-                                      ? null
-                                      : IconButton(
-                                          tooltip: 'Clear search',
-                                          onPressed: () async {
-                                            replySearchDebounce
-                                                ?.cancel();
-                                            replySearchController
-                                                .clear();
-                                            modalSetState(() {});
-                                            await refreshReplyStaffList();
-                                          },
-                                          icon: const Icon(
-                                            Icons.close_rounded,
-                                          ),
-                                        ),
+                              suffixIcon: replySearchController.text.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      tooltip: 'Clear search',
+                                      onPressed: () async {
+                                        replySearchDebounce?.cancel();
+                                        replySearchController.clear();
+                                        modalSetState(() {});
+                                        await refreshReplyStaffList();
+                                      },
+                                      icon: const Icon(
+                                        Icons.close_rounded,
+                                      ),
+                                    ),
                             ),
                           ),
                         ),
@@ -3651,12 +3928,10 @@ class _StaffMailPageState extends State<StaffMailPage>
 
                                     refreshParentSheet();
                                   },
-                            borderRadius:
-                                BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(14),
                             child: Container(
                               width: double.infinity,
-                              padding:
-                                  const EdgeInsets.symmetric(
+                              padding: const EdgeInsets.symmetric(
                                 horizontal: 10,
                                 vertical: 8,
                               ),
@@ -3664,8 +3939,7 @@ class _StaffMailPageState extends State<StaffMailPage>
                                 color: allReplyRecipientsSelected
                                     ? const Color(0xFFEFF6FF)
                                     : const Color(0xFFF8FAFC),
-                                borderRadius:
-                                    BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
                                   color: allReplyRecipientsSelected
                                       ? const Color(0xFF2563EB)
@@ -3682,16 +3956,13 @@ class _StaffMailPageState extends State<StaffMailPage>
                                           ? const SizedBox(
                                               width: 23,
                                               height: 23,
-                                              child:
-                                                  CircularProgressIndicator(
+                                              child: CircularProgressIndicator(
                                                 strokeWidth: 2.5,
                                               ),
                                             )
                                           : Checkbox(
-                                              value:
-                                                  allReplyRecipientsSelected,
-                                              activeColor:
-                                                  const Color(
+                                              value: allReplyRecipientsSelected,
+                                              activeColor: const Color(
                                                 0xFF2563EB,
                                               ),
                                               onChanged: (_) async {
@@ -3701,8 +3972,7 @@ class _StaffMailPageState extends State<StaffMailPage>
                                                   await selectAllReplyRecipients();
                                                 }
 
-                                                if (modalContext
-                                                    .mounted) {
+                                                if (modalContext.mounted) {
                                                   modalSetState(
                                                     () {},
                                                   );
@@ -3726,10 +3996,8 @@ class _StaffMailPageState extends State<StaffMailPage>
                                                   ? 'Clear All'
                                                   : 'Select All',
                                           style: const TextStyle(
-                                            color:
-                                                Color(0xFF0F172A),
-                                            fontWeight:
-                                                FontWeight.w900,
+                                            color: Color(0xFF0F172A),
+                                            fontWeight: FontWeight.w900,
                                           ),
                                         ),
                                         const SizedBox(height: 2),
@@ -3740,19 +4008,16 @@ class _StaffMailPageState extends State<StaffMailPage>
                                                   ? 'All approved staff selected'
                                                   : 'Select approved staff from all pages',
                                           style: const TextStyle(
-                                            color:
-                                                Color(0xFF64748B),
+                                            color: Color(0xFF64748B),
                                             fontSize: 12,
-                                            fontWeight:
-                                                FontWeight.w600,
+                                            fontWeight: FontWeight.w600,
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
                                   Container(
-                                    padding:
-                                        const EdgeInsets.symmetric(
+                                    padding: const EdgeInsets.symmetric(
                                       horizontal: 10,
                                       vertical: 6,
                                     ),
@@ -3760,19 +4025,16 @@ class _StaffMailPageState extends State<StaffMailPage>
                                       color: const Color(
                                         0xFFEFF6FF,
                                       ),
-                                      borderRadius:
-                                          BorderRadius.circular(
+                                      borderRadius: BorderRadius.circular(
                                         999,
                                       ),
                                     ),
                                     child: Text(
                                       '${replyRecipientUsers.length} selected',
                                       style: const TextStyle(
-                                        color:
-                                            Color(0xFF2563EB),
+                                        color: Color(0xFF2563EB),
                                         fontSize: 12,
-                                        fontWeight:
-                                            FontWeight.w800,
+                                        fontWeight: FontWeight.w800,
                                       ),
                                     ),
                                   ),
@@ -3785,33 +4047,26 @@ class _StaffMailPageState extends State<StaffMailPage>
                         Expanded(
                           child: isFetchingReplyStaffs
                               ? const Center(
-                                  child:
-                                      CircularProgressIndicator(),
+                                  child: CircularProgressIndicator(),
                                 )
                               : replyStaffs.isEmpty
                                   ? const Center(
                                       child: Padding(
-                                        padding:
-                                            EdgeInsets.all(24),
+                                        padding: EdgeInsets.all(24),
                                         child: Column(
-                                          mainAxisSize:
-                                              MainAxisSize.min,
+                                          mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Icon(
-                                              Icons
-                                                  .person_search_rounded,
+                                              Icons.person_search_rounded,
                                               size: 48,
-                                              color:
-                                                  Color(0xFF94A3B8),
+                                              color: Color(0xFF94A3B8),
                                             ),
                                             SizedBox(height: 12),
                                             Text(
                                               'No staff found',
                                               style: TextStyle(
-                                                color:
-                                                    Color(0xFF475569),
-                                                fontWeight:
-                                                    FontWeight.w800,
+                                                color: Color(0xFF475569),
+                                                fontWeight: FontWeight.w800,
                                               ),
                                             ),
                                           ],
@@ -3819,27 +4074,23 @@ class _StaffMailPageState extends State<StaffMailPage>
                                       ),
                                     )
                                   : ListView.separated(
-                                      controller:
-                                          scrollController,
+                                      controller: scrollController,
                                       keyboardDismissBehavior:
                                           ScrollViewKeyboardDismissBehavior
                                               .onDrag,
-                                      padding:
-                                          const EdgeInsets.fromLTRB(
+                                      padding: const EdgeInsets.fromLTRB(
                                         18,
                                         4,
                                         18,
                                         110,
                                       ),
-                                      itemCount:
-                                          replyStaffs.length,
+                                      itemCount: replyStaffs.length,
                                       separatorBuilder: (_, __) {
                                         return const SizedBox(
                                           height: 10,
                                         );
                                       },
-                                      itemBuilder:
-                                          (itemContext, index) {
+                                      itemBuilder: (itemContext, index) {
                                         final dynamic staff =
                                             replyStaffs[index];
 
@@ -3856,17 +4107,14 @@ class _StaffMailPageState extends State<StaffMailPage>
                                             modalSetState(() {});
                                             refreshParentSheet();
                                           },
-                                          borderRadius:
-                                              BorderRadius.circular(
+                                          borderRadius: BorderRadius.circular(
                                             16,
                                           ),
                                           child: Container(
-                                            padding:
-                                                const EdgeInsets.all(
+                                            padding: const EdgeInsets.all(
                                               14,
                                             ),
-                                            decoration:
-                                                BoxDecoration(
+                                            decoration: BoxDecoration(
                                               color: selected
                                                   ? const Color(
                                                       0xFFEFF6FF,
@@ -3884,27 +4132,23 @@ class _StaffMailPageState extends State<StaffMailPage>
                                                     : const Color(
                                                         0xFFE2E8F0,
                                                       ),
-                                                width:
-                                                    selected ? 1.4 : 1,
+                                                width: selected ? 1.4 : 1,
                                               ),
                                             ),
                                             child: Row(
                                               children: [
                                                 CircleAvatar(
-                                                  backgroundColor:
-                                                      selected
-                                                          ? const Color(
-                                                              0xFF2563EB,
-                                                            )
-                                                          : const Color(
-                                                              0xFFF1F5F9,
-                                                            ),
+                                                  backgroundColor: selected
+                                                      ? const Color(
+                                                          0xFF2563EB,
+                                                        )
+                                                      : const Color(
+                                                          0xFFF1F5F9,
+                                                        ),
                                                   child: Icon(
                                                     selected
-                                                        ? Icons
-                                                            .check_rounded
-                                                        : Icons
-                                                            .person_rounded,
+                                                        ? Icons.check_rounded
+                                                        : Icons.person_rounded,
                                                     color: selected
                                                         ? Colors.white
                                                         : const Color(
@@ -3926,17 +4170,14 @@ class _StaffMailPageState extends State<StaffMailPage>
                                                           staff,
                                                         ),
                                                         maxLines: 1,
-                                                        overflow:
-                                                            TextOverflow
-                                                                .ellipsis,
-                                                        style:
-                                                            const TextStyle(
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: const TextStyle(
                                                           color: Color(
                                                             0xFF0F172A,
                                                           ),
                                                           fontWeight:
-                                                              FontWeight
-                                                                  .w900,
+                                                              FontWeight.w900,
                                                         ),
                                                       ),
                                                       const SizedBox(
@@ -3944,14 +4185,12 @@ class _StaffMailPageState extends State<StaffMailPage>
                                                       ),
                                                       const Text(
                                                         'mexpo.org',
-                                                        style:
-                                                            TextStyle(
+                                                        style: TextStyle(
                                                           color: Color(
                                                             0xFF64748B,
                                                           ),
                                                           fontWeight:
-                                                              FontWeight
-                                                                  .w500,
+                                                              FontWeight.w500,
                                                         ),
                                                       ),
                                                     ],
@@ -3959,8 +4198,7 @@ class _StaffMailPageState extends State<StaffMailPage>
                                                 ),
                                                 Checkbox(
                                                   value: selected,
-                                                  activeColor:
-                                                      const Color(
+                                                  activeColor: const Color(
                                                     0xFF2563EB,
                                                   ),
                                                   onChanged: (_) {
@@ -4041,8 +4279,7 @@ class _StaffMailPageState extends State<StaffMailPage>
   }
 
   Future<void> pickReplyFiles() async {
-    final FilePickerResult? result =
-        await FilePicker.platform.pickFiles(
+    final FilePickerResult? result = await FilePicker.platform.pickFiles(
       allowMultiple: true,
       type: FileType.any,
       withData: false,
@@ -4081,13 +4318,24 @@ class _StaffMailPageState extends State<StaffMailPage>
     }
 
     final Set<int> recipientIds = replyRecipientUsers
-        .map(getRecipientId).whereType<int>().where((id) => id > 0).toSet();
+        .map(getRecipientId)
+        .whereType<int>()
+        .where((id) => id > 0)
+        .toSet();
     final Set<int> ccRecipientIds = replyCcRecipientUsers
-        .map(getRecipientId).whereType<int>().where((id) => id > 0).toSet();
+        .map(getRecipientId)
+        .whereType<int>()
+        .where((id) => id > 0)
+        .toSet();
     final Set<int> bccRecipientIds = replyBccRecipientUsers
-        .map(getRecipientId).whereType<int>().where((id) => id > 0).toSet();
+        .map(getRecipientId)
+        .whereType<int>()
+        .where((id) => id > 0)
+        .toSet();
 
-    if (recipientIds.isEmpty && ccRecipientIds.isEmpty && bccRecipientIds.isEmpty) {
+    if (recipientIds.isEmpty &&
+        ccRecipientIds.isEmpty &&
+        bccRecipientIds.isEmpty) {
       showMsg('Select at least one To, CC or BCC reply recipient');
       return false;
     }
@@ -4118,8 +4366,7 @@ class _StaffMailPageState extends State<StaffMailPage>
         });
       }
 
-      final http.MultipartRequest request =
-          http.MultipartRequest(
+      final http.MultipartRequest request = http.MultipartRequest(
         'POST',
         Uri.parse(
           '$api/api/internal/mails/$mailId/reply/',
@@ -4130,13 +4377,16 @@ class _StaffMailPageState extends State<StaffMailPage>
       request.fields['message'] = message;
 
       for (final int recipientId in recipientIds) {
-        request.files.add(http.MultipartFile.fromString('recipients', recipientId.toString()));
+        request.files.add(http.MultipartFile.fromString(
+            'recipients', recipientId.toString()));
       }
       for (final int recipientId in ccRecipientIds) {
-        request.files.add(http.MultipartFile.fromString('cc_recipients', recipientId.toString()));
+        request.files.add(http.MultipartFile.fromString(
+            'cc_recipients', recipientId.toString()));
       }
       for (final int recipientId in bccRecipientIds) {
-        request.files.add(http.MultipartFile.fromString('bcc_recipients', recipientId.toString()));
+        request.files.add(http.MultipartFile.fromString(
+            'bcc_recipients', recipientId.toString()));
       }
 
       for (final PlatformFile file in replyDocuments) {
@@ -4151,11 +4401,9 @@ class _StaffMailPageState extends State<StaffMailPage>
         );
       }
 
-      final http.StreamedResponse streamedResponse =
-          await request.send();
+      final http.StreamedResponse streamedResponse = await request.send();
 
-      final String responseBody =
-          await streamedResponse.stream.bytesToString();
+      final String responseBody = await streamedResponse.stream.bytesToString();
 
       if (streamedResponse.statusCode < 200 ||
           streamedResponse.statusCode >= 300) {
@@ -4163,9 +4411,7 @@ class _StaffMailPageState extends State<StaffMailPage>
 
         try {
           final dynamic decoded = jsonDecode(responseBody);
-          errorMessage =
-              decoded['message']?.toString() ??
-              errorMessage;
+          errorMessage = decoded['message']?.toString() ?? errorMessage;
         } catch (_) {}
 
         showMsg(errorMessage);
@@ -4203,15 +4449,10 @@ class _StaffMailPageState extends State<StaffMailPage>
   }
 
   Widget buildAttachmentTile(dynamic file) {
-    final String? url =
-        file?['document_url']?.toString();
+    final String? url = file?['document_url']?.toString();
 
     final String name =
-        file?['document']
-                ?.toString()
-                .split('/')
-                .last ??
-            'Attachment';
+        file?['document']?.toString().split('/').last ?? 'Attachment';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -4230,8 +4471,7 @@ class _StaffMailPageState extends State<StaffMailPage>
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        trailing:
-            const Icon(Icons.open_in_new_rounded),
+        trailing: const Icon(Icons.open_in_new_rounded),
         onTap: () async {
           if (url == null || url.isEmpty) return;
 
@@ -4251,15 +4491,13 @@ class _StaffMailPageState extends State<StaffMailPage>
   }
 
   Widget buildThreadMessageCard(dynamic threadMail) {
-    final List attachments =
-        threadMail?['attachments'] is List
-            ? threadMail['attachments']
-            : <dynamic>[];
+    final List attachments = threadMail?['attachments'] is List
+        ? threadMail['attachments']
+        : <dynamic>[];
 
-    final List recipients =
-        threadMail?['recipients_data'] is List
-            ? threadMail['recipients_data']
-            : <dynamic>[];
+    final List recipients = threadMail?['recipients_data'] is List
+        ? threadMail['recipients_data']
+        : <dynamic>[];
     final List ccRecipients = threadMail?['cc_recipients_data'] is List
         ? threadMail['cc_recipients_data']
         : <dynamic>[];
@@ -4275,10 +4513,12 @@ class _StaffMailPageState extends State<StaffMailPage>
         .join(', ');
     final String ccNames = ccRecipients
         .map((user) => user?['name']?.toString() ?? '')
-        .where((name) => name.isNotEmpty).join(', ');
+        .where((name) => name.isNotEmpty)
+        .join(', ');
     final String bccNames = bccRecipients
         .map((user) => user?['name']?.toString() ?? '')
-        .where((name) => name.isNotEmpty).join(', ');
+        .where((name) => name.isNotEmpty)
+        .join(', ');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -4301,13 +4541,11 @@ class _StaffMailPageState extends State<StaffMailPage>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
                 radius: 20,
-                backgroundColor:
-                    const Color(0xFFEFF6FF),
+                backgroundColor: const Color(0xFFEFF6FF),
                 child: const Icon(
                   Icons.person_rounded,
                   color: Color(0xFF2563EB),
@@ -4316,8 +4554,7 @@ class _StaffMailPageState extends State<StaffMailPage>
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
@@ -4345,9 +4582,7 @@ class _StaffMailPageState extends State<StaffMailPage>
                         ],
                         Expanded(
                           child: Text(
-                            threadMail?['sender_name']
-                                    ?.toString() ??
-                                'Unknown',
+                            threadMail?['sender_name']?.toString() ?? 'Unknown',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -4361,22 +4596,39 @@ class _StaffMailPageState extends State<StaffMailPage>
                     const SizedBox(height: 2),
                     Text(
                       'To: ${recipientNames.isEmpty ? 'Unknown' : recipientNames}',
-                      maxLines: 2, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Color(0xFF64748B), fontSize: 12),
                     ),
                     if (ccNames.isNotEmpty)
-                      Text('CC: $ccNames', maxLines: 2, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                      Text('CC: $ccNames',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Color(0xFF64748B), fontSize: 12)),
                     if (bccNames.isNotEmpty)
-                      Text('BCC: $bccNames', maxLines: 2, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                    if (threadMail?['current_user_recipient_type']?.toString().toLowerCase() == 'bcc')
+                      Text('BCC: $bccNames',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Color(0xFF64748B), fontSize: 12)),
+                    if (threadMail?['current_user_recipient_type']
+                            ?.toString()
+                            .toLowerCase() ==
+                        'bcc')
                       Container(
                         margin: const EdgeInsets.only(top: 5),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(999)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(999)),
                         child: const Text('You received this mail as BCC',
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF475569))),
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF475569))),
                       ),
                   ],
                 ),
@@ -4395,11 +4647,7 @@ class _StaffMailPageState extends State<StaffMailPage>
           ),
           const Divider(height: 24),
           Text(
-            threadMail?['message']
-                        ?.toString()
-                        .trim()
-                        .isNotEmpty ==
-                    true
+            threadMail?['message']?.toString().trim().isNotEmpty == true
                 ? threadMail['message'].toString()
                 : 'No message',
             style: const TextStyle(
@@ -4560,10 +4808,9 @@ class _StaffMailPageState extends State<StaffMailPage>
               minChildSize: 0.55,
               maxChildSize: 0.98,
               builder: (sheetContext, scrollController) {
-                final List<dynamic> displayThread =
-                    mailThread.isNotEmpty
-                        ? mailThread
-                        : <dynamic>[selectedMail];
+                final List<dynamic> displayThread = mailThread.isNotEmpty
+                    ? mailThread
+                    : <dynamic>[selectedMail];
 
                 return Container(
                   decoration: const BoxDecoration(
@@ -4582,8 +4829,7 @@ class _StaffMailPageState extends State<StaffMailPage>
                           height: 5,
                           decoration: BoxDecoration(
                             color: const Color(0xFFCBD5E1),
-                            borderRadius:
-                                BorderRadius.circular(100),
+                            borderRadius: BorderRadius.circular(100),
                           ),
                         ),
                         Padding(
@@ -4594,24 +4840,20 @@ class _StaffMailPageState extends State<StaffMailPage>
                             12,
                           ),
                           child: Row(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      getMailDisplaySubject(
-                                        selectedMail,
-                                      ),
+                                      selectedMail == null
+                                          ? 'No subject'
+                                          : getMailDisplaySubject(selectedMail),
                                       style: const TextStyle(
                                         fontSize: 20,
-                                        fontWeight:
-                                            FontWeight.w900,
-                                        color:
-                                            Color(0xFF0F172A),
+                                        fontWeight: FontWeight.w900,
+                                        color: Color(0xFF0F172A),
                                       ),
                                     ),
                                     // const SizedBox(height: 3),
@@ -4686,10 +4928,8 @@ class _StaffMailPageState extends State<StaffMailPage>
                           child: ListView(
                             controller: scrollController,
                             keyboardDismissBehavior:
-                                ScrollViewKeyboardDismissBehavior
-                                    .onDrag,
-                            padding:
-                                const EdgeInsets.fromLTRB(
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            padding: const EdgeInsets.fromLTRB(
                               16,
                               0,
                               16,
@@ -4755,12 +4995,10 @@ class _StaffMailPageState extends State<StaffMailPage>
                                 buildThreadMessageCard,
                               ),
                               Container(
-                                padding:
-                                    const EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
                                   color: Colors.white,
-                                  borderRadius:
-                                      BorderRadius.circular(18),
+                                  borderRadius: BorderRadius.circular(18),
                                   border: Border.all(
                                     color: const Color(
                                       0xFFE2E8F0,
@@ -4768,33 +5006,27 @@ class _StaffMailPageState extends State<StaffMailPage>
                                   ),
                                 ),
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const Text(
                                       'Reply',
                                       style: TextStyle(
                                         fontSize: 18,
-                                        fontWeight:
-                                            FontWeight.w900,
-                                        color:
-                                            Color(0xFF0F172A),
+                                        fontWeight: FontWeight.w900,
+                                        color: Color(0xFF0F172A),
                                       ),
                                     ),
                                     const SizedBox(height: 14),
                                     InkWell(
                                       onTap: () async {
                                         await openReplyRecipientSelector(
-                                          refreshParentSheet:
-                                              refreshSheet,
+                                          refreshParentSheet: refreshSheet,
                                         );
                                       },
-                                      borderRadius:
-                                          BorderRadius.circular(16),
+                                      borderRadius: BorderRadius.circular(16),
                                       child: Container(
                                         width: double.infinity,
-                                        padding:
-                                            const EdgeInsets.symmetric(
+                                        padding: const EdgeInsets.symmetric(
                                           horizontal: 14,
                                           vertical: 15,
                                         ),
@@ -4802,8 +5034,7 @@ class _StaffMailPageState extends State<StaffMailPage>
                                           color: const Color(
                                             0xFFF8FAFC,
                                           ),
-                                          borderRadius:
-                                              BorderRadius.circular(
+                                          borderRadius: BorderRadius.circular(
                                             16,
                                           ),
                                           border: Border.all(
@@ -4815,8 +5046,7 @@ class _StaffMailPageState extends State<StaffMailPage>
                                         child: Row(
                                           children: [
                                             const Icon(
-                                              Icons
-                                                  .people_alt_rounded,
+                                              Icons.people_alt_rounded,
                                               color: Color(
                                                 0xFF475569,
                                               ),
@@ -4824,28 +5054,24 @@ class _StaffMailPageState extends State<StaffMailPage>
                                             const SizedBox(width: 10),
                                             Expanded(
                                               child: Text(
-                                                replyRecipientUsers
-                                                        .isEmpty
+                                                replyRecipientUsers.isEmpty
                                                     ? 'Select reply recipients'
                                                     : '${replyRecipientUsers.length} reply recipients selected',
                                                 style: TextStyle(
-                                                  color:
-                                                      replyRecipientUsers
-                                                              .isEmpty
-                                                          ? const Color(
-                                                              0xFF64748B,
-                                                            )
-                                                          : const Color(
-                                                              0xFF0F172A,
-                                                            ),
-                                                  fontWeight:
-                                                      FontWeight.w800,
+                                                  color: replyRecipientUsers
+                                                          .isEmpty
+                                                      ? const Color(
+                                                          0xFF64748B,
+                                                        )
+                                                      : const Color(
+                                                          0xFF0F172A,
+                                                        ),
+                                                  fontWeight: FontWeight.w800,
                                                 ),
                                               ),
                                             ),
                                             const Icon(
-                                              Icons
-                                                  .keyboard_arrow_down_rounded,
+                                              Icons.keyboard_arrow_down_rounded,
                                               color: Color(
                                                 0xFF64748B,
                                               ),
@@ -4854,22 +5080,18 @@ class _StaffMailPageState extends State<StaffMailPage>
                                         ),
                                       ),
                                     ),
-                                    if (replyRecipientUsers
-                                        .isNotEmpty) ...[
+                                    if (replyRecipientUsers.isNotEmpty) ...[
                                       const SizedBox(height: 12),
                                       Wrap(
                                         spacing: 8,
                                         runSpacing: 8,
-                                        children:
-                                            replyRecipientUsers
-                                                .map(
+                                        children: replyRecipientUsers.map(
                                           (user) {
                                             return Chip(
                                               label: Text(
                                                 staffName(user),
                                               ),
-                                              deleteIcon:
-                                                  const Icon(
+                                              deleteIcon: const Icon(
                                                 Icons.close_rounded,
                                                 size: 18,
                                               ),
@@ -4885,23 +5107,22 @@ class _StaffMailPageState extends State<StaffMailPage>
                                       ),
                                     ],
                                     const SizedBox(height: 14),
-                                    _buildReplyRecipientField('cc', replyCcRecipientUsers, refreshSheet),
+                                    _buildReplyRecipientField('cc',
+                                        replyCcRecipientUsers, refreshSheet),
                                     const SizedBox(height: 14),
-                                    _buildReplyRecipientField('bcc', replyBccRecipientUsers, refreshSheet),
+                                    _buildReplyRecipientField('bcc',
+                                        replyBccRecipientUsers, refreshSheet),
                                     const SizedBox(height: 14),
                                     SizedBox(
                                       height: 140,
                                       child: TextField(
-                                        controller:
-                                            replyMessageController,
+                                        controller: replyMessageController,
                                         expands: true,
                                         maxLines: null,
                                         textAlignVertical:
                                             TextAlignVertical.top,
-                                        decoration:
-                                            inputDecoration(
-                                          hint:
-                                              'Write your reply',
+                                        decoration: inputDecoration(
+                                          hint: 'Write your reply',
                                         ),
                                       ),
                                     ),
@@ -4911,13 +5132,11 @@ class _StaffMailPageState extends State<StaffMailPage>
                                         await pickReplyFiles();
                                         refreshSheet();
                                       },
-                                      borderRadius:
-                                          BorderRadius.circular(
+                                      borderRadius: BorderRadius.circular(
                                         14,
                                       ),
                                       child: Container(
-                                        padding:
-                                            const EdgeInsets.all(
+                                        padding: const EdgeInsets.all(
                                           13,
                                         ),
                                         decoration: BoxDecoration(
@@ -4925,8 +5144,7 @@ class _StaffMailPageState extends State<StaffMailPage>
                                             0xFFF8FAFC,
                                           ),
                                           borderRadius:
-                                              BorderRadius
-                                                  .circular(14),
+                                              BorderRadius.circular(14),
                                           border: Border.all(
                                             color: const Color(
                                               0xFFE2E8F0,
@@ -4936,25 +5154,20 @@ class _StaffMailPageState extends State<StaffMailPage>
                                         child: const Row(
                                           children: [
                                             Icon(
-                                              Icons
-                                                  .attach_file_rounded,
+                                              Icons.attach_file_rounded,
                                             ),
                                             SizedBox(width: 8),
                                             Expanded(
                                               child: Text(
                                                 'Add reply attachments',
-                                                style:
-                                                    TextStyle(
-                                                  fontWeight:
-                                                      FontWeight
-                                                          .w800,
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w800,
                                                 ),
                                               ),
                                             ),
                                             Text(
                                               'Max 1 MB',
-                                              style:
-                                                  TextStyle(
+                                              style: TextStyle(
                                                 color: Color(
                                                   0xFF64748B,
                                                 ),
@@ -4964,30 +5177,24 @@ class _StaffMailPageState extends State<StaffMailPage>
                                         ),
                                       ),
                                     ),
-                                    if (replyDocuments
-                                        .isNotEmpty) ...[
+                                    if (replyDocuments.isNotEmpty) ...[
                                       const SizedBox(height: 10),
                                       ...List.generate(
                                         replyDocuments.length,
                                         (index) {
                                           final PlatformFile file =
-                                              replyDocuments[
-                                                  index];
+                                              replyDocuments[index];
 
                                           return Container(
-                                            margin:
-                                                const EdgeInsets
-                                                    .only(
+                                            margin: const EdgeInsets.only(
                                               bottom: 8,
                                             ),
-                                            decoration:
-                                                BoxDecoration(
+                                            decoration: BoxDecoration(
                                               color: const Color(
                                                 0xFFF8FAFC,
                                               ),
                                               borderRadius:
-                                                  BorderRadius
-                                                      .circular(
+                                                  BorderRadius.circular(
                                                 12,
                                               ),
                                               border: Border.all(
@@ -5006,32 +5213,25 @@ class _StaffMailPageState extends State<StaffMailPage>
                                               title: Text(
                                                 file.name,
                                                 maxLines: 1,
-                                                overflow:
-                                                    TextOverflow
-                                                        .ellipsis,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                               subtitle: Text(
                                                 fileSizeText(
                                                   file.size,
                                                 ),
                                               ),
-                                              trailing:
-                                                  IconButton(
+                                              trailing: IconButton(
                                                 onPressed: () {
                                                   setState(() {
-                                                    replyDocuments
-                                                        .removeAt(
+                                                    replyDocuments.removeAt(
                                                       index,
                                                     );
                                                   });
                                                   refreshSheet();
                                                 },
-                                                icon:
-                                                    const Icon(
-                                                  Icons
-                                                      .close_rounded,
-                                                  color:
-                                                      Colors.red,
+                                                icon: const Icon(
+                                                  Icons.close_rounded,
+                                                  color: Colors.red,
                                                 ),
                                               ),
                                             ),
@@ -5043,53 +5243,48 @@ class _StaffMailPageState extends State<StaffMailPage>
                                     SizedBox(
                                       width: double.infinity,
                                       height: 50,
-                                      child:
-                                          ElevatedButton.icon(
-                                        onPressed:
-                                            isSendingReply
-                                                ? null
-                                                : () async {
-                                                    final bool
-                                                        sent =
-                                                        await sendReply();
+                                      child: ElevatedButton.icon(
+                                        onPressed: isSendingReply
+                                            ? null
+                                            : () async {
+                                                final bool sent =
+                                                    await sendReply();
 
-                                                    refreshSheet();
+                                                refreshSheet();
 
-                                                    if (sent) {
-                                                      await prepareDefaultReplyRecipients(
-                                                        selectedMail,
-                                                      );
-                                                      refreshSheet();
-                                                    }
-                                                  },
+                                                if (sent) {
+                                                  await prepareDefaultReplyRecipients(
+                                                    selectedMail,
+                                                    threadData: mailThread,
+                                                  );
+                                                  refreshSheet();
+                                                }
+                                              },
                                         icon: isSendingReply
                                             ? const SizedBox(
                                                 width: 18,
                                                 height: 18,
                                                 child:
                                                     CircularProgressIndicator(
-                                                  strokeWidth:
-                                                      2,
-                                                  color:
-                                                      Colors.white,
+                                                  strokeWidth: 2,
+                                                  color: Colors.white,
                                                 ),
                                               )
                                             : const Icon(
-                                                Icons
-                                                    .send_rounded,
+                                                Icons.send_rounded,
                                               ),
                                         label: Text(
                                           isSendingReply
                                               ? 'Sending...'
                                               : 'Send Reply',
                                         ),
-                                        style:
-                                            primaryButtonStyle(),
+                                        style: primaryButtonStyle(),
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
+                              const SizedBox(height: 300),
                             ],
                           ),
                         ),
@@ -5132,11 +5327,16 @@ class _StaffMailPageState extends State<StaffMailPage>
               border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
             child: Row(children: [
-              Icon(type == 'bcc' ? Icons.visibility_off_rounded : Icons.people_outline_rounded),
+              Icon(type == 'bcc'
+                  ? Icons.visibility_off_rounded
+                  : Icons.people_outline_rounded),
               const SizedBox(width: 10),
-              Expanded(child: Text(
-                users.isEmpty ? 'Select ${_recipientLabel(type)} recipients' : '${users.length} ${_recipientLabel(type)} recipients selected',
-                style: const TextStyle(fontWeight: FontWeight.w800))),
+              Expanded(
+                  child: Text(
+                      users.isEmpty
+                          ? 'Select ${_recipientLabel(type)} recipients'
+                          : '${users.length} ${_recipientLabel(type)} recipients selected',
+                      style: const TextStyle(fontWeight: FontWeight.w800))),
               const Icon(Icons.keyboard_arrow_down_rounded),
             ]),
           ),
@@ -5146,14 +5346,17 @@ class _StaffMailPageState extends State<StaffMailPage>
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: users.map((user) => Chip(
-              label: Text(staffName(user)),
-              deleteIcon: const Icon(Icons.close_rounded, size: 18),
-              onDeleted: () => setState(() {
-                users.removeWhere((item) => getRecipientId(item) == getRecipientId(user));
-                allRecipientsSelected = false;
-              }),
-            )).toList(),
+            children: users
+                .map((user) => Chip(
+                      label: Text(staffName(user)),
+                      deleteIcon: const Icon(Icons.close_rounded, size: 18),
+                      onDeleted: () => setState(() {
+                        users.removeWhere((item) =>
+                            getRecipientId(item) == getRecipientId(user));
+                        allRecipientsSelected = false;
+                      }),
+                    ))
+                .toList(),
           ),
         ],
       ],
@@ -5180,15 +5383,24 @@ class _StaffMailPageState extends State<StaffMailPage>
               border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
             child: Row(children: [
-              Icon(type == 'bcc' ? Icons.visibility_off_rounded : Icons.people_alt_rounded,
-                color: const Color(0xFF475569)),
+              Icon(
+                  type == 'bcc'
+                      ? Icons.visibility_off_rounded
+                      : Icons.people_alt_rounded,
+                  color: const Color(0xFF475569)),
               const SizedBox(width: 10),
-              Expanded(child: Text(
-                users.isEmpty ? 'Select reply ${_recipientLabel(type)}' : '${users.length} reply ${_recipientLabel(type)} selected',
-                style: TextStyle(
-                  color: users.isEmpty ? const Color(0xFF64748B) : const Color(0xFF0F172A),
-                  fontWeight: FontWeight.w800))),
-              const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B)),
+              Expanded(
+                  child: Text(
+                      users.isEmpty
+                          ? 'Select reply ${_recipientLabel(type)}'
+                          : '${users.length} reply ${_recipientLabel(type)} selected',
+                      style: TextStyle(
+                          color: users.isEmpty
+                              ? const Color(0xFF64748B)
+                              : const Color(0xFF0F172A),
+                          fontWeight: FontWeight.w800))),
+              const Icon(Icons.keyboard_arrow_down_rounded,
+                  color: Color(0xFF64748B)),
             ]),
           ),
         ),
@@ -5197,14 +5409,17 @@ class _StaffMailPageState extends State<StaffMailPage>
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: users.map((user) => Chip(
-              label: Text(staffName(user)),
-              deleteIcon: const Icon(Icons.close_rounded, size: 18),
-              onDeleted: () {
-                setState(() => users.removeWhere((item) => getRecipientId(item) == getRecipientId(user)));
-                refreshSheet();
-              },
-            )).toList(),
+            children: users
+                .map((user) => Chip(
+                      label: Text(staffName(user)),
+                      deleteIcon: const Icon(Icons.close_rounded, size: 18),
+                      onDeleted: () {
+                        setState(() => users.removeWhere((item) =>
+                            getRecipientId(item) == getRecipientId(user)));
+                        refreshSheet();
+                      },
+                    ))
+                .toList(),
           ),
         ],
       ],

@@ -13,6 +13,7 @@ import 'package:beposoft/pages/ACCOUNTS/order_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/performa_invoice_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/view_staff.dart';
 import 'package:beposoft/pages/ADMIN/add_attendance.dart';
+import 'package:beposoft/pages/ADMIN/localpurchaseorderscreen.dart';
 import 'package:beposoft/pages/BDM/bdm_customer_list.dart';
 import 'package:beposoft/pages/BDM/bdm_grv_list.dart';
 import 'package:beposoft/pages/BDM/bdm_order_list.dart';
@@ -2762,6 +2763,17 @@ void dispose() {
                     );
                   },
                 ),
+                       ListTile(
+                    leading: Icon(Icons.dashboard),
+                    title: Text('Local Purchase Order'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  LocalPurchaseOrderScreen()));
+                    },
+                  ),
                 Divider(),
                 ListTile(
                   leading: const Icon(Icons.logout),

@@ -175,6 +175,61 @@ else if(dep=="Warehouse Admin" ){
     return [];
   }
 
+  Future<void> deleteTeamMember(int memberId) async {
+  final bool? confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text("Delete Member"),
+      content: const Text(
+        "Are you sure you want to remove this team member?",
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text("Cancel"),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text("Delete"),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm != true) return;
+
+  try {
+    final token = await getToken();
+    if (token == null) throw Exception("Token missing");
+
+    final response = await http.delete(
+      Uri.parse(
+        "${baseUrl}staff/attendance/team/members/edit/$memberId/",
+      ),
+      headers: authHeaders(token),
+    );
+
+    final body =
+        response.body.isNotEmpty ? jsonDecode(response.body) : {};
+
+    if (response.statusCode == 200 ||
+        response.statusCode == 204) {
+      showSuccess("Member deleted successfully");
+      await fetchMembers();
+    } else {
+      showError(
+        body["message"]?.toString() ?? "Failed to delete member",
+      );
+    }
+  } catch (_) {
+    showError("Failed to delete member");
+  }
+}
+
   Map<String, dynamic> mapTeamItem(dynamic item) {
     return {
       "id": item["id"],
@@ -187,17 +242,14 @@ else if(dep=="Warehouse Admin" ){
     };
   }
 
-  bool isAllowedSalesTeam(dynamic team) {
+bool isAllowedSalesTeam(dynamic team) {
   final name = (team["team_name"] ?? team["name"] ?? "")
       .toString()
       .trim()
       .toUpperCase();
 
-  return name == "SALES DEPARTMENT (MUBARISH)" ||
-      name == "SALES DEPARTMENT (NOUFAL)" ||
-      name == "SALES DEPARTMENT (SHAMI)";
+  return name.contains("SALES");
 }
-
   Map<String, dynamic> mapStaffItem(dynamic item) {
     return {
       "id": item["id"],
@@ -850,7 +902,7 @@ final list = toArray(body)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
-            color: const Color(0xFFF8FAFC),
+            color: const Color.fromARGB(255, 233, 234, 235),
             child: Row(
               children: [
                 CircleAvatar(
@@ -874,7 +926,7 @@ final list = toArray(body)
                         style: const TextStyle(
                           color: Color(0xFF111827),
                           fontWeight: FontWeight.w900,
-                          fontSize: 16,
+                          fontSize: 11,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -913,48 +965,97 @@ final list = toArray(body)
     );
   }
 
-  Widget buildMemberRow(Map<String, dynamic> member, int index) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: const Color(0xFFF1F5F9),
-            child: Text(
-              "${index + 1}",
-              style: const TextStyle(
-                color: Color(0xFF475569),
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
+Widget buildMemberRow(Map<String, dynamic> member, int index) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    child: Row(
+      children: [
+        CircleAvatar(
+          radius: 16,
+          backgroundColor: const Color(0xFFF1F5F9),
+          child: Text(
+            "${index + 1}",
+            style: const TextStyle(
+              color: Color(0xFF475569),
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            member["member_name"]?.toString() ?? "-",
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+            style: const TextStyle(
+              color: Color(0xFF1E293B),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        PopupMenuButton<String>(
+          icon: const Icon(
+            Icons.more_vert_rounded,
+            color: Color(0xFF475569),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          onSelected: (value) {
+            if (value == "edit") {
+              openEditModal(member);
+            } else if (value == "delete") {
+              final int? memberId = member["id"] is int
+                  ? member["id"]
+                  : int.tryParse(member["id"].toString());
+
+              if (memberId != null) {
+                deleteTeamMember(memberId);
+              } else {
+                showError("Member id missing");
+              }
+            }
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem<String>(
+              value: "edit",
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.edit_rounded,
+                    color: Color(0xFFB45309),
+                    size: 20,
+                  ),
+                  SizedBox(width: 12),
+                  Text("Edit"),
+                ],
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              member["member_name"]?.toString() ?? "-",
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFF1E293B),
-                fontWeight: FontWeight.w900,
+            PopupMenuItem<String>(
+              value: "delete",
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.delete_rounded,
+                    color: Colors.red,
+                    size: 20,
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    "Delete",
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          TextButton.icon(
-            onPressed: () => openEditModal(member),
-            icon: const Icon(Icons.edit_rounded, size: 17),
-            label: const Text("Edit"),
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFB45309),
-              textStyle: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+          ],
+        ),
+      ],
+    ),
+  );
+}
 
   Widget buildCountBadge(String value) {
     return Container(

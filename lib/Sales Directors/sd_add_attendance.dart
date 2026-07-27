@@ -76,7 +76,6 @@ class _sdAllAttendanceAddPageState extends State<sdAllAttendanceAddPage> {
     setState(() => loading = true);
 
     await Future.wait([
-      fetchTeams(),
       fetchAttendance(),
       getProfile(),
     ]);
@@ -186,42 +185,6 @@ class _sdAllAttendanceAddPageState extends State<sdAllAttendanceAddPage> {
     );
   }
 
-  bool isAllowedSalesTeam(dynamic team) {
-    final name = (team["team_name"] ?? team["name"] ?? "")
-        .toString()
-        .trim()
-        .toUpperCase();
-
-    return name == "SALES DEPARTMENT (MUBARISH)" ||
-        name == "SALES DEPARTMENT (NOUFAL)" ||
-        name == "SALES DEPARTMENT (SHAMI)";
-  }
-
-  Future<void> fetchTeams() async {
-    try {
-      final token = await getToken();
-      if (token == null) throw Exception("Token missing");
-
-      final response = await http.get(
-        Uri.parse("${baseUrl}staff/attendance/teams/"),
-        headers: authHeaders(token),
-      );
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        final body = jsonDecode(response.body);
-
-        if (!mounted) return;
-        setState(() {
-          teams = body["data"] ?? [];
-        });
-      } else {
-        throw Exception("Failed to load teams");
-      }
-    } catch (_) {
-      showError("Failed to load teams");
-    }
-  }
-
   Future<void> fetchStaffs(dynamic teamId) async {
     if (teamId == null || teamId.toString().isEmpty) {
       if (!mounted) return;
@@ -268,8 +231,8 @@ class _sdAllAttendanceAddPageState extends State<sdAllAttendanceAddPage> {
 
       final uri = Uri.parse("${baseUrl}staff/attendance/sales/data/").replace(
         queryParameters: {
-          if (startDate != null) "start_date": formatDate(startDate!),
-          if (endDate != null) "end_date": formatDate(endDate!),
+          "start_date": formatDate(startDate!),
+          "end_date": formatDate(endDate!),
         },
       );
 
@@ -282,10 +245,27 @@ class _sdAllAttendanceAddPageState extends State<sdAllAttendanceAddPage> {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final body = jsonDecode(response.body);
+        final List<dynamic> salesAttendanceData = body["data"] ?? [];
+
+        final Map<String, dynamic> uniqueSalesTeams = {};
+
+        for (final team in salesAttendanceData) {
+          final teamId = team["team_id"];
+
+          if (teamId == null) continue;
+
+          uniqueSalesTeams[teamId.toString()] = {
+            "id": teamId,
+            "team_id": teamId,
+            "name": team["team_name"],
+            "team_name": team["team_name"],
+          };
+        }
 
         if (!mounted) return;
         setState(() {
-          attendanceData = body["data"] ?? [];
+          attendanceData = salesAttendanceData;
+          teams = uniqueSalesTeams.values.toList();
           teamName = "All Teams";
           teamLeaderName = "All Team Leaders";
         });
@@ -1425,9 +1405,7 @@ class _sdAllAttendanceAddPageState extends State<sdAllAttendanceAddPage> {
     required ValueChanged<String?> onChanged,
     String? Function(String?)? validator,
   }) {
-    final filteredTeams = teams.where(isAllowedSalesTeam).toList();
-
-    final validValue = filteredTeams.any((team) {
+    final validValue = teams.any((team) {
       final itemValue = (team["id"] ?? team["team_id"]).toString();
       return itemValue == value;
     })
@@ -1438,7 +1416,7 @@ class _sdAllAttendanceAddPageState extends State<sdAllAttendanceAddPage> {
       isExpanded: true,
       value: validValue,
       decoration: inputDecoration("Team"),
-      items: filteredTeams.map((team) {
+      items: teams.map((team) {
         final itemValue = (team["id"] ?? team["team_id"]).toString();
         final label = (team["team_name"] ?? team["name"] ?? "-").toString();
 
@@ -1452,7 +1430,7 @@ class _sdAllAttendanceAddPageState extends State<sdAllAttendanceAddPage> {
         );
       }).toList(),
       selectedItemBuilder: (context) {
-        return filteredTeams.map((team) {
+        return teams.map((team) {
           final label = (team["team_name"] ?? team["name"] ?? "-").toString();
 
           return Align(

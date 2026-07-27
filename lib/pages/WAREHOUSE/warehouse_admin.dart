@@ -6,6 +6,7 @@ import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
 import 'package:beposoft/pages/ACCOUNTS/order_list.dart';
 import 'package:beposoft/pages/ADMIN/add_attendance.dart';
 import 'package:beposoft/pages/ADMIN/add_team_staff.dart';
+import 'package:beposoft/pages/ADMIN/localpurchaseorderscreen.dart';
 import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
 import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_order_request_list.dart';
@@ -31,6 +32,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 class WarehouseAdmin extends StatefulWidget {
   @override
   State<WarehouseAdmin> createState() => _WarehouseAdminState();
@@ -38,7 +40,7 @@ class WarehouseAdmin extends StatefulWidget {
 
 class _WarehouseAdminState extends State<WarehouseAdmin>
     with WidgetsBindingObserver {
-        List<String> statusOptions = ["pending", "approved", "rejected"];
+  List<String> statusOptions = ["pending", "approved", "rejected"];
   List<Map<String, dynamic>> grvlist = [];
   List<Map<String, dynamic>> proforma = [];
   List<Map<String, dynamic>> salesReportList = [];
@@ -46,48 +48,47 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
   List<Map<String, dynamic>> filteredOrders = [];
   List<Map<String, dynamic>> shippedOrders = [];
   int inboxMailCount = 0;
-Timer? mailCountTimer;
-      String profileImage = '';
-      bool isFetchingInboxMailCount = false;
-
+  Timer? mailCountTimer;
+  String profileImage = '';
+  bool isFetchingInboxMailCount = false;
 
   String? username = '';
   bool isManager = false;
-@override
-void initState() {
-  super.initState();
+  @override
+  void initState() {
+    super.initState();
 
-  WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addObserver(this);
 
-  _getUsername();
-  getGrvList();
-  getProfile();
-  fetchproformaData();
-  getSalesReport();
-  fetchOrderData();
-  fetchInboxMailCount();
+    _getUsername();
+    getGrvList();
+    getProfile();
+    fetchproformaData();
+    getSalesReport();
+    fetchOrderData();
+    fetchInboxMailCount();
 
-  mailCountTimer = Timer.periodic(
-    const Duration(seconds: 15),
-    (_) {
-      if (mounted) {
-        fetchInboxMailCount();
-      }
-    },
-  );
+    mailCountTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) {
+        if (mounted) {
+          fetchInboxMailCount();
+        }
+      },
+    );
 
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (!mounted) return;
-    AuthStatusChecker.start(context);
-  });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      AuthStatusChecker.start(context);
+    });
 
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (!mounted) return;
-    checkAppUpdate(context);
-  });
-}
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      checkAppUpdate(context);
+    });
+  }
 
-Future<void> getProfile() async {
+  Future<void> getProfile() async {
     try {
       final token = await getTokenFromPrefs();
 
@@ -115,15 +116,14 @@ Future<void> getProfile() async {
       debugPrint("PROFILE ERROR : $e");
     }
   }
-    String getProfileImageUrl() {
+
+  String getProfileImageUrl() {
     if (profileImage.trim().isEmpty) return '';
     if (profileImage.startsWith('http')) return profileImage;
     return '$api$profileImage';
   }
 
-
-
- bool _isUpdateAvailable(String currentVersion, String storeVersion) {
+  bool _isUpdateAvailable(String currentVersion, String storeVersion) {
     List<int> currentParts =
         currentVersion.split('.').map((e) => int.tryParse(e) ?? 0).toList();
 
@@ -152,9 +152,9 @@ Future<void> getProfile() async {
     return false;
   }
 
-int toprint=0;
-int packed=0;
- Future<bool> checkAppUpdate(BuildContext context) async {
+  int toprint = 0;
+  int packed = 0;
+  Future<bool> checkAppUpdate(BuildContext context) async {
     final packageInfo = await PackageInfo.fromPlatform();
     final currentVersion = packageInfo.version;
 
@@ -272,37 +272,36 @@ int packed=0;
 
     return true;
   }
- Future<void> fetchOrderData() async {
-  try {
-    final token = await getTokenFromPrefs();
-    var response = await http.get(
-      Uri.parse('$api/api/orders/'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
 
-    
+  Future<void> fetchOrderData() async {
+    try {
+      final token = await getTokenFromPrefs();
+      var response = await http.get(
+        Uri.parse('$api/api/orders/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-    if (response.statusCode == 200) {
-      final parsed = jsonDecode(response.body);
-      var productsData = parsed;
-      List<Map<String, dynamic>> orderList = [];
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+        var productsData = parsed;
+        List<Map<String, dynamic>> orderList = [];
 
-      for (var productData in productsData) {
-        String rawOrderDate = productData['order_date'];
-        String formattedOrderDate = rawOrderDate;
+        for (var productData in productsData) {
+          String rawOrderDate = productData['order_date'];
+          String formattedOrderDate = rawOrderDate;
 
-        try {
-          DateTime parsedOrderDate = DateFormat('yyyy-MM-dd').parse(rawOrderDate);
-          formattedOrderDate = DateFormat('yyyy-MM-dd').format(parsedOrderDate); // Convert to desired format
-        } catch (e) {
-          
-        }
+          try {
+            DateTime parsedOrderDate =
+                DateFormat('yyyy-MM-dd').parse(rawOrderDate);
+            formattedOrderDate = DateFormat('yyyy-MM-dd')
+                .format(parsedOrderDate); // Convert to desired format
+          } catch (e) {}
 
-        // Add to orderList if status is "Shipped" or "To print"
-       
+          // Add to orderList if status is "Shipped" or "To print"
+
           orderList.add({
             'id': productData['id'],
             'invoice': productData['invoice'],
@@ -345,28 +344,21 @@ int packed=0;
             'total_amount': productData['total_amount'],
             'order_date': formattedOrderDate, // Use the formatted string
           });
-           if (productData['status'] == 'To Print') {
+          if (productData['status'] == 'To Print') {
             toprint++;
-
-
+          } else if (productData['status'] == 'Packed') {
+            packed++;
+          }
         }
-        else if(productData['status'] == 'Packed'){
-          packed++;
-        }
+
+        setState(() {
+          orders = orderList;
+
+          filteredOrders = orderList;
+        });
       }
-
-
-      setState(() {
-        orders = orderList;
-        
-        filteredOrders = orderList;
-      });
-    }
-  } catch (error) {
-    
+    } catch (error) {}
   }
-}
-
 
   Future<void> getSalesReport() async {
     setState(() {});
@@ -476,13 +468,8 @@ int packed=0;
           proforma = performaInvoiceList;
         });
         int proformalistcount = proforma.length;
-        
-      } else {
-        
-      }
-    } catch (error) {
-      
-    }
+      } else {}
+    } catch (error) {}
   }
 
 // Get token from SharedPreferences
@@ -490,134 +477,132 @@ int packed=0;
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('token');
   }
-@override
-void didChangeAppLifecycleState(AppLifecycleState state) {
-  super.didChangeAppLifecycleState(state);
 
-  if (state == AppLifecycleState.resumed) {
-    fetchInboxMailCount();
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    if (state == AppLifecycleState.resumed) {
+      fetchInboxMailCount();
+    }
   }
-}
+
   Future<void> fetchInboxMailCount() async {
-  if (isFetchingInboxMailCount) return;
+    if (isFetchingInboxMailCount) return;
 
-  isFetchingInboxMailCount = true;
+    isFetchingInboxMailCount = true;
 
-  try {
-    final String? token = await getTokenFromPrefs();
+    try {
+      final String? token = await getTokenFromPrefs();
 
-    if (token == null || token.trim().isEmpty) {
-      return;
-    }
+      if (token == null || token.trim().isEmpty) {
+        return;
+      }
 
-    final Uri uri = Uri.parse(
-      '$api/api/internal/mails/',
-    ).replace(
-      queryParameters: {
-        'type': 'inbox',
-        'read_status': 'unread',
-        'page': '1',
-      },
-    );
-
-    final http.Response response = await http.get(
-      uri,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-
-    if (response.statusCode != 200) {
-      debugPrint(
-        'MAIL COUNT REQUEST FAILED: '
-        '${response.statusCode} ${response.body}',
+      final Uri uri = Uri.parse(
+        '$api/api/internal/mails/',
+      ).replace(
+        queryParameters: {
+          'type': 'inbox',
+          'read_status': 'unread',
+          'page': '1',
+        },
       );
-      return;
-    }
 
-    final dynamic decoded = jsonDecode(response.body);
+      final http.Response response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-    int newUnreadCount = 0;
+      if (response.statusCode != 200) {
+        debugPrint(
+          'MAIL COUNT REQUEST FAILED: '
+          '${response.statusCode} ${response.body}',
+        );
+        return;
+      }
 
-    if (decoded is Map<String, dynamic>) {
-      final dynamic results = decoded['results'];
-      final dynamic data = decoded['data'];
+      final dynamic decoded = jsonDecode(response.body);
 
-      final dynamic rawUnreadCount =
-          decoded['unread_count'] ??
-          (results is Map ? results['unread_count'] : null) ??
-          (data is Map ? data['unread_count'] : null);
+      int newUnreadCount = 0;
 
-      final dynamic rawFilteredCount =
-          decoded['count'] ??
-          (results is Map ? results['count'] : null) ??
-          (data is Map ? data['count'] : null);
+      if (decoded is Map<String, dynamic>) {
+        final dynamic results = decoded['results'];
+        final dynamic data = decoded['data'];
 
-      if (rawUnreadCount != null) {
-        newUnreadCount =
-            rawUnreadCount is int
-                ? rawUnreadCount
-                : int.tryParse(rawUnreadCount.toString()) ?? 0;
-      } else if (rawFilteredCount != null) {
-        newUnreadCount =
-            rawFilteredCount is int
-                ? rawFilteredCount
-                : int.tryParse(rawFilteredCount.toString()) ?? 0;
-      } else {
-        dynamic mailList;
+        final dynamic rawUnreadCount = decoded['unread_count'] ??
+            (results is Map ? results['unread_count'] : null) ??
+            (data is Map ? data['unread_count'] : null);
 
-        if (results is Map && results['data'] is List) {
-          mailList = results['data'];
-        } else if (data is Map && data['data'] is List) {
-          mailList = data['data'];
-        } else if (results is List) {
-          mailList = results;
-        } else if (data is List) {
-          mailList = data;
-        }
+        final dynamic rawFilteredCount = decoded['count'] ??
+            (results is Map ? results['count'] : null) ??
+            (data is Map ? data['count'] : null);
 
-        if (mailList is List) {
-          newUnreadCount = mailList.where((dynamic mail) {
-            if (mail is! Map) return false;
+        if (rawUnreadCount != null) {
+          newUnreadCount = rawUnreadCount is int
+              ? rawUnreadCount
+              : int.tryParse(rawUnreadCount.toString()) ?? 0;
+        } else if (rawFilteredCount != null) {
+          newUnreadCount = rawFilteredCount is int
+              ? rawFilteredCount
+              : int.tryParse(rawFilteredCount.toString()) ?? 0;
+        } else {
+          dynamic mailList;
 
-            if (mail.containsKey('is_read')) {
-              return mail['is_read'] != true;
-            }
+          if (results is Map && results['data'] is List) {
+            mailList = results['data'];
+          } else if (data is Map && data['data'] is List) {
+            mailList = data['data'];
+          } else if (results is List) {
+            mailList = results;
+          } else if (data is List) {
+            mailList = data;
+          }
 
-            if (mail.containsKey('read')) {
-              return mail['read'] != true;
-            }
+          if (mailList is List) {
+            newUnreadCount = mailList.where((dynamic mail) {
+              if (mail is! Map) return false;
 
-            final dynamic readAt = mail['read_at'];
+              if (mail.containsKey('is_read')) {
+                return mail['is_read'] != true;
+              }
 
-            return readAt == null ||
-                readAt.toString().trim().isEmpty;
-          }).length;
+              if (mail.containsKey('read')) {
+                return mail['read'] != true;
+              }
+
+              final dynamic readAt = mail['read_at'];
+
+              return readAt == null || readAt.toString().trim().isEmpty;
+            }).length;
+          }
         }
       }
-    }
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (inboxMailCount != newUnreadCount) {
-      setState(() {
-        inboxMailCount = newUnreadCount;
-      });
+      if (inboxMailCount != newUnreadCount) {
+        setState(() {
+          inboxMailCount = newUnreadCount;
+        });
+      }
+    } catch (error, stackTrace) {
+      debugPrint('MAIL COUNT ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    } finally {
+      isFetchingInboxMailCount = false;
     }
-  } catch (error, stackTrace) {
-    debugPrint('MAIL COUNT ERROR: $error');
-    debugPrintStack(stackTrace: stackTrace);
-  } finally {
-    isFetchingInboxMailCount = false;
   }
-}
-@override
-void dispose() {
-  WidgetsBinding.instance.removeObserver(this);
-  mailCountTimer?.cancel();
-  super.dispose();
-}
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    mailCountTimer?.cancel();
+    super.dispose();
+  }
 
 // Function to fetch GRV data
   Future<void> getGrvList() async {
@@ -656,7 +641,6 @@ void dispose() {
 
         // Get the count of grvlist
         int grvListCount = grvlist.length;
-        
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -674,33 +658,33 @@ void dispose() {
       );
     }
   }
- Future<String?> getusernameFromPrefs() async {
+
+  Future<String?> getusernameFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('username');
   }
+
   // Retrieve the username from SharedPreferences
   Future<void> _getUsername() async {
-          final name = await getusernameFromPrefs();
+    final name = await getusernameFromPrefs();
     setState(() {
-      username =name??
-          'Guest'; // Default to 'Guest' if no username
+      username = name ?? 'Guest'; // Default to 'Guest' if no username
     });
   }
 
- void logout(BuildContext context) async {
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  // await prefs.remove('userId');
-  // await prefs.remove('token');
-  // await prefs.remove('username');
-  // await prefs.remove('department');
-  // await prefs.remove('warehouse');
-  await Future.delayed(Duration(milliseconds: 100));
-  Navigator.pushReplacement(
-    context,
-    MaterialPageRoute(builder: (context) => login()),
-  );
-}
-
+  void logout(BuildContext context) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    // await prefs.remove('userId');
+    // await prefs.remove('token');
+    // await prefs.remove('username');
+    // await prefs.remove('department');
+    // await prefs.remove('warehouse');
+    await Future.delayed(Duration(milliseconds: 100));
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => login()),
+    );
+  }
 
   drower d = drower();
 
@@ -731,64 +715,65 @@ void dispose() {
           elevation: 0,
           backgroundColor: Colors.white,
           // leading: Icon(Icons.arrow_back, color: Colors.black),
-       actions: [
-  Padding(
-    padding: const EdgeInsets.only(right: 12),
-    child: Stack(
-      clipBehavior: Clip.none,
-      children: [
-        IconButton(
-          icon: const Icon(
-            Icons.mail_outline_rounded,
-            color: Colors.black,
-            size: 28,
-          ),
-         onPressed: () async {
-  await Navigator.push<void>(
-    context,
-    MaterialPageRoute(
-      builder: (_) => const StaffMailPage(),
-    ),
-  );
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.mail_outline_rounded,
+                      color: Colors.black,
+                      size: 28,
+                    ),
+                    onPressed: () async {
+                      await Navigator.push<void>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const StaffMailPage(),
+                        ),
+                      );
 
-  if (!mounted) return;
+                      if (!mounted) return;
 
-  await fetchInboxMailCount();
-},
-        ),
-
-        if (inboxMailCount > 0)
-          Positioned(
-            right: 4,
-            top: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 6,
-                vertical: 2,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              constraints: const BoxConstraints(
-                minWidth: 18,
-                minHeight: 18,
-              ),
-              child: Text(
-                inboxMailCount > 99 ? '99+' : inboxMailCount.toString(),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
+                      await fetchInboxMailCount();
+                    },
+                  ),
+                  if (inboxMailCount > 0)
+                    Positioned(
+                      right: 4,
+                      top: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 18,
+                          minHeight: 18,
+                        ),
+                        child: Text(
+                          inboxMailCount > 99
+                              ? '99+'
+                              : inboxMailCount.toString(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
-          ),
-      ],
-    ),
-  ),
-],
+          ],
         ),
         drawer: Drawer(
           child: ListView(
@@ -814,98 +799,159 @@ void dispose() {
                 leading: Icon(Icons.dashboard),
                 title: Text('Dashboard'),
                 onTap: () {
-                  Navigator.push(context,
-                      MaterialPageRoute(builder: (context) => WarehouseAdmin()));
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => WarehouseAdmin()));
                 },
               ),
-             
               Divider(),
-                  ListTile(
-                  leading: Icon(Icons.person),
+              ListTile(
+                leading: Icon(Icons.person),
+                title: Text('Add Attendance'),
+                onTap: () {
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => StaffSelfAttendanceScreen()));
+                  // Navigate to the Settings page or perform any other action
+                },
+              ),
+              ListTile(
+                title: const Text('Send Mail'),
+                onTap: () async {
+                  Navigator.pop(context);
+
+                  await Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const StaffMailPage(),
+                    ),
+                  );
+
+                  if (!mounted) return;
+
+                  await fetchInboxMailCount();
+                },
+              ),
+              _buildDropdownTile(context, 'Purchase', [
+                'Product List',
+                // 'Purchase request',
+                // 'Purchase request List',
+                'Product Add',
+              ]),
+              _buildDropdownTile(context, 'Delivery Note', [
+                'Delivery Note List(All)',
+                'Delivery Note List(To Print)',
+                'Delivery Note List(Packing under Progress)',
+                'Delivery Note List(Packed)',
+                'Delivery Note List(Ready to ship)',
+                'Delivery Note List(Shipped)',
+                'Daily Goods Movement'
+              ]),
+              _buildDropdownTile(
+                  context, 'GRV', ['Create New GRV', 'GRVs List']),
+
+                         ListTile(
+                    leading: Icon(Icons.dashboard),
+                    title: Text('Local Purchase Order'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  LocalPurchaseOrderScreen()));
+                    },
+                  ),
+              ListTile(
+                title: Text('Order Requests'),
+                onTap: () {
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => Warehouse_Order_Request(
+                                status: null,
+                              )));
+                },
+              ),
+              if (isManager)
+                ListTile(
+                  title: Text('Add Team Staff'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) =>
+                                StaffAttendanceTeamMemberScreen()));
+                  },
+                ),
+              if (isManager)
+                ListTile(
                   title: Text('Add Attendance'),
                   onTap: () {
                     Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (context) => StaffSelfAttendanceScreen()));
-                    // Navigate to the Settings page or perform any other action
+                            builder: (context) => StaffMarkAttendanceScreen()));
                   },
                 ),
-
-  ListTile(
-  title: const Text('Send Mail'),
-  onTap: () async {
-    Navigator.pop(context);
-
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const StaffMailPage(),
-      ),
-    );
-
-    if (!mounted) return;
-
-    await fetchInboxMailCount();
-  },
-),
-             
-              
-              _buildDropdownTile(context, 'Delivery Note',
-                  ['Delivery Note List(All)','Delivery Note List(To Print)','Delivery Note List(Packing under Progress)','Delivery Note List(Packed)','Delivery Note List(Ready to ship)','Delivery Note List(Shipped)', 'Daily Goods Movement']),
-           
-             
-              _buildDropdownTile(
-                  context, 'GRV', ['Create New GRV', 'GRVs List']),
-            ListTile(
-                title: Text('Order Requests'),
-                onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => Warehouse_Order_Request(status: null,)));
-                },
-              ),
-              if (isManager)
-              ListTile(
-                title: Text('Add Team Staff'),
-                onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => StaffAttendanceTeamMemberScreen()));
-                },
-              ),
-              if (isManager)
-              ListTile(
-                title: Text('Add Attendance'),
-                onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => StaffMarkAttendanceScreen()));
-                },
-              ),
               Divider(),
-
               if (isManager)
-              ListTile(
-                title: Text('Approve Leave Requests'),
-                onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => ManagerLeaveRequestsPage()));
-                },
-              ),
-              Divider(),
-
                 ListTile(
+                  title: Text('Approve Leave Requests'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => ManagerLeaveRequestsPage()));
+                  },
+                ),
+              Divider(),
+              ListTile(
                 title: Text('Employee Leave Form'),
                 onTap: () {
-                  Navigator.push(context,
-                      MaterialPageRoute(builder: (context) => EmployeeLeaveFormPage()));
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => EmployeeLeaveFormPage()));
                 },
               ),
-
               Divider(),
               ListTile(
                 leading: Icon(Icons.check_circle),
                 title: Text('Approve Products'),
                 onTap: () {
-                   Navigator.push(context,
-                      MaterialPageRoute(builder: (context) => Approve_products()));
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => Approve_products()));
                 },
               ),
               Divider(),
+                   _buildDropdownTile(context, 'Reports', [
+                    // 'Sales Report',
+                    // 'Sales Report Excel',
+                    // 'GST Report',
+                    'Product Stock Report',
+                    // 'Order Items Excel Report',
+                    // 'Shipping Address Excel Report',
+                    // 'Daily Product Sold Report',
+                    // 'All Division Product Sale Report',
+                    // 'Cycling & Skating Monthly Excel',
+                    // 'Cycling & Skating Daily Excel',
+                    // 'Tracking Report',
+                    // 'Credit Sales Report',
+                    // 'COD Sales Report',
+                    // 'Statewise Sales Report',
+                    // 'Expence Report',
+                    // 'Delivery Report',
+                    'Product Sale Report',
+                    'Stock Report',
+                    'Damaged Stock',
+                    // 'Finance Report',
+                    // 'Actual Delivery Report',
+                    // 'Order Comparison Report',
+                  ]),
               ListTile(
                 leading: Icon(Icons.exit_to_app),
                 title: Text('Logout'),
@@ -917,24 +963,24 @@ void dispose() {
           ),
         ),
         body: SafeArea(
-  child: Padding(
-    padding: const EdgeInsets.all(16.0),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Profile Section
-        Row(
-          children: [
-            GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => EditProfileScreen(),
-                  ),
-                );
-              },
-             child: CircleAvatar(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Profile Section
+                Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EditProfileScreen(),
+                          ),
+                        );
+                      },
+                      child: CircleAvatar(
                         radius: 25,
                         backgroundColor: const Color(0xFFE5E7EB),
                         backgroundImage: getProfileImageUrl().isNotEmpty
@@ -942,109 +988,106 @@ void dispose() {
                             : const AssetImage('lib/assets/female.jpeg')
                                 as ImageProvider,
                       ),
-            ),
-            SizedBox(width: 16),
-            Text(
-              '$username',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-
-        SizedBox(height: 10),
-
-        Expanded(
-          child: ListView(
-            children: [
-              // Display the count of today's shipped orders in cards
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => WarehouseOrderView(status:'To Print',)),
-        );
-                },
-                child: _buildCard(
-                  Icons.local_shipping,
-                  'Waiting For Packing  ',
-                  toprint
+                    ),
+                    SizedBox(width: 16),
+                    Text(
+                      '$username',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                  ],
                 ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => WarehouseOrderView(status:'Packed')),
-        );
-                  
-                },
-                child: _buildCard(
-                  Icons.request_quote, 
-                  'Waiting For Shipping', 
-                  packed
+
+                SizedBox(height: 10),
+
+                Expanded(
+                  child: ListView(
+                    children: [
+                      // Display the count of today's shipped orders in cards
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => WarehouseOrderView(
+                                      status: 'To Print',
+                                    )),
+                          );
+                        },
+                        child: _buildCard(Icons.local_shipping,
+                            'Waiting For Packing  ', toprint),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                    WarehouseOrderView(status: 'Packed')),
+                          );
+                        },
+                        child: _buildCard(Icons.request_quote,
+                            'Waiting For Shipping', packed),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              
-            ],
+              ],
+            ),
           ),
         ),
-      ],
-    ),
-  ),
-),
-
-
       ),
     );
   }
-Widget _buildCard(IconData icon, String title, [int count = 0]) {
-  return Container(
-    height: 120.0, // Set a fixed height for each card
-    margin: EdgeInsets.symmetric(vertical: 8.0),
-    child: Card(
-      elevation: 4.0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12.0),
-      ),
-      child: Stack(
-        children: [
-          
-          Column(
-            children: [
-              SizedBox(height: 20,),
-              ListTile(
-                leading: Icon(icon, size: 40, color: Colors.blue),
-                title: Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
-                onTap: () {
-                  // Handle item tap if needed
-                },
-              ),
-            ],
-          ),
-          if (count > 0) 
-            Positioned(
-              top: 8.0,
-              right: 8.0,
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                decoration: BoxDecoration(
-                  color: Colors.grey,
-                  borderRadius: BorderRadius.circular(12.0),
+
+  Widget _buildCard(IconData icon, String title, [int count = 0]) {
+    return Container(
+      height: 120.0, // Set a fixed height for each card
+      margin: EdgeInsets.symmetric(vertical: 8.0),
+      child: Card(
+        elevation: 4.0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.0),
+        ),
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                SizedBox(
+                  height: 20,
                 ),
-                child: Text(
-                  '$count',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                ListTile(
+                  leading: Icon(icon, size: 40, color: Colors.blue),
+                  title: Text(title,
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  onTap: () {
+                    // Handle item tap if needed
+                  },
+                ),
+              ],
+            ),
+            if (count > 0)
+              Positioned(
+                top: 8.0,
+                right: 8.0,
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                  decoration: BoxDecoration(
+                    color: Colors.grey,
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
-}
-
- 
+    );
+  }
 }

@@ -20,6 +20,8 @@ import 'package:beposoft/pages/ACCOUNTS/add_team.dart';
 import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
 import 'package:beposoft/pages/ADMIN/add_staffwise_department.dart';
 import 'package:beposoft/pages/ADMIN/admin_add_attendance.dart';
+import 'package:beposoft/pages/ADMIN/all_local_purchases_screen.dart';
+import 'package:beposoft/pages/ADMIN/localpurchaseorderscreen.dart';
 import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
 import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
 import 'package:beposoft/pages/auth_status_checker.dart';
@@ -1044,7 +1046,8 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                   'Advance Recipt',
                   'Order Recipt',
                   'COD Transfer',
-                  'COD Transfer List'
+                  'COD Transfer List',
+                  'Add Commission Recipt',
                 ]),
                 _buildDropdownTile(context, 'Refund', [
                   'Add Refund',
@@ -1110,6 +1113,29 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
 
                 _buildDropdownTile(context, 'Daily Sales Reports',
                     ['Add Team', 'Team wise Report']),
+
+                           ListTile(
+                    leading: Icon(Icons.dashboard),
+                    title: Text('Local Purchase Order'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  LocalPurchaseOrderScreen()));
+                    },
+                  ),
+                                ListTile(
+                    leading: Icon(Icons.dashboard),
+                    title: Text('All Local Purchase Orders'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  AllLocalPurchaseOrderScreen()));
+                    },
+                  ),
      ListTile(
                   leading: Icon(Icons.category),
                   title: Text('Add Main Category'),

@@ -27,6 +27,7 @@ import 'package:beposoft/pages/ACCOUNTS/status_wise_orders_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/todays_orders_list.dart';
 import 'package:beposoft/pages/ACCOUNTS/uploadbulkorders.dart';
 import 'package:beposoft/pages/ADMIN/cso_grv_sales_return_summary.dart';
+import 'package:beposoft/pages/ADMIN/localpurchaseorderscreen.dart';
 import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
 import 'package:beposoft/pages/HR/staff_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/view_staff.dart';
@@ -2641,6 +2642,19 @@ class _cso_dashboardState extends State<cso_dashboard>
           _buildDropdownTile(
               context, 'Staff', ['Add Staff', 'View Staff List']),
           // const Divider(),
+
+          
+                           ListTile(
+                    leading: Icon(Icons.dashboard),
+                    title: Text('Local Purchase Order'),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  LocalPurchaseOrderScreen()));
+                    },
+                  ),
           ListTile(
             leading: const Icon(Icons.exit_to_app),
             title: const Text('Logout'),
