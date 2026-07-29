@@ -71,7 +71,7 @@ class _OrderReviewState extends State<OrderReview> {
   bool showParcelServiceDropdown = false;
   final TextEditingController parcelServiceNoteController =
       TextEditingController();
-List<Map<String, dynamic>> commissionReceipts = [];
+
   String? currentOrderStatus; // REAL status from API
   bool statusSubmitted = false; // Track submit action
   String normalizePayStatus(String? value) {
@@ -116,7 +116,7 @@ List<Map<String, dynamic>> commissionReceipts = [];
   TextEditingController accountsnoteController = TextEditingController();
   List<Map<String, dynamic>> selectedImageData =
       []; // Replace your previous selectedImageUrls list
-
+  List<Map<String, dynamic>> commissionReceipts = [];
   List<String> paystatus = ["paid", 'COD', 'credit'];
   List<String> codtype = ["select type", "FULL_COD", 'PARTIAL_COD', 'null'];
 
@@ -208,114 +208,115 @@ List<Map<String, dynamic>> commissionReceipts = [];
     'Invoice Rejected',
   ];
 
- final Map<String, List<String>> statusFlow = {
-  'Invoice Created': [
-    'Invoice Created',
-    'Invoice Approved',
-    'Invoice Rejected',
-  ],
-  'Invoice Approved': [
-    'Invoice Approved',
-    'Pre Booked',
-    'Waiting For Confirmation',
-    'Invoice Rejected',
-  ],
-  'Pre Booked': [
-    'Pre Booked',
-    'Waiting For Confirmation',
-    'Invoice Rejected',
-  ],
-  'Waiting For Confirmation': [
-    'Waiting For Confirmation',
-    'To Print',
-    'Invoice Rejected',
-  ],
-  'To Print': [
-    'To Print',
-    'Packing under progress',
-    'Invoice Rejected',
-  ],
-  'Packing under progress': [
-    'Packing under progress',
-    'Packed',
-    'Invoice Rejected',
-  ],
-  'Packed': [
-    'Packed',
-    'Ready to ship',
-    'Invoice Rejected',
-  ],
-  'Ready to ship': [
-    'Ready to ship',
-    'Shipped',
-    'Invoice Rejected',
-  ],
-  'Shipped': [
-    'Shipped',
-  ],
-  'Invoice Rejected': [
-    'Invoice Rejected',
-  ],
-};
+  final Map<String, List<String>> statusFlow = {
+    'Invoice Created': [
+      'Invoice Created',
+      'Invoice Approved',
+      'Invoice Rejected',
+    ],
+    'Invoice Approved': [
+      'Invoice Approved',
+      'Pre Booked',
+      'Waiting For Confirmation',
+      'Invoice Rejected',
+    ],
+    'Pre Booked': [
+      'Pre Booked',
+      'Waiting For Confirmation',
+      'Invoice Rejected',
+    ],
+    'Waiting For Confirmation': [
+      'Waiting For Confirmation',
+      'To Print',
+      'Invoice Rejected',
+    ],
+    'To Print': [
+      'To Print',
+      'Packing under progress',
+      'Invoice Rejected',
+    ],
+    'Packing under progress': [
+      'Packing under progress',
+      'Packed',
+      'Invoice Rejected',
+    ],
+    'Packed': [
+      'Packed',
+      'Ready to ship',
+      'Invoice Rejected',
+    ],
+    'Ready to ship': [
+      'Ready to ship',
+      'Shipped',
+      'Invoice Rejected',
+    ],
+    'Shipped': [
+      'Shipped',
+    ],
+    'Invoice Rejected': [
+      'Invoice Rejected',
+    ],
+  };
 
-List<String> getFilteredStatuses() {
-  if (isTopManagement()) {
-    return statuses2;
-  }
+  List<String> getFilteredStatuses() {
+    if (isTopManagement()) {
+      return statuses2;
+    }
 
-  final dept = department?.toString().trim();
+    final dept = department?.toString().trim();
 
-  // ✅ BDM old flow: Invoice Approved -> Waiting For Confirmation
-if (dept == "BDM" || dept == "SD" || dept =="CSO") {
+    // ✅ BDM old flow: Invoice Approved -> Waiting For Confirmation
+    if (dept == "BDM" || dept == "SD" || dept == "CSO") {
       final baseStatus = (selectedStatus ?? currentOrderStatus)?.trim();
 
-    if (baseStatus == null || baseStatus.isEmpty) return [];
+      if (baseStatus == null || baseStatus.isEmpty) return [];
 
-    return statusFlow[baseStatus]
-            ?.where((status) => status != 'Pre Booked')
-            .toSet()
-            .toList() ??
-        [baseStatus];
-  }
-
-  // ✅ ADMIN / Accounts new flow with Pre Booked
-  if (isAdminOrAccounts()) {
-    final baseStatus = (selectedStatus ?? currentOrderStatus)?.trim();
-
-    if (baseStatus == null || baseStatus.isEmpty) return [];
-
-    final List<String> result = [];
-
-    if (!statusSubmitted) {
-      result.add(baseStatus);
+      return statusFlow[baseStatus]
+              ?.where((status) => status != 'Pre Booked')
+              .toSet()
+              .toList() ??
+          [baseStatus];
     }
 
-    if (baseStatus == 'Invoice Approved') {
-      result.add('Pre Booked');
-      result.add('Waiting For Confirmation');
-    } else if (baseStatus == 'Pre Booked') {
-      result.add('Waiting For Confirmation');
-    } else {
-      final currentIndex = statuses2.indexOf(baseStatus);
+    // ✅ ADMIN / Accounts new flow with Pre Booked
+    if (isAdminOrAccounts()) {
+      final baseStatus = (selectedStatus ?? currentOrderStatus)?.trim();
 
-      if (currentIndex != -1 && currentIndex + 1 < statuses2.length) {
-        final nextStatus = statuses2[currentIndex + 1];
+      if (baseStatus == null || baseStatus.isEmpty) return [];
 
-        if (nextStatus != 'Invoice Rejected') {
-          result.add(nextStatus);
+      final List<String> result = [];
+
+      if (!statusSubmitted) {
+        result.add(baseStatus);
+      }
+
+      if (baseStatus == 'Invoice Approved') {
+        result.add('Pre Booked');
+        result.add('Waiting For Confirmation');
+      } else if (baseStatus == 'Pre Booked') {
+        result.add('Waiting For Confirmation');
+      } else {
+        final currentIndex = statuses2.indexOf(baseStatus);
+
+        if (currentIndex != -1 && currentIndex + 1 < statuses2.length) {
+          final nextStatus = statuses2[currentIndex + 1];
+
+          if (nextStatus != 'Invoice Rejected') {
+            result.add(nextStatus);
+          }
         }
       }
+
+      if (baseStatus != 'Shipped' && !result.contains('Invoice Rejected')) {
+        result.add('Invoice Rejected');
+      }
+
+      return result.toSet().toList();
     }
 
-    if (baseStatus != 'Shipped' && !result.contains('Invoice Rejected')) {
-      result.add('Invoice Rejected');
-    }
-
-    return result.toSet().toList();
+    return statusFlow[selectedStatus] ?? [selectedStatus ?? statuses2.first];
   }
 
-  return statusFlow[selectedStatus] ?? [selectedStatus ?? statuses2.first];
-}
   var customerledgertotal;
   var customerledgerreceived;
   var difference;
@@ -730,123 +731,277 @@ if (dept == "BDM" || dept == "SD" || dept =="CSO") {
     balanceledger = Balance - customerledgerreceived;
   }
 
-  Future<void> fetchCustomerLedgerDetails() async {
-    try {
-      final token = await getTokenFromPrefs();
+ Future<void> fetchCustomerLedgerDetails() async {
+  try {
+    final String? token = await getTokenFromPrefs();
 
-      final response = await http.get(
-        Uri.parse('$api/api/customer/${widget.customer}/ledger/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-
-        final ledgerList = parsed['data']['ledger'] as List<dynamic>? ?? [];
-        final advanceReceipts =
-            parsed['data']['advance_receipts'] as List<dynamic>? ?? [];
-        final paymentReceipts =
-            parsed['data']['payment_receipts'] as List<dynamic>? ?? [];
-        final refundReceipts =
-            parsed['data']['refund_receipts'] as List<dynamic>? ?? [];
-        final grvList = parsed['data']['grv'] as List<dynamic>? ?? [];
-
-        /// 🔹 Transfers
-        final ledgerSentTransfers =
-            parsed['data']['ledger_sent_transfers'] as List<dynamic>? ?? [];
-        final advanceTransfers =
-            parsed['data']['advance_transfers'] as List<dynamic>? ?? [];
-
-        double totalAmountSum = 0.0;
-        double receivedPaymentSum = 0.0;
-        double approvedGrvSum = 0.0;
-        double refundReceiptSum = 0.0;
-        double advanceTransferSum = 0.0;
-
-        /// 1️⃣ Ledger total (orders)
-        for (var order in ledgerList) {
-          final status = order['status']?.toString();
-
-          if (status != 'Invoice Created' && status != 'Invoice Rejected') {
-            totalAmountSum +=
-                (order['total_amount'] as num?)?.toDouble() ?? 0.0;
-          }
-        }
-
-        /// 2️⃣ Payment receipts (DEBIT)
-        for (var payment in paymentReceipts) {
-          receivedPaymentSum +=
-              double.tryParse(payment['amount']?.toString() ?? '0') ?? 0.0;
-        }
-
-        /// 3️⃣ Advance receipts (DEBIT)
-        for (var adv in advanceReceipts) {
-          receivedPaymentSum +=
-              double.tryParse(adv['amount']?.toString() ?? '0') ?? 0.0;
-        }
-
-        /// 4️⃣ Ledger sent transfers (DEBIT)
-        for (var transfer in ledgerSentTransfers) {
-          totalAmountSum +=
-              double.tryParse(transfer['amount']?.toString() ?? '0') ?? 0.0;
-        }
-
-        /// 5️⃣ Approved GRV (DEBIT / adjustment)
-        for (var grv in grvList) {
-          final status = grv['status']?.toString().toLowerCase();
-          if (status == 'approved') {
-            approvedGrvSum +=
-                double.tryParse(grv['price']?.toString() ?? '0') ?? 0.0;
-          }
-        }
-
-        /// 6️⃣ Refund receipts (CREDIT)
-        for (var refund in refundReceipts) {
-          refundReceiptSum +=
-              double.tryParse(refund['amount']?.toString() ?? '0') ?? 0.0;
-        }
-
-        /// 7️⃣ Advance transfers (CREDIT)
-        for (var advTransfer in advanceTransfers) {
-          advanceTransferSum +=
-              double.tryParse(advTransfer['amount']?.toString() ?? '0') ?? 0.0;
-        }
-
-        /// 🔥 Apply CREDIT / DEBIT adjustments
-        totalAmountSum += refundReceiptSum;
-        totalAmountSum += advanceTransferSum;
-
-        receivedPaymentSum += approvedGrvSum;
-
-        /// 8️⃣ Difference logic
-        double dif;
-        if (receivedPaymentSum > totalAmountSum) {
-          dif = receivedPaymentSum - totalAmountSum;
-          ledger = true; // company owes customer
-        } else {
-          dif = totalAmountSum - receivedPaymentSum;
-          ledger = false; // customer owes company
-        }
-
-        setState(() {
-          customerledgertotal = totalAmountSum;
-          customerledgerreceived = receivedPaymentSum;
-          difference = dif;
-
-          approvedGrvAmount = approvedGrvSum;
-          refundReceiptAmount = refundReceiptSum;
-        });
-
-        calculatebalance();
-      }
-    } catch (e) {
-      // optional error handling
+    if (token == null || token.trim().isEmpty) {
+      return;
     }
-  }
 
+    final http.Response response = await http.get(
+      Uri.parse(
+        '$api/api/customer/${widget.customer}/ledger/',
+      ),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      debugPrint(
+        'CUSTOMER LEDGER FAILED: '
+        '${response.statusCode} ${response.body}',
+      );
+      return;
+    }
+
+    final dynamic decoded = jsonDecode(response.body);
+
+    if (decoded is! Map ||
+        decoded['data'] is! Map) {
+      debugPrint('INVALID CUSTOMER LEDGER RESPONSE');
+      return;
+    }
+
+    final Map<String, dynamic> data =
+        Map<String, dynamic>.from(decoded['data']);
+
+    final List<dynamic> ledgerList =
+        data['ledger'] is List ? data['ledger'] : [];
+
+    final List<dynamic> advanceReceipts =
+        data['advance_receipts'] is List
+            ? data['advance_receipts']
+            : [];
+
+    final List<dynamic> paymentReceipts =
+        data['payment_receipts'] is List
+            ? data['payment_receipts']
+            : [];
+
+    final List<dynamic> commissionReceiptList =
+        data['commission_receipts'] is List
+            ? data['commission_receipts']
+            : [];
+
+    final List<dynamic> refundReceipts =
+        data['refund_receipts'] is List
+            ? data['refund_receipts']
+            : [];
+
+    final List<dynamic> grvList =
+        data['grv'] is List ? data['grv'] : [];
+
+    final List<dynamic> ledgerSentTransfers =
+        data['ledger_sent_transfers'] is List
+            ? data['ledger_sent_transfers']
+            : [];
+
+    final List<dynamic> advanceTransfers =
+        data['advance_transfers'] is List
+            ? data['advance_transfers']
+            : [];
+
+    double totalAmountSum = 0.0;
+    double receivedPaymentSum = 0.0;
+
+    double approvedGrvSum = 0.0;
+    double refundReceiptSum = 0.0;
+    double advanceTransferSum = 0.0;
+    double commissionReceiptSum = 0.0;
+
+    // ================= ORDER DEBIT =================
+    for (final dynamic order in ledgerList) {
+      if (order is! Map) continue;
+
+      final String status =
+          (order['status'] ?? '').toString().trim();
+
+      if (status != 'Invoice Created' &&
+          status != 'Invoice Rejected') {
+        totalAmountSum += double.tryParse(
+              (order['total_amount'] ?? 0).toString(),
+            ) ??
+            0.0;
+      }
+    }
+
+    // ================= PAYMENT RECEIPTS =================
+    for (final dynamic payment in paymentReceipts) {
+      if (payment is! Map) continue;
+
+      receivedPaymentSum += double.tryParse(
+            (payment['amount'] ?? 0).toString(),
+          ) ??
+          0.0;
+    }
+
+    // ================= ADVANCE RECEIPTS =================
+    for (final dynamic advance in advanceReceipts) {
+      if (advance is! Map) continue;
+
+      receivedPaymentSum += double.tryParse(
+            (advance['amount'] ?? 0).toString(),
+          ) ??
+          0.0;
+    }
+
+    // ================= COMMISSION RECEIPTS =================
+    for (final dynamic commission
+        in commissionReceiptList) {
+      if (commission is! Map) continue;
+
+      commissionReceiptSum += double.tryParse(
+            (commission['amount'] ?? 0).toString(),
+          ) ??
+          0.0;
+    }
+
+    // Commission receipt is customer ledger credit.
+    receivedPaymentSum += commissionReceiptSum;
+
+    // ================= LEDGER SENT TRANSFERS =================
+    for (final dynamic transfer
+        in ledgerSentTransfers) {
+      if (transfer is! Map) continue;
+
+      totalAmountSum += double.tryParse(
+            (transfer['amount'] ?? 0).toString(),
+          ) ??
+          0.0;
+    }
+
+    // ================= APPROVED GRV =================
+    for (final dynamic grv in grvList) {
+      if (grv is! Map) continue;
+
+      final String status =
+          (grv['status'] ?? '').toString().toLowerCase().trim();
+
+      if (status != 'approved') continue;
+
+      final String remark =
+          (grv['remark'] ?? '').toString().toLowerCase().trim();
+
+      final double quantity = double.tryParse(
+            (grv['quantity'] ?? 0).toString(),
+          ) ??
+          0.0;
+
+      final double price = double.tryParse(
+            (grv['price'] ?? 0).toString(),
+          ) ??
+          0.0;
+
+      double grvAmount = quantity * price;
+
+      if (remark == 'cod_return') {
+        final double codAmount = double.tryParse(
+              (grv['cod_amount'] ?? 0).toString(),
+            ) ??
+            0.0;
+
+        if (codAmount > 0) {
+          grvAmount = codAmount;
+        }
+      }
+
+      approvedGrvSum += grvAmount;
+    }
+
+    // GRV reduces the customer payable amount.
+    receivedPaymentSum += approvedGrvSum;
+
+    // ================= REFUND RECEIPTS =================
+    for (final dynamic refund in refundReceipts) {
+      if (refund is! Map) continue;
+
+      refundReceiptSum += double.tryParse(
+            (refund['amount'] ?? 0).toString(),
+          ) ??
+          0.0;
+    }
+
+    // Refund issued increases customer debit.
+    totalAmountSum += refundReceiptSum;
+
+    // ================= ADVANCE TRANSFER RECEIVED =================
+    for (final dynamic transfer in advanceTransfers) {
+      if (transfer is! Map) continue;
+
+      advanceTransferSum += double.tryParse(
+            (transfer['amount'] ?? 0).toString(),
+          ) ??
+          0.0;
+    }
+
+    // Advance transfer received is a customer credit.
+    receivedPaymentSum += advanceTransferSum;
+
+    final double ledgerDifference =
+        (totalAmountSum - receivedPaymentSum).abs();
+
+    final bool customerHasCredit =
+        receivedPaymentSum > totalAmountSum;
+
+    if (!mounted) return;
+
+    setState(() {
+      customerledgertotal = totalAmountSum;
+      customerledgerreceived = receivedPaymentSum;
+      difference = ledgerDifference;
+
+      ledger = customerHasCredit;
+
+      approvedGrvAmount = approvedGrvSum;
+      refundReceiptAmount = refundReceiptSum;
+
+      commissionReceipts = commissionReceiptList
+          .whereType<Map>()
+          .map<Map<String, dynamic>>(
+            (Map item) =>
+                Map<String, dynamic>.from(item),
+          )
+          .toList();
+    });
+
+    calculatebalance();
+
+    debugPrint(
+      'CUSTOMER LEDGER TOTAL DEBIT: $totalAmountSum',
+    );
+
+    debugPrint(
+      'CUSTOMER LEDGER PAYMENT CREDIT: '
+      '${receivedPaymentSum - commissionReceiptSum}',
+    );
+
+    debugPrint(
+      'CUSTOMER LEDGER COMMISSION CREDIT: '
+      '$commissionReceiptSum',
+    );
+
+    debugPrint(
+      'CUSTOMER LEDGER FINAL CREDIT: '
+      '$receivedPaymentSum',
+    );
+
+    debugPrint(
+      'CUSTOMER LEDGER DIFFERENCE: '
+      '$ledgerDifference',
+    );
+  } catch (error, stackTrace) {
+    debugPrint(
+      'CUSTOMER LEDGER ERROR: $error',
+    );
+
+    debugPrintStack(
+      stackTrace: stackTrace,
+    );
+  }
+}
   void showParcelServiceDialog(
       BuildContext context, var id, dynamic currentParcelServiceId) {
     selectedserviceId = currentParcelServiceId != null
@@ -3207,12 +3362,12 @@ if (dept == "BDM" || dept == "SD" || dept =="CSO") {
         final parsed = jsonDecode(response.body);
         final List<Map<String, dynamic>> tempCommissionReceipts = [];
 
-for (final commission in parsed['commission_receipts'] ?? []) {
-  tempCommissionReceipts.add({
-    'amount': commission['amount'],
-    'payment_receipt': commission['payment_receipt'],
-  });
-}
+        for (final commission in parsed['commission_receipts'] ?? []) {
+          tempCommissionReceipts.add({
+            'amount': commission['amount'],
+            'payment_receipt': commission['payment_receipt'],
+          });
+        }
         List<Map<String, dynamic>> tempGrvList = [];
 
         for (var grv in parsed['grv'] ?? []) {
@@ -4538,7 +4693,18 @@ for (final commission in parsed['commission_receipts'] ?? []) {
       },
     );
   }
-
+double get totalCommissionReceiptAmount {
+  return commissionReceipts.fold<double>(
+    0.0,
+    (double total, Map<String, dynamic> receipt) {
+      return total +
+          (double.tryParse(
+                receipt['amount']?.toString() ?? '0',
+              ) ??
+              0.0);
+    },
+  );
+}
   Future<bool?> _confirmCustomerUpdate(BuildContext context) {
     return showDialog<bool>(
       context: context,
@@ -4591,7 +4757,83 @@ for (final commission in parsed['commission_receipts'] ?? []) {
       ),
     );
   }
+Widget _buildProductImage(dynamic imagePath) {
+  final String rawImagePath = imagePath?.toString().trim() ?? '';
 
+  if (rawImagePath.isEmpty ||
+      rawImagePath.toLowerCase() == 'null') {
+    return Container(
+      color: Colors.grey.shade200,
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.image_not_supported_outlined,
+        size: 24,
+        color: Colors.grey.shade500,
+      ),
+    );
+  }
+
+  final String imageUrl = rawImagePath.startsWith('http')
+      ? rawImagePath
+      : '$api${rawImagePath.startsWith('/') ? '' : '/'}$rawImagePath';
+
+  return Image.network(
+    imageUrl,
+    fit: BoxFit.cover,
+    errorBuilder: (
+      BuildContext context,
+      Object error,
+      StackTrace? stackTrace,
+    ) {
+      return Container(
+        color: Colors.grey.shade200,
+        alignment: Alignment.center,
+        child: Icon(
+          Icons.broken_image_outlined,
+          size: 24,
+          color: Colors.grey.shade500,
+        ),
+      );
+    },
+  );
+}
+
+Widget _buildLedgerSummaryRow({
+  required String label,
+  required double amount,
+  Color valueColor = Colors.black87,
+  bool isBold = false,
+}) {
+  return Row(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      Expanded(
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: isBold
+                ? FontWeight.w700
+                : FontWeight.w500,
+            color: Colors.black87,
+          ),
+        ),
+      ),
+      const SizedBox(width: 12),
+      Text(
+        '₹${amount.toStringAsFixed(2)}',
+        textAlign: TextAlign.right,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: isBold
+              ? FontWeight.w700
+              : FontWeight.w500,
+          color: valueColor,
+        ),
+      ),
+    ],
+  );
+}
   @override
   Widget build(BuildContext context) {
     final String status = ord?['status']?.toString().toLowerCase() ?? '';
@@ -5576,18 +5818,14 @@ for (final commission in parsed['commission_receipts'] ?? []) {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 // Display the first image in a small container
-                                Container(
-                                  height: 50,
-                                  width: 50,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(8),
-                                    image: DecorationImage(
-                                      image:
-                                          NetworkImage('$api${item["images"]}'),
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                ),
+                              ClipRRect(
+  borderRadius: BorderRadius.circular(8),
+  child: SizedBox(
+    height: 50,
+    width: 50,
+    child: _buildProductImage(item['images']),
+  ),
+),
                                 SizedBox(width: 10),
                                 // Display product details
                                 Expanded(
@@ -6512,205 +6750,219 @@ for (final commission in parsed['commission_receipts'] ?? []) {
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Card(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15.0),
-                  ),
-                  color: Colors.white,
-                  elevation: 4,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey,
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(15.0),
-                            topRight: Radius.circular(15.0),
-                          ),
-                        ),
-                        padding: const EdgeInsets.all(12.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Leadger',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(height: .0),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Balance Payment Amount: ',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600),
-                                ),
-                                Text(
-                                  ledger
-                                      ? "0.0"
-                                      : '${Balance.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                      color:
-                                          const Color.fromARGB(255, 255, 0, 0)),
-                                )
-                              ],
-                            ),
-                            SizedBox(height: 4.0),
+            Padding(
+  padding: const EdgeInsets.all(8.0),
+  child: Card(
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(15),
+    ),
+    color: Colors.white,
+    elevation: 4,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: const BoxDecoration(
+            color: Colors.grey,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(15),
+              topRight: Radius.circular(15),
+            ),
+          ),
+          child: const Text(
+            'Ledger Summary',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              _buildLedgerSummaryRow(
+                label: 'Order Balance Amount',
+                amount: ledger ? 0.0 : Balance,
+                valueColor: Colors.red,
+                isBold: true,
+              ),
+              const SizedBox(height: 10),
 
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      "GRV AMOUNT",
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Text(
-                                  '${(approvedGrvAmount ?? 0).toStringAsFixed(2)}', // Use null-coalescing operator to handle null
-                                )
-                              ],
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      "COD GRV AMOUNT",
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Text(
-                                  '${(approvedCodReturnAmount ?? 0).toStringAsFixed(2)}', // Use null-coalescing operator to handle null
-                                )
-                              ],
-                            ),
-                            SizedBox(height: 4.0),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      "Refund AMOUNT",
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Text(
-                                  '${(refundReceiptAmount ?? 0).toStringAsFixed(2)}', // Use null-coalescing operator to handle null
-                                )
-                              ],
-                            ),
-                            SizedBox(height: 4.0),
+              _buildLedgerSummaryRow(
+                label: 'Customer Ledger Debit',
+                amount: double.tryParse(
+                      customerledgertotal?.toString() ?? '0',
+                    ) ??
+                    0.0,
+              ),
+              const SizedBox(height: 8),
 
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      ledger
-                                          ? 'Customer Ledger Credit:'
-                                          : 'Customer Ledger Debit:',
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.green),
-                                    ),
-                                  ],
-                                ),
-                                Text(
-                                  '${(difference ?? 0).toStringAsFixed(2)}',
-                                  style: TextStyle(color: Colors.green),
-                                )
-                              ],
-                            ),
-                            // if (flag == false)
-                            //   Row(
-                            //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            //     children: [
-                            //       Text(
-                            //         'Customer Ledger Debit:',
-                            //         style: TextStyle(
-                            //             fontSize: 12,
-                            //             fontWeight: FontWeight.bold),
-                            //       ),
-                            //       Text(
-                            //         Balance == 0
-                            //             ? '\$${payableAmount.toStringAsFixed(2)}'
-                            //             : '\$${Balance.toStringAsFixed(2)}',
-                            //       )
-                            //     ],
-                            //   ),
-                            SizedBox(height: 8.0),
-                            if (dep != "BDM" && dep != "BDO")
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    backgroundColor:
-                                        Colors.blue, // Text color (white)
-                                  ),
-                                  onPressed: () {
-                                    if (createdBy != null) {
-                                      showAddDialog(context);
-                                    } else {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                            content: Text(
-                                                "Loading data, please wait...")),
-                                      );
-                                    }
-                                  },
-                                  child: Text("Add"),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+              _buildLedgerSummaryRow(
+                label: 'Total Customer Credits',
+                amount: double.tryParse(
+                      customerledgerreceived?.toString() ?? '0',
+                    ) ??
+                    0.0,
+                valueColor: Colors.green,
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 10),
+                child: Divider(height: 1),
+              ),
+
+              _buildLedgerSummaryRow(
+                label: 'Payment / Advance Credits',
+                amount: ((double.tryParse(
+                              customerledgerreceived?.toString() ?? '0',
+                            ) ??
+                            0.0) -
+                        totalCommissionReceiptAmount)
+                    .clamp(0.0, double.infinity),
+                valueColor: Colors.green.shade700,
+              ),
+              const SizedBox(height: 8),
+
+              _buildLedgerSummaryRow(
+                label: 'Commission Credit',
+                amount: totalCommissionReceiptAmount,
+                valueColor: Colors.teal,
+                isBold: true,
+              ),
+              const SizedBox(height: 8),
+
+              _buildLedgerSummaryRow(
+                label: 'Approved GRV Credit',
+                amount: approvedGrvAmount,
+                valueColor: Colors.orange.shade800,
+              ),
+              const SizedBox(height: 8),
+
+              _buildLedgerSummaryRow(
+                label: 'COD GRV Credit',
+                amount: approvedCodReturnAmount,
+                valueColor: Colors.orange.shade800,
+              ),
+              const SizedBox(height: 8),
+
+              _buildLedgerSummaryRow(
+                label: 'Refund Amount',
+                amount: refundReceiptAmount,
+                valueColor: Colors.red.shade700,
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Divider(
+                  height: 1,
+                  thickness: 1.2,
                 ),
               ),
+
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: ledger
+                      ? Colors.green.shade50
+                      : Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: ledger
+                        ? Colors.green.shade200
+                        : Colors.red.shade200,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      ledger
+                          ? Icons.account_balance_wallet_outlined
+                          : Icons.warning_amber_rounded,
+                      color: ledger ? Colors.green : Colors.red,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        ledger
+                            ? 'Customer Ledger Credit'
+                            : 'Customer Ledger Debit',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: ledger
+                              ? Colors.green.shade800
+                              : Colors.red.shade800,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '₹${(double.tryParse(
+                            difference?.toString() ?? '0',
+                          ) ??
+                          0.0).toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: ledger
+                            ? Colors.green.shade800
+                            : Colors.red.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              if (dep != "BDM" && dep != "BDO")
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.blue,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () {
+                      if (createdBy != null) {
+                        showAddDialog(context);
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Loading data, please wait...',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.add_card),
+                    label: const Text(
+                      'Add Receipt',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  ),
+),
               Padding(
                 padding: const EdgeInsets.only(left: 20, right: 20, top: 10),
                 child: Column(
@@ -6867,122 +7119,122 @@ for (final commission in parsed['commission_receipts'] ?? []) {
                 ),
               ),
               SizedBox(height: 10),
-
               Padding(
-  padding: const EdgeInsets.only(
-    left: 20,
-    right: 20,
-    top: 10,
-  ),
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      if (commissionReceipts.isNotEmpty)
-        const Text(
-          'Commission Receipt Details',
-          style: TextStyle(
-            color: Color.fromARGB(255, 0, 0, 0),
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      if (commissionReceipts.isNotEmpty)
-        const SizedBox(height: 10),
-      if (commissionReceipts.isNotEmpty)
-        Table(
-          border: TableBorder.all(color: Colors.grey),
-          columnWidths: const <int, TableColumnWidth>{
-            0: FlexColumnWidth(),
-            1: FlexColumnWidth(),
-          },
-          children: [
-            const TableRow(
-              children: [
-                Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: Text(
-                    'Receipt No',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                padding: const EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 10,
                 ),
-                Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: Text(
-                    'Amount',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            for (var commission in commissionReceipts)
-              TableRow(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Text(
-                      commission['payment_receipt']?.toString() ?? 'N/A',
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Text(
-                      commission['amount']?.toString() ?? 'N/A',
-                    ),
-                  ),
-                ],
-              ),
-            TableRow(
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-              ),
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: Text(
-                    'Total',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    commissionReceipts.fold<double>(
-                      0.0,
-                      (sum, item) {
-                        final amount = item['amount'];
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (commissionReceipts.isNotEmpty)
+                      const Text(
+                        'Commission Receipt Details',
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 0, 0, 0),
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    if (commissionReceipts.isNotEmpty)
+                      const SizedBox(height: 10),
+                    if (commissionReceipts.isNotEmpty)
+                      Table(
+                        border: TableBorder.all(color: Colors.grey),
+                        columnWidths: const <int, TableColumnWidth>{
+                          0: FlexColumnWidth(),
+                          1: FlexColumnWidth(),
+                        },
+                        children: [
+                          const TableRow(
+                            children: [
+                              Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: Text(
+                                  'Receipt No',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: Text(
+                                  'Amount',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          for (var commission in commissionReceipts)
+                            TableRow(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Text(
+                                    commission['payment_receipt']?.toString() ??
+                                        'N/A',
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Text(
+                                    commission['amount']?.toString() ?? 'N/A',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          TableRow(
+                            decoration: BoxDecoration(
+                              color: Colors.grey[300],
+                            ),
+                            children: [
+                              const Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: Text(
+                                  'Total',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Text(
+                                  commissionReceipts.fold<double>(
+                                    0.0,
+                                    (sum, item) {
+                                      final amount = item['amount'];
 
-                        return sum +
-                            ((amount is num)
-                                ? amount.toDouble()
-                                : double.tryParse(
-                                      amount?.toString() ?? '0',
-                                    ) ??
-                                    0.0);
-                      },
-                    ).toStringAsFixed(2),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                                      return sum +
+                                          ((amount is num)
+                                              ? amount.toDouble()
+                                              : double.tryParse(
+                                                    amount?.toString() ?? '0',
+                                                  ) ??
+                                                  0.0);
+                                    },
+                                  ).toStringAsFixed(2),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      )
+                    else
+                      const Text(
+                        'No commission receipt details available.',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                  ],
                 ),
-              ],
-            ),
-          ],
-        )
-      else
-        const Text(
-          'No commission receipt details available.',
-          style: TextStyle(color: Colors.grey),
-        ),
-    ],
-  ),
-),
+              ),
               Center(
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
