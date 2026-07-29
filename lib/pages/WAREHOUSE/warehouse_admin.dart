@@ -948,6 +948,7 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
                     'Product Sale Report',
                     'Stock Report',
                     'Damaged Stock',
+                    'Product Usability Report',
                     // 'Finance Report',
                     // 'Actual Delivery Report',
                     // 'Order Comparison Report',

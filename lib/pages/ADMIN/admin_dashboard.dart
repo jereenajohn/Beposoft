@@ -1569,6 +1569,9 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                   'Finance Report',
                   'Actual Delivery Report',
                   'Order Comparison Report',
+                  'Product Usability Report',
+                   'Dispatched & Pending Orders Report',
+
                 ]),
 
                 _buildDropdownTile(context, 'Staff', [

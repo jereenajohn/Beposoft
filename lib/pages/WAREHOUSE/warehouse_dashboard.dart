@@ -895,6 +895,7 @@ ListTile(
                     'Product Sale Report',
                     'Stock Report',
                     'Damaged Stock',
+                    'Product Usability Report',
                     // 'Finance Report',
                     // 'Actual Delivery Report',
                     // 'Order Comparison Report',

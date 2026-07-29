@@ -118,10 +118,17 @@ import 'package:beposoft/pages/BDO/daily_bdo_sales_report.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_all_orders.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_order_view.dart';
 import 'package:beposoft/pages/BDM/bdm_order_list.dart';
+import 'package:beposoft/pages/ACCOUNTS/Dispatched_Pending_Orders_Summary_Report.dart';
+import 'package:beposoft/pages/ACCOUNTS/product_rack_usability_page.dart';
 
 import 'package:flutter/material.dart';
 
 class drower {
+
+  Future<String?> getTokenFromPrefs() async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  return prefs.getString('token');
+}
   Future<void> navigateToSelectedPage(
       BuildContext context, String option) async {
     // Navigate to the selected page based on the option
@@ -560,6 +567,42 @@ class drower {
           MaterialPageRoute(
               builder: (context) => OrderList2(
                     status: 'Invoice Rejected',
+                  )),
+        );
+        break;
+        case 'Product Usability Report':
+        final String? accessToken = await getTokenFromPrefs();
+
+        if (!context.mounted) return;
+
+        if (accessToken == null || accessToken.trim().isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Access token not found. Please log in again.',
+              ),
+            ),
+          );
+          break;
+        }
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProductRackUsabilityPage(
+              baseUrl: api,
+              token: accessToken,
+              initialUsability: 'usable',
+            ),
+          ),
+        );
+        break;
+        case 'Dispatched & Pending Orders Report':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => ShippingOrderSummaryPage(
+                    baseUrl: api,
                   )),
         );
         break;

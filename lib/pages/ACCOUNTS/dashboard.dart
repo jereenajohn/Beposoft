@@ -1578,6 +1578,8 @@ class _admin_dashboardState extends State<dashboard>
                   'Damaged Stock',
                   'Finance Report',
                   'Actual Delivery Report',
+                  'Product Usability Report',
+                  'Dispatched & Pending Orders Report',
                 ]),
 
                 _buildDropdownTile(context, 'Staff', [
