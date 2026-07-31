@@ -538,14 +538,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                             "Manager",
                                             yesNo(p.isManager),
                                           ),
-                                          InfoItem(
-                                            Icons.apartment_outlined,
-                                            "Department",
-                                            nameFromMap(
-                                              departmentMap,
-                                              p.departmentId,
-                                            ),
-                                          ),
+                                          // InfoItem(
+                                          //   Icons.apartment_outlined,
+                                          //   "Department",
+                                          //   nameFromMap(
+                                          //     departmentMap,
+                                          //     p.departmentId,
+                                          //   ),
+                                          // ),
                                           InfoItem(
                                             Icons.supervisor_account_outlined,
                                             "Supervisor",

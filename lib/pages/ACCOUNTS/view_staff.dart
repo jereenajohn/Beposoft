@@ -1413,12 +1413,12 @@ if (selectedBloodGroup.trim().isNotEmpty) {
                                                         ?.toString() ??
                                                     '-',
                                               ),
-                                              _buildInfoRow(
-                                                'Department',
-                                                staffData['department_name']
-                                                        ?.toString() ??
-                                                    '-',
-                                              ),
+                                              // _buildInfoRow(
+                                              //   'Department',
+                                              //   staffData['department_name']
+                                              //           ?.toString() ??
+                                              //       '-',
+                                              // ),
                                               // _buildInfoRow(
                                               //   'Supervisor',
                                               //   staffData['supervisor_name']
