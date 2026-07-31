@@ -1421,12 +1421,12 @@ sta = stafflist.where((staff) {
                                                         ?.toString() ??
                                                     '-',
                                               ),
-                                              _buildInfoRow(
-                                                'Department',
-                                                staffData['department_name']
-                                                        ?.toString() ??
-                                                    '-',
-                                              ),
+                                              // _buildInfoRow(
+                                              //   'Department',
+                                              //   staffData['department_name']
+                                              //           ?.toString() ??
+                                              //       '-',
+                                              // ),
                                               // _buildInfoRow(
                                               //   'Supervisor',
                                               //   staffData['supervisor_name']
