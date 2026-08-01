@@ -44,6 +44,8 @@ class _CommissionReceiptScreenState extends State<CommissionReceiptScreen> {
   List<Map<String, dynamic>> orders = [];
   List<Map<String, dynamic>> receipts = [];
 
+  dynamic respo;
+
   int? selectedOrderId;
   int? selectedBankId;
   int? editingId;
@@ -56,6 +58,8 @@ class _CommissionReceiptScreenState extends State<CommissionReceiptScreen> {
   bool loadingEdit = false;
   bool saving = false;
 
+  String currentDepartment = '';
+
   int orderPage = 1;
   bool hasNextOrderPage = false;
   String bankFilter = 'all';
@@ -66,6 +70,7 @@ class _CommissionReceiptScreenState extends State<CommissionReceiptScreen> {
   void initState() {
     super.initState();
     receiptSearchController.addListener(_onSearchChanged);
+    loadDepartment();
     _loadInitialData();
   }
 
@@ -108,6 +113,89 @@ class _CommissionReceiptScreenState extends State<CommissionReceiptScreen> {
     }
 
     return token.trim();
+  }
+
+  Future<String?> gettokenFromPrefs() async {
+    final SharedPreferences prefs =
+        await SharedPreferences.getInstance();
+    return prefs.getString('token');
+  }
+
+  Future<void> loadDepartment() async {
+    final String? department = await getdepFromPrefs();
+
+    if (!mounted) return;
+
+    setState(() {
+      currentDepartment =
+          department?.trim().toUpperCase() ?? '';
+    });
+  }
+
+  bool get canUpdate {
+    final String department =
+        currentDepartment.trim().toUpperCase();
+
+    return department == 'ADMIN' ||
+        department == 'COO' ||
+        department == 'CEO';
+  }
+
+  Future<void> AddStatusTime(
+    BuildContext scaffoldContext,
+  ) async {
+    final String? token = await gettokenFromPrefs();
+
+    try {
+      final http.Response response = await http.post(
+        Uri.parse(
+          '$api/api/datalog/create/',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'before_data': {
+            "Action": "Recipt added ",
+          },
+          'after_data': {
+            "Data": "$respo",
+          },
+          'order': "",
+        }),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 201) {
+        ScaffoldMessenger.of(
+          scaffoldContext,
+        ).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.green,
+            content: Text(
+              'time added Successfully.',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(
+          scaffoldContext,
+        ).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            content: Text(
+              'Adding time failed.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        'Error adding status time: $e',
+      );
+    }
   }
 
   Map<String, String> _headers(String token) => {
@@ -504,6 +592,14 @@ class _CommissionReceiptScreenState extends State<CommissionReceiptScreen> {
   Future<void> saveReceipt() async {
     FocusScope.of(context).unfocus();
 
+    if (editingId != null && !canUpdate) {
+      _showMessage(
+        'Only ADMIN, COO, and CEO can update commission receipts.',
+        error: true,
+      );
+      return;
+    }
+
     if (!(formKey.currentState?.validate() ?? false)) {
       _showMessage('Please correct the highlighted fields.', error: true);
       return;
@@ -558,6 +654,22 @@ class _CommissionReceiptScreenState extends State<CommissionReceiptScreen> {
       if (response.statusCode != 200 && response.statusCode != 201) {
         throw Exception(_responseError(response));
       }
+
+      try {
+        final dynamic responseData = jsonDecode(response.body);
+
+        if (responseData is Map<String, dynamic>) {
+          respo = responseData['data'] ?? responseData;
+        } else {
+          respo = responseData;
+        }
+      } catch (_) {
+        respo = response.body;
+      }
+
+      await AddStatusTime(context);
+
+      if (!mounted) return;
 
       clearForm();
       await fetchReceipts();
@@ -1311,7 +1423,13 @@ class _CommissionReceiptScreenState extends State<CommissionReceiptScreen> {
                       Expanded(
                         flex: editingId == null ? 1 : 2,
                         child: ElevatedButton.icon(
-                          onPressed: saving ? null : saveReceipt,
+                          onPressed: saving
+                              ? null
+                              : editingId == null
+                                  ? saveReceipt
+                                  : canUpdate
+                                      ? saveReceipt
+                                      : null,
                           icon: saving
                               ? const SizedBox(
                                   width: 18,

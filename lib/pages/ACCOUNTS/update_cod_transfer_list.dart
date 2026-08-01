@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:beposoft/pages/ACCOUNTS/cod_transfer.dart';
 import 'package:beposoft/pages/ACCOUNTS/cod_transfer_list.dart';
+import 'package:beposoft/pages/ACCOUNTS/csodashboard.dart';
 import 'package:beposoft/pages/ACCOUNTS/dashboard.dart';
 import 'package:beposoft/pages/ACCOUNTS/internal_tranfer.dart';
 import 'package:beposoft/pages/ADMIN/ceo_dashboard.dart';
@@ -12,54 +13,222 @@ import 'package:beposoft/pages/WAREHOUSE/warehouse_dashboard.dart';
 import 'package:beposoft/pages/api.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:intl/intl.dart'; // Import the intl package for date formatting
 
 class UpdateCodTransferList extends StatefulWidget {
   final int id;
-  const UpdateCodTransferList({super.key, required this.id});
+
+  const UpdateCodTransferList({
+    super.key,
+    required this.id,
+  });
 
   @override
-  State<UpdateCodTransferList> createState() => _UpdateCodTransferListState();
+  State<UpdateCodTransferList> createState() =>
+      _UpdateCodTransferListState();
 }
 
-class _UpdateCodTransferListState extends State<UpdateCodTransferList> {
+class _UpdateCodTransferListState
+    extends State<UpdateCodTransferList> {
   List<Map<String, dynamic>> bank = [];
   List<Map<String, dynamic>> salesReportList = [];
-  List<Map<String, dynamic>> allSalesReportList = []; // Original data
-  int totalReceipts = 0; // Add this line
-  double totalAmount = 0.0; // Add this line
+  List<Map<String, dynamic>> allSalesReportList = [];
 
-  TextEditingController uname = TextEditingController();
-  TextEditingController amount = TextEditingController();
-  TextEditingController transactionid = TextEditingController();
-  TextEditingController Remark = TextEditingController();
+  int totalReceipts = 0;
+  double totalAmount = 0.0;
 
-  String? selectedInvoiceId; // Variable to store the selected invoice ID
-  String? selectedBankId; // Variable to store the selected bank ID
-  String? selectedrecieverId; // Variable to store the selected bank ID
+  final TextEditingController uname =
+      TextEditingController();
+
+  final TextEditingController amount =
+      TextEditingController();
+
+  final TextEditingController transactionid =
+      TextEditingController();
+
+  final TextEditingController Remark =
+      TextEditingController();
+
+  String? selectedInvoiceId;
+  String? selectedBankId;
+  String? selectedrecieverId;
+
   DateTime selectedDate = DateTime.now();
+
+  String currentDepartment = '';
+
+  dynamic respo;
+
+  bool isUpdating = false;
 
   @override
   void initState() {
     super.initState();
-    // Initialize any necessary data or state here
 
-    getreciptReport();
-    getbank();
+    initializePage();
+  }
+
+  Future<void> initializePage() async {
+    await loadDepartment();
+
+    if (!mounted) return;
+
+    await getreciptReport();
+
+    if (!mounted) return;
+
+    await getbank();
+  }
+
+  Future<void> loadDepartment() async {
+    final String? department =
+        await getdepFromPrefs();
+
+    if (!mounted) return;
+
+    setState(() {
+      currentDepartment =
+          department?.trim().toUpperCase() ?? '';
+    });
+  }
+
+  bool get canUpdate {
+    final String department =
+        currentDepartment.trim().toUpperCase();
+
+    return department == 'ADMIN' ||
+        department == 'COO' ||
+        department == 'CEO';
   }
 
   Future<String?> getTokenFromPrefs() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final SharedPreferences prefs =
+        await SharedPreferences.getInstance();
+
     return prefs.getString('token');
   }
 
-  Future<void> updatebanktransfer() async {
-    try {
-      final token = await getTokenFromPrefs();
+  Future<String?> gettokenFromPrefs() async {
+    final SharedPreferences prefs =
+        await SharedPreferences.getInstance();
 
-      var response = await http.put(
-        Uri.parse('$api/api/cod/transfers/${widget.id}/'),
+    return prefs.getString('token');
+  }
+
+  Future<void> AddStatusTime(
+    BuildContext scaffoldContext,
+  ) async {
+    final String? token =
+        await gettokenFromPrefs();
+
+    try {
+      final http.Response response =
+          await http.post(
+        Uri.parse(
+          '$api/api/datalog/create/',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'before_data': {
+            "Action": "Recipt added ",
+          },
+          'after_data': {
+            "Data": "$respo",
+          },
+          'order': "",
+        }),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 201) {
+        ScaffoldMessenger.of(
+          scaffoldContext,
+        ).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.green,
+            content: Text(
+              'time added Successfully.',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(
+          scaffoldContext,
+        ).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            content: Text(
+              'Adding time failed.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        'Error adding status time: $e',
+      );
+    }
+  }
+
+  Future<void> updatebanktransfer() async {
+    if (!canUpdate || isUpdating) {
+      return;
+    }
+
+    if (selectedBankId == null ||
+        selectedBankId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.red,
+          content: Text(
+            'Please select sending bank.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    if (selectedrecieverId == null ||
+        selectedrecieverId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.red,
+          content: Text(
+            'Please select receiver bank.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      isUpdating = true;
+    });
+
+    try {
+      final String? token =
+          await getTokenFromPrefs();
+
+      if (token == null || token.isEmpty) {
+        throw Exception(
+          'Authentication token not found',
+        );
+      }
+
+      final http.Response response =
+          await http.put(
+        Uri.parse(
+          '$api/api/cod/transfers/${widget.id}/',
+        ),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -67,106 +236,197 @@ class _UpdateCodTransferListState extends State<UpdateCodTransferList> {
         body: jsonEncode({
           "amount": amount.text,
           "transactionID": transactionid.text,
-          "sender_bank": int.tryParse(selectedBankId ?? '0'),
-          "receiver_bank": int.tryParse(selectedrecieverId ?? '0'),
+          "sender_bank":
+              int.tryParse(selectedBankId ?? '0'),
+          "receiver_bank":
+              int.tryParse(selectedrecieverId ?? '0'),
           "description": Remark.text,
-          "created_at": selectedDate.toIso8601String(),
+          "created_at":
+              selectedDate.toIso8601String(),
         }),
       );
+
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
+        try {
+          final dynamic responseData =
+              jsonDecode(response.body);
+
+          if (responseData is Map<String, dynamic>) {
+            respo = responseData['data'] ??
+                responseData;
+          } else {
+            respo = responseData;
+          }
+        } catch (_) {
+          respo = response.body;
+        }
+
+        await AddStatusTime(context);
+
+        if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Transfer updated successfully'),
+          const SnackBar(
+            content: Text(
+              'Transfer updated successfully',
+            ),
             duration: Duration(seconds: 2),
           ),
         );
+
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => cod_transfer_list()),
+          MaterialPageRoute(
+            builder: (BuildContext context) =>
+                cod_transfer_list(),
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update Transfer'),
+          const SnackBar(
+            content: Text(
+              'Failed to update Transfer',
+            ),
             duration: Duration(seconds: 2),
           ),
         );
       }
     } catch (error) {
+      debugPrint(
+        'Error updating transfer: $error',
+      );
+
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error updating transfer'),
+        const SnackBar(
+          content: Text(
+            'Error updating transfer',
+          ),
           duration: Duration(seconds: 2),
         ),
       );
+    } finally {
+      if (!mounted) return;
+
+      setState(() {
+        isUpdating = false;
+      });
     }
   }
 
   Future<void> getbank() async {
-    final token = await getTokenFromPrefs();
+    final String? token =
+        await getTokenFromPrefs();
+
     try {
-      final response = await http.get(Uri.parse('$api/api/banks/'), headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      });
-      List<Map<String, dynamic>> banklist = [];
+      final http.Response response =
+          await http.get(
+        Uri.parse('$api/api/banks/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      final List<Map<String, dynamic>>
+          banklist = [];
 
       if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-        var productsData = parsed['data'];
+        final dynamic parsed =
+            jsonDecode(response.body);
 
-        for (var productData in productsData) {
-          // String imageUrl = "${productData['image']}";
+        final dynamic productsData =
+            parsed['data'];
+
+        for (final dynamic productData
+            in productsData) {
           banklist.add({
             'id': productData['id'],
             'name': productData['name'],
-            'branch': productData['branch']
+            'branch': productData['branch'],
           });
         }
+
+        if (!mounted) return;
+
         setState(() {
           bank = banklist;
         });
       }
-    } catch (e) {}
+    } catch (e) {
+      debugPrint(
+        'Error fetching banks: $e',
+      );
+    }
   }
 
   void _updateTotals() {
-    ;
-    int tempTotalReceipts = 0; // Add this line
-    double tempTotalAmount = 0.0; // Add this line
+    int tempTotalReceipts = 0;
+    double tempTotalAmount = 0.0;
 
-    for (var reportData in salesReportList) {
-      // Increment total receipts and total amount
-      tempTotalReceipts++; // Add this line
-      tempTotalAmount += reportData['amount']; // Add this line
+    for (final Map<String, dynamic> reportData
+        in salesReportList) {
+      tempTotalReceipts++;
+
+      final dynamic rawAmount =
+          reportData['amount'];
+
+      if (rawAmount is num) {
+        tempTotalAmount += rawAmount.toDouble();
+      } else {
+        tempTotalAmount +=
+            double.tryParse(
+                  rawAmount?.toString() ?? '0',
+                ) ??
+                0.0;
+      }
     }
 
+    if (!mounted) return;
+
     setState(() {
-      totalReceipts = tempTotalReceipts; // Add this line
-      totalAmount = tempTotalAmount; // Add this line
+      totalReceipts = tempTotalReceipts;
+      totalAmount = tempTotalAmount;
     });
-    ;
-    ;
   }
 
-  String formatCreatedAtDate(Map<String, dynamic> reportData) {
-    final rawDate = reportData[
-        'created_at']; // Assuming it is a String like "2025-07-25T12:34:56Z"
-    if (rawDate == null) return '';
+  String formatCreatedAtDate(
+    Map<String, dynamic> reportData,
+  ) {
+    final dynamic rawDate =
+        reportData['created_at'];
 
-    final parsedDate = DateTime.tryParse(rawDate);
-    if (parsedDate == null) return '';
+    if (rawDate == null) {
+      return '';
+    }
 
-    final formattedDate = DateFormat('yyyy-MM-dd').format(parsedDate);
-    return formattedDate;
+    final DateTime? parsedDate =
+        DateTime.tryParse(
+      rawDate.toString(),
+    );
+
+    if (parsedDate == null) {
+      return '';
+    }
+
+    return DateFormat('yyyy-MM-dd').format(
+      parsedDate,
+    );
   }
 
   Future<void> getreciptReport() async {
     try {
-      final token = await getTokenFromPrefs();
+      final String? token =
+          await getTokenFromPrefs();
 
-      var response = await http.get(
-        Uri.parse('$api/api/cod/transfers/'),
+      final http.Response response =
+          await http.get(
+        Uri.parse(
+          '$api/api/cod/transfers/',
+        ),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -174,572 +434,983 @@ class _UpdateCodTransferListState extends State<UpdateCodTransferList> {
       );
 
       if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-        List<Map<String, dynamic>> reciptList = [];
+        final dynamic parsed =
+            jsonDecode(response.body);
 
-        for (var reportData in parsed) {
-          reciptList.add({
-            'id': reportData['id'],
-            'transactionID': reportData['transactionID'] ?? '',
-            'amount': double.tryParse(reportData['amount'].toString()) ?? 0.0,
-            'bank': reportData['bank'],
-            'receiver_bank_name': reportData['receiver_bank_name'],
-            'sender_bank_name': reportData['sender_bank_name'],
-            'receiver_bank': reportData['receiver_bank'],
-            'created_by_name': reportData['created_by_name'] ?? '',
-            'remark': reportData['remark'] ?? '',
-            'created_at': reportData['created_at'],
-          });
+        final List<Map<String, dynamic>>
+            reciptList = [];
 
-          // ✅ Set form fields if it's the selected ID
-          if (reportData['id'] == widget.id) {
-            setState(() {
-              amount.text = reportData['amount'].toString();
-              transactionid.text = reportData['transactionID'] ?? '';
-              selectedBankId =
-                  reportData['sender_bank']?.toString(); // ✅ Correct ID
-              selectedrecieverId =
-                  reportData['receiver_bank']?.toString(); // ✅ Correct ID
-              Remark.text = reportData['description'] ?? '';
-              uname.text = reportData['created_by_name'] ?? '';
-              selectedDate =
-                  DateTime.tryParse(reportData['created_at']) ?? DateTime.now();
+        if (parsed is List) {
+          for (final dynamic reportData
+              in parsed) {
+            if (reportData is! Map) {
+              continue;
+            }
+
+            reciptList.add({
+              'id': reportData['id'],
+              'transactionID':
+                  reportData['transactionID'] ?? '',
+              'amount': double.tryParse(
+                    reportData['amount'].toString(),
+                  ) ??
+                  0.0,
+              'bank': reportData['bank'],
+              'receiver_bank_name':
+                  reportData[
+                      'receiver_bank_name'],
+              'sender_bank_name':
+                  reportData['sender_bank_name'],
+              'receiver_bank':
+                  reportData['receiver_bank'],
+              'created_by_name':
+                  reportData['created_by_name'] ??
+                      '',
+              'remark':
+                  reportData['remark'] ?? '',
+              'created_at':
+                  reportData['created_at'],
             });
+
+            if (reportData['id'] == widget.id) {
+              if (!mounted) return;
+
+              setState(() {
+                amount.text =
+                    reportData['amount'].toString();
+
+                transactionid.text =
+                    reportData['transactionID'] ??
+                        '';
+
+                selectedBankId =
+                    reportData['sender_bank']
+                        ?.toString();
+
+                selectedrecieverId =
+                    reportData['receiver_bank']
+                        ?.toString();
+
+                Remark.text =
+                    reportData['description'] ?? '';
+
+                uname.text =
+                    reportData['created_by_name'] ??
+                        '';
+
+                selectedDate =
+                    DateTime.tryParse(
+                          reportData['created_at']
+                                  ?.toString() ??
+                              '',
+                        ) ??
+                        DateTime.now();
+              });
+            }
           }
         }
 
+        if (!mounted) return;
+
         setState(() {
           allSalesReportList = reciptList;
-          salesReportList = allSalesReportList;
+
+          salesReportList =
+              List<Map<String, dynamic>>.from(
+            allSalesReportList,
+          );
         });
+
         _updateTotals();
       } else {
+        if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Failed to fetch data'),
-              duration: Duration(seconds: 2)),
+            content: Text(
+              'Failed to fetch data',
+            ),
+            duration: Duration(seconds: 2),
+          ),
         );
       }
     } catch (error) {
+      debugPrint(
+        'Error fetching transfer data: $error',
+      );
+
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Error fetching data'),
-            duration: Duration(seconds: 2)),
+          content: Text(
+            'Error fetching data',
+          ),
+          duration: Duration(seconds: 2),
+        ),
       );
     }
   }
 
   Future<String?> getdepFromPrefs() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final SharedPreferences prefs =
+        await SharedPreferences.getInstance();
+
     return prefs.getString('department');
   }
 
   Future<String?> getusername() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final SharedPreferences prefs =
+        await SharedPreferences.getInstance();
+
     return prefs.getString('username');
   }
 
   Future<void> _navigateBack() async {
-    final dep = await getdepFromPrefs();
+    final String? dep =
+        await getdepFromPrefs();
+
+    if (!mounted) return;
+
     if (dep == "BDO") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-            builder: (context) =>
-                bdo_dashbord()), // Replace AnotherPage with your target page
+          builder: (BuildContext context) =>
+              bdo_dashbord(),
+        ),
+      );
+    } else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (BuildContext context) =>
+              ceo_dashboard(),
+        ),
+      );
+    } else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (BuildContext context) =>
+              cso_dashboard(),
+        ),
       );
     } else if (dep == "BDM") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-            builder: (context) =>
-                bdm_dashbord()), // Replace AnotherPage with your target page
+          builder: (BuildContext context) =>
+              bdm_dashbord(),
+        ),
       );
     } else if (dep == "warehouse") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-            builder: (context) =>
-                WarehouseDashboard()), // Replace AnotherPage with your target page
+          builder: (BuildContext context) =>
+              WarehouseDashboard(),
+        ),
       );
-    } else if(dep=="CEO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => ceo_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="COO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => ceo_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if (dep == "Warehouse Admin") {
+    } else if (dep == "CEO") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-            builder: (context) =>
-                WarehouseAdmin()), // Replace AnotherPage with your target page
+          builder: (BuildContext context) =>
+              ceo_dashboard(),
+        ),
+      );
+    } else if (dep == "Warehouse Admin") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (BuildContext context) =>
+              WarehouseAdmin(),
+        ),
       );
     } else {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => dashboard()),
+        MaterialPageRoute(
+          builder: (BuildContext context) =>
+              dashboard(),
+        ),
       );
     }
+  }
+
+  int? _parseBankId(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is int) {
+      return value;
+    }
+
+    return int.tryParse(
+      value.toString(),
+    );
+  }
+
+  String? get safeSelectedBankId {
+    if (selectedBankId == null) {
+      return null;
+    }
+
+    final bool exists = bank.any(
+      (Map<String, dynamic> bankItem) {
+        return bankItem['id'].toString() ==
+            selectedBankId;
+      },
+    );
+
+    return exists ? selectedBankId : null;
+  }
+
+  String? get safeSelectedReceiverBankId {
+    if (selectedrecieverId == null) {
+      return null;
+    }
+
+    final bool exists = bank.any(
+      (Map<String, dynamic> bankItem) {
+        return bankItem['id'].toString() ==
+            selectedrecieverId;
+      },
+    );
+
+    return exists
+        ? selectedrecieverId
+        : null;
+  }
+
+  @override
+  void dispose() {
+    uname.dispose();
+    amount.dispose();
+    transactionid.dispose();
+    Remark.dispose();
+
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        // Prevent the swipe-back gesture (and back button)
-        _navigateBack();
+        await _navigateBack();
         return false;
       },
       child: Scaffold(
-        backgroundColor: Color.fromARGB(242, 255, 255, 255),
+        backgroundColor:
+            const Color.fromARGB(
+          242,
+          255,
+          255,
+          255,
+        ),
         appBar: AppBar(
-          title: Text(
+          title: const Text(
             "Update COD Transfer",
-            style: TextStyle(fontSize: 14, color: Colors.grey),
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey,
+            ),
           ),
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back), // Custom back arrow
-            onPressed: () async {
-              final dep = await getdepFromPrefs();
-              if (dep == "BDO") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          bdo_dashbord()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "BDM") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          bdm_dashbord()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "warehouse") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          WarehouseDashboard()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "CEO") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          ceo_dashboard()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "Warehouse Admin") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          WarehouseAdmin()), // Replace AnotherPage with your target page
-                );
-              } else {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          dashboard()), // Replace AnotherPage with your target page
-                );
-              }
-            },
+            icon:
+                const Icon(Icons.arrow_back),
+            onPressed: _navigateBack,
           ),
           actions: [
             IconButton(
-              icon: Image.asset('lib/assets/profile.png'),
+              icon: Image.asset(
+                'lib/assets/profile.png',
+              ),
               onPressed: () {},
             ),
           ],
         ),
         body: SingleChildScrollView(
-            child: Padding(
-          padding: const EdgeInsets.only(bottom: 55),
-          child: Container(
-            child: Column(
-              children: [
-                SizedBox(
-                  height: 15,
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 10, top: 10, left: 10),
-                  child: Container(
-                    width: 600,
-                    decoration: BoxDecoration(
-                      color: Color.fromARGB(255, 34, 165, 246),
-                      border:
-                          Border.all(color: Color.fromARGB(255, 202, 202, 202)),
+          child: Padding(
+            padding:
+                const EdgeInsets.only(
+              bottom: 55,
+            ),
+            child: Container(
+              child: Column(
+                children: [
+                  const SizedBox(
+                    height: 15,
+                  ),
+                  Padding(
+                    padding:
+                        const EdgeInsets.only(
+                      right: 10,
+                      top: 10,
+                      left: 10,
                     ),
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          height: 10,
+                    child: Container(
+                      width: 600,
+                      decoration:
+                          BoxDecoration(
+                        color:
+                            const Color.fromARGB(
+                          255,
+                          34,
+                          165,
+                          246,
                         ),
-                        Text(
-                          "COD Transfer Update",
-                          style: TextStyle(
+                        border:
+                            Border.all(
+                          color:
+                              const Color.fromARGB(
+                            255,
+                            202,
+                            202,
+                            202,
+                          ),
+                        ),
+                      ),
+                      child: const Column(
+                        children: [
+                          SizedBox(
+                            height: 10,
+                          ),
+                          Text(
+                            "COD Transfer Update",
+                            style:
+                                TextStyle(
                               fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white),
-                        ),
-                        SizedBox(
-                          height: 13,
-                        ),
-                      ],
+                              fontWeight:
+                                  FontWeight.bold,
+                              color:
+                                  Colors.white,
+                            ),
+                          ),
+                          SizedBox(
+                            height: 13,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 25, left: 15, right: 15),
-                  child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10.0),
-                        border: Border.all(
-                            color: Color.fromARGB(255, 202, 202, 202)),
-                      ),
+                  Padding(
+                    padding:
+                        const EdgeInsets.only(
+                      top: 25,
+                      left: 15,
+                      right: 15,
+                    ),
+                    child: Container(
                       width: 700,
+                      decoration:
+                          BoxDecoration(
+                        color: Colors.white,
+                        borderRadius:
+                            BorderRadius
+                                .circular(
+                          10,
+                        ),
+                        border:
+                            Border.all(
+                          color:
+                              const Color.fromARGB(
+                            255,
+                            202,
+                            202,
+                            202,
+                          ),
+                        ),
+                      ),
                       child: Padding(
-                        padding: const EdgeInsets.only(left: 10),
+                        padding:
+                            const EdgeInsets.only(
+                          left: 10,
+                        ),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment:
+                              CrossAxisAlignment
+                                  .start,
                           children: [
-                            SizedBox(
+                            const SizedBox(
                               height: 10,
                             ),
-
-                            SizedBox(
+                            const SizedBox(
                               height: 5,
                             ),
-                            Text(
+                            const Text(
                               "Amount",
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold),
+                              style:
+                                  TextStyle(
+                                fontSize: 12,
+                                fontWeight:
+                                    FontWeight.bold,
+                              ),
                             ),
-                            SizedBox(
+                            const SizedBox(
                               height: 5,
                             ),
                             Padding(
-                              padding: const EdgeInsets.only(right: 10),
-                              child: Container(
-                                child: TextField(
-                                  controller: amount,
-                                  decoration: InputDecoration(
-                                    labelText: 'Amount',
-                                    labelStyle: TextStyle(
-                                      fontSize:
-                                          12.0, // Set your desired font size
+                              padding:
+                                  const EdgeInsets
+                                      .only(
+                                right: 10,
+                              ),
+                              child: TextField(
+                                controller:
+                                    amount,
+                                decoration:
+                                    InputDecoration(
+                                  labelText:
+                                      'Amount',
+                                  labelStyle:
+                                      const TextStyle(
+                                    fontSize:
+                                        12,
+                                  ),
+                                  border:
+                                      OutlineInputBorder(
+                                    borderRadius:
+                                        BorderRadius
+                                            .circular(
+                                      10,
                                     ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(10.0),
-                                      borderSide:
-                                          BorderSide(color: Colors.grey),
+                                    borderSide:
+                                        const BorderSide(
+                                      color:
+                                          Colors.grey,
                                     ),
-                                    contentPadding: EdgeInsets.symmetric(
-                                        vertical: 8.0), // Set vertical padding
+                                  ),
+                                  contentPadding:
+                                      const EdgeInsets
+                                          .symmetric(
+                                    vertical: 8,
                                   ),
                                 ),
                               ),
                             ),
-                            // SizedBox(
-                            //   height: 10,
-                            // ),
-                            // Text(
-                            //   "Transaction Id",
-                            //   style: TextStyle(
-                            //       fontSize: 12, fontWeight: FontWeight.bold),
-                            // ),
-                            // SizedBox(
-                            //   height: 5,
-                            // ),
-                            // Padding(
-                            //   padding: const EdgeInsets.only(right: 10),
-                            //   child: Container(
-                            //     child: TextField(
-                            //       controller: transactionid,
-                            //       decoration: InputDecoration(
-                            //         labelText: 'Transaction Id',
-                            //         labelStyle: TextStyle(
-                            //           fontSize:
-                            //               12.0, // Set your desired font size
-                            //         ),
-                            //         border: OutlineInputBorder(
-                            //           borderRadius: BorderRadius.circular(10.0),
-                            //           borderSide:
-                            //               BorderSide(color: Colors.grey),
-                            //         ),
-                            //         contentPadding: EdgeInsets.symmetric(
-                            //             vertical: 8.0), // Set vertical padding
-                            //       ),
-                            //     ),
-                            //   ),
-                            // ),
-                            SizedBox(
+                            const SizedBox(
                               height: 10,
                             ),
-                            Text(
+                            const Text(
                               "Sending Bank",
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(height: 5),
-                            Padding(
-                              padding: const EdgeInsets.only(right: 10),
-                              child: Container(
-                                padding: EdgeInsets.symmetric(horizontal: 10),
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
-                                  borderRadius: BorderRadius.circular(10.0),
-                                ),
-                                child: DropdownButton<String>(
-                                  isExpanded: true,
-                                  value: selectedBankId,
-                                  hint: Text(
-                                    'Select Bank',
-                                    style: TextStyle(fontSize: 12.0),
-                                  ),
-                                  items: bank.map((bankItem) {
-                                    return DropdownMenuItem<String>(
-                                      value: bankItem['id'].toString(),
-                                      child: Text(
-                                        '${bankItem['name']}',
-                                        style: TextStyle(fontSize: 12.0),
-                                      ),
-                                    );
-                                  }).toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      selectedBankId =
-                                          value; // Store the selected bank ID
-                                      ;
-                                    });
-                                  },
-                                  underline: SizedBox(),
-                                ),
+                              style:
+                                  TextStyle(
+                                fontSize: 12,
+                                fontWeight:
+                                    FontWeight.bold,
                               ),
                             ),
-
-                            SizedBox(
-                              height: 10,
-                            ),
-                            Text(
-                              "Reciever Bank",
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(height: 5),
-                            Padding(
-                              padding: const EdgeInsets.only(right: 10),
-                              child: Container(
-                                padding: EdgeInsets.symmetric(horizontal: 10),
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
-                                  borderRadius: BorderRadius.circular(10.0),
-                                ),
-                                child: DropdownButton<String>(
-                                  isExpanded: true,
-                                  value: selectedrecieverId,
-                                  hint: Text(
-                                    'Select Bank',
-                                    style: TextStyle(fontSize: 12.0),
-                                  ),
-                                  items: bank.map((bankItem) {
-                                    return DropdownMenuItem<String>(
-                                      value: bankItem['id'].toString(),
-                                      child: Text(
-                                        '${bankItem['name']}',
-                                        style: TextStyle(fontSize: 12.0),
-                                      ),
-                                    );
-                                  }).toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      selectedrecieverId =
-                                          value; // Store the selected bank ID
-                                    });
-                                  },
-                                  underline: SizedBox(),
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 10),
-                            Text(
-                              "Remark",
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(
+                            const SizedBox(
                               height: 5,
                             ),
                             Padding(
-                              padding: const EdgeInsets.only(right: 10),
+                              padding:
+                                  const EdgeInsets
+                                      .only(
+                                right: 10,
+                              ),
                               child: Container(
-                                child: TextField(
-                                  controller: Remark,
-                                  decoration: InputDecoration(
-                                    labelText: 'Remark',
-                                    labelStyle: TextStyle(
+                                padding:
+                                    const EdgeInsets
+                                        .symmetric(
+                                  horizontal:
+                                      10,
+                                ),
+                                decoration:
+                                    BoxDecoration(
+                                  border:
+                                      Border.all(
+                                    color:
+                                        Colors.grey,
+                                  ),
+                                  borderRadius:
+                                      BorderRadius
+                                          .circular(
+                                    10,
+                                  ),
+                                ),
+                                child:
+                                    DropdownButton<
+                                        String>(
+                                  isExpanded:
+                                      true,
+                                  value:
+                                      safeSelectedBankId,
+                                  hint:
+                                      const Text(
+                                    'Select Bank',
+                                    style:
+                                        TextStyle(
                                       fontSize:
-                                          12.0, // Set your desired font size
+                                          12,
                                     ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(10.0),
-                                      borderSide:
-                                          BorderSide(color: Colors.grey),
+                                  ),
+                                  items:
+                                      bank.map(
+                                    (
+                                      Map<String,
+                                              dynamic>
+                                          bankItem,
+                                    ) {
+                                      return DropdownMenuItem<
+                                          String>(
+                                        value: bankItem[
+                                                'id']
+                                            .toString(),
+                                        child:
+                                            Text(
+                                          '${bankItem['name']}',
+                                          style:
+                                              const TextStyle(
+                                            fontSize:
+                                                12,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ).toList(),
+                                  onChanged:
+                                      (String?
+                                          value) {
+                                    setState(
+                                      () {
+                                        selectedBankId =
+                                            value;
+                                      },
+                                    );
+                                  },
+                                  underline:
+                                      const SizedBox(),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(
+                              height: 10,
+                            ),
+                            const Text(
+                              "Reciever Bank",
+                              style:
+                                  TextStyle(
+                                fontSize: 12,
+                                fontWeight:
+                                    FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(
+                              height: 5,
+                            ),
+                            Padding(
+                              padding:
+                                  const EdgeInsets
+                                      .only(
+                                right: 10,
+                              ),
+                              child: Container(
+                                padding:
+                                    const EdgeInsets
+                                        .symmetric(
+                                  horizontal:
+                                      10,
+                                ),
+                                decoration:
+                                    BoxDecoration(
+                                  border:
+                                      Border.all(
+                                    color:
+                                        Colors.grey,
+                                  ),
+                                  borderRadius:
+                                      BorderRadius
+                                          .circular(
+                                    10,
+                                  ),
+                                ),
+                                child:
+                                    DropdownButton<
+                                        String>(
+                                  isExpanded:
+                                      true,
+                                  value:
+                                      safeSelectedReceiverBankId,
+                                  hint:
+                                      const Text(
+                                    'Select Bank',
+                                    style:
+                                        TextStyle(
+                                      fontSize:
+                                          12,
                                     ),
-                                    contentPadding: EdgeInsets.symmetric(
-                                        vertical: 8.0), // Set vertical padding
+                                  ),
+                                  items:
+                                      bank.map(
+                                    (
+                                      Map<String,
+                                              dynamic>
+                                          bankItem,
+                                    ) {
+                                      return DropdownMenuItem<
+                                          String>(
+                                        value: bankItem[
+                                                'id']
+                                            .toString(),
+                                        child:
+                                            Text(
+                                          '${bankItem['name']}',
+                                          style:
+                                              const TextStyle(
+                                            fontSize:
+                                                12,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ).toList(),
+                                  onChanged:
+                                      (String?
+                                          value) {
+                                    setState(
+                                      () {
+                                        selectedrecieverId =
+                                            value;
+                                      },
+                                    );
+                                  },
+                                  underline:
+                                      const SizedBox(),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(
+                              height: 10,
+                            ),
+                            const Text(
+                              "Remark",
+                              style:
+                                  TextStyle(
+                                fontSize: 12,
+                                fontWeight:
+                                    FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(
+                              height: 5,
+                            ),
+                            Padding(
+                              padding:
+                                  const EdgeInsets
+                                      .only(
+                                right: 10,
+                              ),
+                              child: TextField(
+                                controller:
+                                    Remark,
+                                decoration:
+                                    InputDecoration(
+                                  labelText:
+                                      'Remark',
+                                  labelStyle:
+                                      const TextStyle(
+                                    fontSize:
+                                        12,
+                                  ),
+                                  border:
+                                      OutlineInputBorder(
+                                    borderRadius:
+                                        BorderRadius
+                                            .circular(
+                                      10,
+                                    ),
+                                    borderSide:
+                                        const BorderSide(
+                                      color:
+                                          Colors.grey,
+                                    ),
+                                  ),
+                                  contentPadding:
+                                      const EdgeInsets
+                                          .symmetric(
+                                    vertical: 8,
                                   ),
                                 ),
                               ),
                             ),
-                            SizedBox(
+                            const SizedBox(
                               height: 10,
                             ),
-                            Text(
+                            const Text(
                               "Date",
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold),
+                              style:
+                                  TextStyle(
+                                fontSize: 12,
+                                fontWeight:
+                                    FontWeight.bold,
+                              ),
                             ),
-                            SizedBox(
+                            const SizedBox(
                               height: 5,
                             ),
-                            // ...existing code...
                             Padding(
-                              padding: const EdgeInsets.only(right: 10),
-                              child: GestureDetector(
-                                onTap: () async {
-                                  DateTime? pickedDate = await showDatePicker(
-                                    context: context,
-                                    initialDate: selectedDate,
-                                    firstDate: DateTime(2000),
-                                    lastDate: DateTime(2100),
+                              padding:
+                                  const EdgeInsets
+                                      .only(
+                                right: 10,
+                              ),
+                              child:
+                                  GestureDetector(
+                                onTap:
+                                    () async {
+                                  final DateTime?
+                                      pickedDate =
+                                      await showDatePicker(
+                                    context:
+                                        context,
+                                    initialDate:
+                                        selectedDate,
+                                    firstDate:
+                                        DateTime(
+                                      2000,
+                                    ),
+                                    lastDate:
+                                        DateTime(
+                                      2100,
+                                    ),
                                   );
-                                  if (pickedDate != null) {
-                                    setState(() {
-                                      selectedDate = pickedDate;
-                                    });
+
+                                  if (!mounted) return;
+
+                                  if (pickedDate !=
+                                      null) {
+                                    setState(
+                                      () {
+                                        selectedDate =
+                                            pickedDate;
+                                      },
+                                    );
                                   }
                                 },
-                                child: AbsorbPointer(
-                                  child: TextField(
-                                    readOnly: true,
-                                    decoration: InputDecoration(
-                                      labelText: 'Date',
-                                      labelStyle: TextStyle(fontSize: 12.0),
-                                      border: OutlineInputBorder(
+                                child:
+                                    AbsorbPointer(
+                                  child:
+                                      TextField(
+                                    readOnly:
+                                        true,
+                                    decoration:
+                                        InputDecoration(
+                                      labelText:
+                                          'Date',
+                                      labelStyle:
+                                          const TextStyle(
+                                        fontSize:
+                                            12,
+                                      ),
+                                      border:
+                                          OutlineInputBorder(
                                         borderRadius:
-                                            BorderRadius.circular(10.0),
+                                            BorderRadius
+                                                .circular(
+                                          10,
+                                        ),
                                         borderSide:
-                                            BorderSide(color: Colors.grey),
+                                            const BorderSide(
+                                          color:
+                                              Colors.grey,
+                                        ),
                                       ),
                                       contentPadding:
-                                          EdgeInsets.symmetric(vertical: 8.0),
+                                          const EdgeInsets
+                                              .symmetric(
+                                        vertical:
+                                            8,
+                                      ),
                                     ),
-                                    controller: TextEditingController(
-                                      text: DateFormat('yyyy-MM-dd')
-                                          .format(selectedDate),
+                                    controller:
+                                        TextEditingController(
+                                      text:
+                                          DateFormat(
+                                        'yyyy-MM-dd',
+                                      ).format(
+                                        selectedDate,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-
-                            SizedBox(
+                            const SizedBox(
                               height: 10,
                             ),
-                            Text(
+                            const Text(
                               "Name",
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold),
+                              style:
+                                  TextStyle(
+                                fontSize: 12,
+                                fontWeight:
+                                    FontWeight.bold,
+                              ),
                             ),
-                            SizedBox(
+                            const SizedBox(
                               height: 5,
                             ),
                             Padding(
-                              padding: const EdgeInsets.only(right: 10),
-                              child: Container(
-                                child: TextField(
-                                  controller: TextEditingController(
-                                      text: uname
-                                          .text), // Display the name extracted from JWT
-                                  readOnly: true, // Make the field non-editable
-                                  decoration: InputDecoration(
-                                    labelText: 'Name',
-                                    labelStyle: TextStyle(
-                                      fontSize:
-                                          12.0, // Set your desired font size
+                              padding:
+                                  const EdgeInsets
+                                      .only(
+                                right: 10,
+                              ),
+                              child: TextField(
+                                controller:
+                                    TextEditingController(
+                                  text:
+                                      uname.text,
+                                ),
+                                readOnly: true,
+                                decoration:
+                                    InputDecoration(
+                                  labelText:
+                                      'Name',
+                                  labelStyle:
+                                      const TextStyle(
+                                    fontSize:
+                                        12,
+                                  ),
+                                  border:
+                                      OutlineInputBorder(
+                                    borderRadius:
+                                        BorderRadius
+                                            .circular(
+                                      10,
                                     ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(10.0),
-                                      borderSide:
-                                          BorderSide(color: Colors.grey),
+                                    borderSide:
+                                        const BorderSide(
+                                      color:
+                                          Colors.grey,
                                     ),
-                                    contentPadding: EdgeInsets.symmetric(
-                                        vertical: 8.0), // Set vertical padding
+                                  ),
+                                  contentPadding:
+                                      const EdgeInsets
+                                          .symmetric(
+                                    vertical: 8,
                                   ),
                                 ),
                               ),
                             ),
-                            SizedBox(
+                            const SizedBox(
                               height: 10,
                             ),
                             Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  SizedBox(
-                                    width: 20,
-                                  ),
-                                  SizedBox(
-                                    width: 270,
-                                    child: ElevatedButton(
-                                      onPressed: () {
-                                        //AddReceipt3(context);
-                                         updatebanktransfer() ;
-                                      },
-                                      style: ButtonStyle(
-                                        backgroundColor:
-                                            MaterialStateProperty.all<Color>(
-                                          Color.fromARGB(255, 64, 176, 251),
-                                        ),
-                                        shape: MaterialStateProperty.all<
-                                            RoundedRectangleBorder>(
-                                          RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                                10), // Set your desired border radius
+                              mainAxisAlignment:
+                                  MainAxisAlignment
+                                      .center,
+                              children: [
+                                const SizedBox(
+                                  width: 20,
+                                ),
+                                SizedBox(
+                                  width: 270,
+                                  child:
+                                      ElevatedButton(
+                                    onPressed:
+                                        canUpdate &&
+                                                !isUpdating
+                                            ? updatebanktransfer
+                                            : null,
+                                    style:
+                                        ButtonStyle(
+                                      backgroundColor:
+                                          MaterialStateProperty
+                                              .resolveWith<
+                                                  Color>(
+                                        (
+                                          Set<MaterialState>
+                                              states,
+                                        ) {
+                                          if (states
+                                              .contains(
+                                            MaterialState
+                                                .disabled,
+                                          )) {
+                                            return Colors
+                                                .grey;
+                                          }
+
+                                          return const Color
+                                              .fromARGB(
+                                            255,
+                                            64,
+                                            176,
+                                            251,
+                                          );
+                                        },
+                                      ),
+                                      shape:
+                                          MaterialStateProperty
+                                              .all<
+                                                  RoundedRectangleBorder>(
+                                        RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius
+                                                  .circular(
+                                            10,
                                           ),
                                         ),
-                                        fixedSize:
-                                            MaterialStateProperty.all<Size>(
-                                          Size(95,
-                                              15), // Set your desired width and heigh
+                                      ),
+                                      fixedSize:
+                                          MaterialStateProperty
+                                              .all<
+                                                  Size>(
+                                        const Size(
+                                          95,
+                                          15,
                                         ),
                                       ),
-                                      child: Text("Submit",
-                                          style:
-                                              TextStyle(color: Colors.white)),
                                     ),
+                                    child:
+                                        isUpdating
+                                            ? const SizedBox(
+                                                width:
+                                                    18,
+                                                height:
+                                                    18,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth:
+                                                      2,
+                                                  valueColor:
+                                                      AlwaysStoppedAnimation<
+                                                          Color>(
+                                                    Colors
+                                                        .white,
+                                                  ),
+                                                ),
+                                              )
+                                            : const Text(
+                                                "Submit",
+                                                style:
+                                                    TextStyle(
+                                                  color:
+                                                      Colors.white,
+                                                ),
+                                              ),
                                   ),
-                                ]),
-                            SizedBox(
+                                ),
+                              ],
+                            ),
+                            const SizedBox(
                               height: 20,
-                            )
+                            ),
                           ],
                         ),
-                      )),
-                ),
-              ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        )),
+        ),
       ),
     );
   }
