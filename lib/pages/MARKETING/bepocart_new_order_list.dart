@@ -459,6 +459,14 @@ class _MyFamilyOrderListState extends State<MyFamilyOrderList> {
     return result.isEmpty ? fallback : result;
   }
 
+  String _getDisplayStatus(dynamic rawStatus) {
+    final String status = _text(rawStatus);
+
+    return status == 'Invoice Created'
+        ? 'Waiting For Approval'
+        : status;
+  }
+
   void _onSearchChanged(String value) {
     _searchDebounce?.cancel();
 
@@ -681,7 +689,7 @@ Future<void> exportToExcel() async {
           order['family_name'],
           fallback: _text(order['family']),
         ),
-        _text(order['status']),
+        _getDisplayStatus(order['status']),
         _text(order['payment_status']),
         _text(order['payment_method']),
         _toDouble(order['total_amount']),
@@ -788,7 +796,7 @@ Future<void> exportToExcel() async {
                   'Order Date': _formatDateForDisplay(
                     _text(order['order_date']),
                   ),
-                  'Status': _text(order['status']),
+                  'Status': _getDisplayStatus(order['status']),
                   'Family': _text(order['family_name']),
                   'Staff': _text(order['manage_staff']),
                   'Company': _text(order['company']),
@@ -1343,7 +1351,7 @@ Future<void> exportToExcel() async {
               return DropdownMenuItem<String>(
                 value: status,
                 child: Text(
-                  status,
+                  _getDisplayStatus(status),
                   overflow: TextOverflow.ellipsis,
                 ),
               );
@@ -1751,6 +1759,8 @@ Future<void> exportToExcel() async {
       fallback: 'N/A',
     );
 
+    final String displayStatus = _getDisplayStatus(status);
+
     final String family = _text(
       order['family_name'],
       fallback: _text(order['family']),
@@ -1849,7 +1859,7 @@ Future<void> exportToExcel() async {
                         ),
                         Expanded(
                           child: Text(
-                            status,
+                            displayStatus,
                             style: TextStyle(
                               fontSize: 13,
                               color: statusColor,

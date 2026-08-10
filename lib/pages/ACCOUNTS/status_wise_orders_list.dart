@@ -49,7 +49,7 @@ class _OrderList2State extends State<OrderList2> {
   List<Map<String, dynamic>> orders = [];
   List<Map<String, dynamic>> filteredOrders = [];
   String searchQuery = '';
-
+int waitingForConfirmationCount = 0;
   DateTime? selectedDate; // For single date filter
   DateTime? startDate; // For date range filter
   DateTime? endDate; // For date range filter
@@ -117,6 +117,15 @@ void _filterOrdersByStatus(String status) {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('department');
   }
+
+  String getDisplayStatus(dynamic rawStatus) {
+    final String status = (rawStatus ?? '').toString().trim();
+
+    return status == 'Invoice Created'
+        ? 'Waiting For Approval'
+        : status;
+  }
+ 
  
 Future<void> fetchOrderData() async {
   try {
@@ -363,7 +372,7 @@ Future<void> fetchOrderData() async {
           item['price'] ?? '',
           item['tax'] ?? '',
           item['discount'] ?? '',
-          order['status'] ?? '',
+          getDisplayStatus(order['status']),
           order['total_amount'] ?? '',
           order['order_date'] ?? '',
         ]);
@@ -494,7 +503,9 @@ Future<void> fetchOrderData() async {
                     'Order Summary',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                   ),
-                  pw.Text('Status: ${order['status'] ?? ''}'),
+                  pw.Text(
+                    'Status: ${getDisplayStatus(order['status'])}',
+                  ),
                   pw.Text('Total Amount: ${order['total_amount'].toString()}'),
                   pw.Text('Order Date: ${order['order_date'] ?? ''}'),
                 ],
@@ -524,7 +535,18 @@ Future<void> fetchOrderData() async {
               MaterialPageRoute(builder: (context) => bdo_dashbord()), // Replace AnotherPage with your target page
             );
 
-}
+}else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
+      );
+    }
+    else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => cso_dashboard()),
+      );
+    }
 else if(dep=="BDM" ){
    Navigator.pushReplacement(
               context,
@@ -640,6 +662,18 @@ else if(dep=="Marketing" ){
               MaterialPageRoute(builder: (context) => marketing_dashboard()), // Replace AnotherPage with your target page
             );
 }
+else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
+      );
+    }
+    else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => cso_dashboard()),
+      );
+    }
 else if(dep=="Warehouse Admin" ){
    Navigator.pushReplacement(
               context,
@@ -720,7 +754,7 @@ else if(dep=="Warehouse Admin" ){
     items: orderStatuses.map((status) {
       return DropdownMenuItem<String>(
         value: status,
-        child: Text(status),
+        child: Text(getDisplayStatus(status)),
       );
     }).toList(),
   ),
@@ -842,10 +876,13 @@ else if(dep=="Warehouse Admin" ){
                                                 ),
                                               ),
                                               Text(
-                                                '${order['status']}',
-                                                style: TextStyle(
-                                                    fontSize: 13,
-                                                    color: Colors.blue),
+                                                getDisplayStatus(
+                                                  order['status'],
+                                                ),
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.blue,
+                                                ),
                                               ),
                                             ],
                                           ),

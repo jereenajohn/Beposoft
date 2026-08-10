@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:beposoft/loginpage.dart';
+import 'package:beposoft/pages/ACCOUNTS/add_address.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_attribute.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_company.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_department.dart';
@@ -75,6 +77,8 @@ class _Performa_order_requestState extends State<Performa_order_request> {
   String selectaddress = "empty";
   List<Map<String, dynamic>> fam = [];
   List<Map<String, dynamic>> customer = [];
+  String? selectedCustomerName;
+  Timer? _debounce;
   List<Map<String, dynamic>> variant = [];
   int? selectedFamilyId;
   List<Map<String, dynamic>> cartdata = [];
@@ -91,6 +95,8 @@ class _Performa_order_requestState extends State<Performa_order_request> {
   Set<int> expandedRows = {};
   var famid;
   var staffid;
+  String loggedInStaffName = '';
+  String loggedInFamilyName = '';
 
   @override
   void initState() {
@@ -99,33 +105,55 @@ class _Performa_order_requestState extends State<Performa_order_request> {
   }
 
   var dep;
-void initdata() async {
-  await getprofiledata();
 
-  dep = await getdepFromPrefs();
+  bool get canChooseStaffAndFamily {
+    final String departmentName = dep?.toString().trim() ?? '';
 
-  await getfamily();
-  selectedFamilyId = famid;
-
-  await getstaff();
-  selectedstaffId = staffid;
-
-  if (dep == "BDO" || dep == "BDM") {
-    await getcustomer2();
-  } else {
-    await getcustomer();
+    return departmentName == 'ADMIN' ||
+        departmentName == 'Accounts / Accounting' ||
+        departmentName == 'CEO' ||
+        departmentName == 'COO' ||
+        departmentName == 'CSO';
   }
 
-  await getstate();
-  await fetchProductList();
-  await getbank();
-  await getcompany();
-  await fetchCartData();
+  void initdata() async {
+    await getprofiledata();
 
-  searchController.addListener(() {
-    filterProducts();
-  });
-}
+    dep = await getdepFromPrefs();
+
+    if (dep == "BDO" || dep == "BDM") {
+      await getcustomer2();
+    } else {
+      await getcustomer();
+    }
+
+    await getfamily();
+
+    selectedFamilyId = famid;
+    selectedstaffId = staffid;
+
+    final Map<String, dynamic> loggedInFamily = fam.firstWhere(
+      (family) => family['id'] == famid,
+      orElse: () => <String, dynamic>{'name': ''},
+    );
+
+    loggedInFamilyName =
+        loggedInFamily['name']?.toString() ?? '';
+
+    if (canChooseStaffAndFamily) {
+      await getstaff();
+    }
+
+    await getstate();
+    await fetchProductList();
+    await getbank();
+    await getcompany();
+    await fetchCartData();
+
+    searchController.addListener(() {
+      filterProducts();
+    });
+  }
 
   Future<String?> getdepFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -147,16 +175,16 @@ void initdata() async {
   Future<void> getcompany() async {
     try {
       final token = await gettokenFromPrefs();
-
       var response = await http.get(
         Uri.parse('$api/api/company/data/'),
         headers: {
-          'Authorization': ' Bearer $token',
+          'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
 
       List<Map<String, dynamic>> companylist = [];
+      ;
       if (response.statusCode == 200) {
         final Data = jsonDecode(response.body);
         final productsData = Data['data'];
@@ -173,6 +201,61 @@ void initdata() async {
         });
       }
     } catch (error) {}
+  }
+
+  Future<void> createlog({
+    required BuildContext scaffoldContext,
+    required dynamic createdProformaData,
+    required dynamic createdProformaId,
+  }) async {
+    final String? token = await gettokenFromPrefs();
+
+    if (token == null || token.trim().isEmpty) {
+      debugPrint(
+        'Unable to create proforma log: authentication token not found.',
+      );
+      return;
+    }
+
+    try {
+      final http.Response response = await http.post(
+        Uri.parse(
+          '$api/api/datalog/create/',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'before_data': {
+            'Action': 'Proforma created',
+          },
+          'after_data': {
+            'Data': createdProformaData,
+          },
+          'order': '',
+        }),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200 ||
+          response.statusCode == 201) {
+        debugPrint(
+          'Proforma creation log added successfully. '
+          'Proforma ID: $createdProformaId',
+        );
+      } else {
+        debugPrint(
+          'Proforma creation log failed: '
+          '${response.statusCode} - ${response.body}',
+        );
+      }
+    } catch (error) {
+      debugPrint(
+        'Error creating proforma log: $error',
+      );
+    }
   }
 
   void performaordercreate(
@@ -194,13 +277,36 @@ void initdata() async {
           "warehouse_id": warehouse,
           'billing_address': selectedAddressId,
           'order_date':
-              "${selectedDate.toLocal().year}-${selectedDate.toLocal().month.toString().padLeft(2, '0')}-${selectedDate.toLocal().day.toString().padLeft(2, '0')}",
+              "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}",
           "family": selectedFamilyId,
           "state": selectedstateId,
           'total_amount': tot,
         }),
       );
       if (response.statusCode == 201) {
+        dynamic createdProformaData;
+        dynamic createdProformaId;
+
+        try {
+          createdProformaData = jsonDecode(response.body);
+
+          if (createdProformaData is Map) {
+            createdProformaId =
+                createdProformaData['id'] ??
+                createdProformaData['data']?['id'];
+          }
+        } catch (_) {
+          createdProformaData = response.body;
+        }
+
+        await createlog(
+          scaffoldContext: scaffoldContext,
+          createdProformaData: createdProformaData,
+          createdProformaId: createdProformaId,
+        );
+
+        if (!mounted) return;
+
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
@@ -245,22 +351,8 @@ void initdata() async {
     });
   }
 
-//dateselection
-  DateTime selectedDate = DateTime.now();
-
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: selectedDate,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2101),
-    );
-    if (picked != null && picked != selectedDate) {
-      setState(() {
-        selectedDate = picked;
-      });
-    }
-  }
+// Current date only. Date selection is intentionally disabled.
+  DateTime get currentDate => DateTime.now();
 
   Future<String?> gettokenFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -583,87 +675,491 @@ void initdata() async {
     } catch (error) {}
   }
 
-  Future<void> getcustomer2({String search = ""}) async {
+  Future<void> getcustomer2({String search = ''}) async {
     try {
       final token = await gettokenFromPrefs();
 
-      String url = "$api/api/staff/customers/";
+      final queryParameters = <String, String>{};
 
-      var response = await http.get(
-        Uri.parse(url),
+      if (search.trim().isNotEmpty) {
+        queryParameters['search'] = search.trim();
+      }
+
+      final uri = Uri.parse('$api/api/staff/customers/').replace(
+        queryParameters: queryParameters,
+      );
+
+      final response = await http.get(
+        uri,
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
 
-      print("Customer response status: ${response.statusCode}");
-      print("Customer response body: ${response.body}");
+      debugPrint("Staff Customer API URL: $uri");
+      debugPrint("Staff Customer API Status: ${response.statusCode}");
 
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
 
-        List results = parsed['data'] ?? [];
+        List<dynamic> customersData = [];
 
-        List<Map<String, dynamic>> customerList = [];
-
-        for (var productData in results) {
-          customerList.add({
-            'id': productData['id'],
-            'name': productData['name'],
-            'created_at': productData['created_at'],
-          });
+        if (parsed is Map && parsed['data'] is List) {
+          customersData = parsed['data'];
+        } else if (parsed is Map && parsed['results'] is List) {
+          customersData = parsed['results'];
+        } else if (parsed is List) {
+          customersData = parsed;
         }
 
+        final List<Map<String, dynamic>> newCustomers =
+            customersData.map((item) {
+          return {
+            'id': item['id'],
+            'name': item['name'] ?? '',
+            'created_at': item['created_at'],
+            'phone': item['phone'] ?? '',
+            'state': item['state_name'] ?? item['state'] ?? '',
+            'gst': item['gst'] ?? '',
+          };
+        }).toList();
+
+        debugPrint("Staff customer count: ${newCustomers.length}");
+        if (newCustomers.isNotEmpty) {
+          debugPrint("First staff customer: ${newCustomers.first}");
+        }
+
+        if (!mounted) return;
+
         setState(() {
-          customer = customerList;
+          customer = newCustomers;
         });
+      } else {
+        debugPrint("Staff Customer API Error: ${response.body}");
       }
-    } catch (error) {
-      print("Customer2 error: $error");
+    } catch (e) {
+      debugPrint("Staff customer fetch error: $e");
     }
   }
 
-  Future<void> getcustomer({String search = ""}) async {
+  Future<void> _openCustomerSelector() async {
+    final TextEditingController modalSearchController = TextEditingController();
+    final FocusNode modalSearchFocusNode = FocusNode();
+
+    Timer? modalDebounce;
+    bool isSearching = false;
+    bool isInitialLoading = true;
+    List<Map<String, dynamic>> modalCustomers = [];
+
+    final bool isStaffCustomer = dep == "BDO" || dep == "BDM";
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (bottomSheetContext) {
+        return StatefulBuilder(
+          builder: (modalContext, modalSetState) {
+            Future<void> loadInitialCustomers() async {
+              final result = await fetchCustomersForDropdown(
+                staffCustomer: isStaffCustomer,
+              );
+
+              if (!mounted) return;
+
+              modalSetState(() {
+                modalCustomers = result;
+                isInitialLoading = false;
+              });
+            }
+
+            Future<void> searchCustomers(String value) async {
+              final searchText = value.trim();
+
+              if (searchText.length < 2) {
+                final result = await fetchCustomersForDropdown(
+                  staffCustomer: isStaffCustomer,
+                );
+
+                if (!mounted) return;
+
+                modalSetState(() {
+                  modalCustomers = result;
+                  isSearching = false;
+                });
+                return;
+              }
+
+              modalSetState(() {
+                isSearching = true;
+              });
+
+              final result = await fetchCustomersForDropdown(
+                search: searchText,
+                staffCustomer: isStaffCustomer,
+              );
+
+              if (!mounted) return;
+
+              modalSetState(() {
+                modalCustomers = result;
+                isSearching = false;
+              });
+            }
+
+            if (isInitialLoading) {
+              Future.microtask(loadInitialCustomers);
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(bottomSheetContext).viewInsets.bottom,
+              ),
+              child: Container(
+                height: MediaQuery.of(context).size.height * 0.75,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(22),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 10),
+                    Container(
+                      width: 45,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              "Select Customer",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              FocusScope.of(modalContext).unfocus();
+                              Navigator.pop(bottomSheetContext);
+                            },
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                      child: TextField(
+                        controller: modalSearchController,
+                        focusNode: modalSearchFocusNode,
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: "Search customer by name or phone...",
+                          hintStyle: const TextStyle(fontSize: 13),
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          suffixIcon: modalSearchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  onPressed: () async {
+                                    modalSearchController.clear();
+                                    modalDebounce?.cancel();
+
+                                    modalSetState(() {
+                                      isSearching = true;
+                                    });
+
+                                    final result =
+                                        await fetchCustomersForDropdown(
+                                      staffCustomer: isStaffCustomer,
+                                    );
+
+                                    if (!mounted) return;
+
+                                    modalSetState(() {
+                                      modalCustomers = result;
+                                      isSearching = false;
+                                    });
+                                  },
+                                )
+                              : null,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          modalSetState(() {});
+
+                          if (modalDebounce?.isActive ?? false) {
+                            modalDebounce!.cancel();
+                          }
+
+                          modalDebounce = Timer(
+                            const Duration(milliseconds: 500),
+                            () async {
+                              await searchCustomers(value);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    if (isInitialLoading || isSearching)
+                      const Expanded(
+                        child: Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    else if (modalCustomers.isEmpty)
+                      const Expanded(
+                        child: Center(
+                          child: Text(
+                            "No customers found",
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Expanded(
+                        child: ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                          itemCount: modalCustomers.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final item = modalCustomers[index];
+
+                            final int? customerId = item['id'];
+                            final String customerName =
+                                item['name']?.toString() ?? '';
+                            final String phone =
+                                item['phone']?.toString() ?? '';
+                            final String state =
+                                item['state']?.toString() ?? '';
+
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: CircleAvatar(
+                                backgroundColor: Colors.blue.withOpacity(0.08),
+                                child: Text(
+                                  customerName.isNotEmpty
+                                      ? customerName[0].toUpperCase()
+                                      : "?",
+                                  style: const TextStyle(
+                                    color: Colors.blue,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                customerName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              subtitle: Text(
+                                [
+                                  if (phone.isNotEmpty) phone,
+                                  if (state.isNotEmpty) state,
+                                ].join(" • "),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              trailing: const Icon(
+                                Icons.chevron_right,
+                                size: 20,
+                              ),
+                              onTap: () async {
+                                if (customerId == null) return;
+
+                                FocusScope.of(modalContext).unfocus();
+
+                                setState(() {
+                                  selectedCustomerId = customerId;
+                                  selectedCustomerName = customerName;
+                                  selectedAddressId = null;
+                                  addres = [];
+                                });
+
+                                Navigator.pop(bottomSheetContext);
+
+                                await getaddress(customerId);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    modalDebounce?.cancel();
+
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    modalSearchController.dispose();
+    modalSearchFocusNode.dispose();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchCustomersForDropdown({
+    String search = '',
+    bool staffCustomer = false,
+  }) async {
     try {
       final token = await gettokenFromPrefs();
 
-      String url = "$api/api/customers/?search=$search";
+      final endpoint =
+          staffCustomer ? '$api/api/staff/customers/' : '$api/api/customers/';
 
-      var response = await http.get(
-        Uri.parse(url),
+      final queryParameters = <String, String>{};
+
+      if (search.trim().isNotEmpty) {
+        queryParameters['search'] = search.trim();
+      }
+
+      final uri = Uri.parse(endpoint).replace(
+        queryParameters: queryParameters,
+      );
+
+      final response = await http.get(
+        uri,
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
 
-      print("Customer responseeeeee status: ${response.statusCode}");
-      print("Customer responseeeee body: ${response.body}");
+      debugPrint("Customer Dropdown API URL: $uri");
+      debugPrint("Customer Dropdown API Status: ${response.statusCode}");
+
+      if (response.statusCode != 200) {
+        debugPrint("Customer Dropdown API Error: ${response.body}");
+        return [];
+      }
+
+      final parsed = jsonDecode(response.body);
+
+      List<dynamic> customersData = [];
+
+      if (parsed is Map && parsed['results'] is List) {
+        customersData = parsed['results'];
+      } else if (parsed is Map && parsed['data'] is List) {
+        customersData = parsed['data'];
+      } else if (parsed is List) {
+        customersData = parsed;
+      }
+
+      final customers = customersData.map<Map<String, dynamic>>((item) {
+        return {
+          'id': item['id'],
+          'name': item['name'] ?? '',
+          'created_at': item['created_at'],
+          'phone': item['phone'] ?? '',
+          'state': item['state_name'] ?? item['state'] ?? '',
+          'gst': item['gst'] ?? '',
+        };
+      }).toList();
+
+      debugPrint("Customer Dropdown Count: ${customers.length}");
+
+      return customers;
+    } catch (e) {
+      debugPrint("Customer dropdown fetch error: $e");
+      return [];
+    }
+  }
+
+  Future<void> getcustomer({String search = ''}) async {
+    try {
+      final token = await gettokenFromPrefs();
+
+      final queryParameters = <String, String>{};
+
+      if (search.trim().isNotEmpty) {
+        queryParameters['search'] = search.trim();
+      }
+
+      final uri = Uri.parse('$api/api/customers/').replace(
+        queryParameters: queryParameters,
+      );
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      debugPrint("Customer API URL: $uri");
+      debugPrint("Customer API Status: ${response.statusCode}");
 
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
 
-        List results = parsed['results'] ?? [];
+        List<dynamic> customersData = [];
 
-        List<Map<String, dynamic>> customerList = [];
-
-        for (var productData in results) {
-          customerList.add({
-            'id': productData['id'],
-            'name': productData['name'],
-            'created_at': productData['created_at'],
-          });
+        if (parsed is Map && parsed['results'] is List) {
+          customersData = parsed['results'];
+        } else if (parsed is Map && parsed['data'] is List) {
+          customersData = parsed['data'];
+        } else if (parsed is List) {
+          customersData = parsed;
         }
 
-        setState(() {
-          customer = customerList;
-        });
+        final List<Map<String, dynamic>> newCustomers =
+            customersData.map((item) {
+          return {
+            'id': item['id'],
+            'name': item['name'] ?? '',
+            'phone': item['phone'] ?? '',
+            'state': item['state_name'] ?? item['state'] ?? '',
+            'gst': item['gst'] ?? '',
+          };
+        }).toList();
 
-        print("Loaded customers: ${customerList.length}");
+        debugPrint("Customer count: ${newCustomers.length}");
+        if (newCustomers.isNotEmpty) {
+          debugPrint("First customer: ${newCustomers.first}");
+        }
+
+        if (!mounted) return;
+
+        setState(() {
+          customer = newCustomers;
+        });
+      } else {
+        debugPrint("Customer API Error: ${response.body}");
       }
-    } catch (error) {
-      print("Customer error: $error");
+    } catch (e) {
+      debugPrint("Customer fetch error: $e");
     }
   }
 
@@ -674,6 +1170,11 @@ void initdata() async {
   Future<void> getaddress(var id) async {
     try {
       final token = await gettokenFromPrefs();
+
+      setState(() {
+        addres = [];
+        selectedAddressId = null;
+      });
 
       var response = await http.get(
         Uri.parse('$api/api/add/customer/address/$id/'),
@@ -690,7 +1191,6 @@ void initdata() async {
         var productsData = parsed['data'];
 
         for (var productData in productsData) {
-          String imageUrl = "${productData['image']}";
           addresslist.add({
             'id': productData['id'],
             'name': productData['name'],
@@ -703,8 +1203,12 @@ void initdata() async {
             'state': productData['state'],
           });
         }
+
         setState(() {
           addres = addresslist;
+          if (addres.isNotEmpty) {
+            selectedAddressId = addres.first['id']; // optional auto select
+          }
         });
       }
     } catch (error) {}
@@ -755,7 +1259,7 @@ void initdata() async {
           'Content-Type': 'application/json',
         },
       );
-
+      ;
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
         var productsData = parsed['data'];
@@ -763,6 +1267,8 @@ void initdata() async {
         setState(() {
           famid = productsData['family'];
           staffid = productsData['id'];
+          selectedstaffId = productsData['id'];
+          loggedInStaffName = productsData['name']?.toString() ?? '';
           allocatedstates = productsData['allocated_states'];
         });
         getstate();
@@ -821,7 +1327,7 @@ void initdata() async {
   Future<void> getstaff() async {
     try {
       final token = await gettokenFromPrefs();
-
+      var dep = await getdepFromPrefs();
       var response = await http.get(
         Uri.parse('$api/api/staffs/'),
         headers: {
@@ -863,9 +1369,7 @@ void initdata() async {
           sta = stafflist;
         });
       }
-    } catch (error) {
-      ;
-    }
+    } catch (error) {}
   }
 
   final List<String> items = [
@@ -886,6 +1390,8 @@ void initdata() async {
   @override
   void dispose() {
     textEditingController.dispose();
+    searchController.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
 
@@ -1005,884 +1511,729 @@ void initdata() async {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    double screenWidth = MediaQuery.of(context).size.width;
-    return Scaffold(
-      backgroundColor: Color.fromARGB(242, 255, 255, 255),
-      appBar: AppBar(
-        title: Text(
-          "Performa Order Request",
-          style: TextStyle(color: Colors.grey, fontSize: 14),
+
+  static const Color _primaryColor = Color(0xFF2563EB);
+  static const Color _primaryDark = Color(0xFF1D4ED8);
+  static const Color _pageBackground = Color(0xFFF4F7FB);
+  static const Color _textPrimary = Color(0xFF101828);
+  static const Color _textSecondary = Color(0xFF667085);
+  static const Color _borderColor = Color(0xFFE4E7EC);
+  static const Color _fieldBackground = Color(0xFFF9FAFB);
+
+  InputDecoration _fieldDecoration({
+    required String hintText,
+    required IconData icon,
+  }) {
+    return InputDecoration(
+      hintText: hintText,
+      hintStyle: const TextStyle(
+        fontSize: 14,
+        color: Color(0xFF98A2B3),
+        fontWeight: FontWeight.w400,
+      ),
+      prefixIcon: Icon(
+        icon,
+        size: 21,
+        color: const Color(0xFF667085),
+      ),
+      filled: true,
+      fillColor: _fieldBackground,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 16,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(
+          color: _borderColor,
+          width: 1,
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back), // Custom back arrow
-          onPressed: () async {
-            Navigator.pop(context);
-          },
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(
+          color: _primaryColor,
+          width: 1.5,
         ),
-        actions: [
-          IconButton(
-            icon: Image.asset('lib/assets/profile.png'),
-            onPressed: () {},
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(
+          color: _borderColor,
+          width: 1,
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionLabel(
+    String label, {
+    bool required = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: _textPrimary,
+            ),
+          ),
+          if (required)
+            const Text(
+              ' *',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFFD92D20),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionCard({
+    required Widget child,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFEAECF0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A101828),
+            blurRadius: 18,
+            offset: Offset(0, 8),
           ),
         ],
       ),
-      body: SingleChildScrollView(
-          child: Column(
+      child: child,
+    );
+  }
+
+  Widget _buildDropdownField({
+    required int? value,
+    required String hint,
+    required IconData icon,
+    required List<DropdownMenuItem<int>> items,
+    required ValueChanged<int?> onChanged,
+  }) {
+    return DropdownButtonFormField<int>(
+      value: value,
+      isExpanded: true,
+      icon: const Icon(
+        Icons.keyboard_arrow_down_rounded,
+        color: Color(0xFF667085),
+      ),
+      decoration: _fieldDecoration(
+        hintText: hint,
+        icon: icon,
+      ),
+      items: items,
+      onChanged: onChanged,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: _textPrimary,
+      ),
+      dropdownColor: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+    );
+  }
+
+  Widget _buildReadOnlyField({
+    required String value,
+    required String placeholder,
+    required IconData icon,
+    IconData? trailingIcon,
+  }) {
+    final bool hasValue = value.trim().isNotEmpty;
+
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: _fieldBackground,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _borderColor),
+      ),
+      child: Row(
         children: [
+          Icon(
+            icon,
+            size: 21,
+            color: const Color(0xFF667085),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              hasValue ? value : placeholder,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight:
+                    hasValue ? FontWeight.w600 : FontWeight.w400,
+                color: hasValue
+                    ? _textPrimary
+                    : const Color(0xFF98A2B3),
+              ),
+            ),
+          ),
+          if (trailingIcon != null)
+            Icon(
+              trailingIcon,
+              size: 21,
+              color: const Color(0xFF98A2B3),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomerField() {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () async {
+        await _openCustomerSelector();
+      },
+      child: _buildReadOnlyField(
+        value: selectedCustomerName ?? '',
+        placeholder: 'Select a customer',
+        icon: Icons.person_search_outlined,
+        trailingIcon: Icons.keyboard_arrow_down_rounded,
+      ),
+    );
+  }
+
+  Widget _buildAddressSelector() {
+    if (selectedCustomerId == null) {
+      return const SizedBox.shrink();
+    }
+
+    if (addres.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFAEB),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFFEC84B)),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.info_outline_rounded,
+              color: Color(0xFFB54708),
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'No shipping address found for this customer.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF7A2E0E),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => add_address(
+                      customerid: selectedCustomerId ?? 0,
+                      name: selectedCustomerName,
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('Shipping Address', required: true),
+        _buildDropdownField(
+          value: selectedAddressId,
+          hint: 'Select shipping address',
+          icon: Icons.location_on_outlined,
+          items: addres.map<DropdownMenuItem<int>>((address) {
+            return DropdownMenuItem<int>(
+              value: address['id'],
+              child: Text(
+                address['address']?.toString() ?? '',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            );
+          }).toList(),
+          onChanged: (value) {
+            if (value == null) return;
+            setState(() {
+              selectedAddressId = value;
+            });
+          },
+        ),
+        if (selectedAddressId != null) ...[
+          const SizedBox(height: 10),
           Container(
-            child: Column(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F9FF),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFB9E6FE)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  height: 15,
+                const Icon(
+                  Icons.local_shipping_outlined,
+                  size: 20,
+                  color: Color(0xFF026AA2),
                 ),
-                Text(
-                  "PERFORMA ORDER REQUEST ",
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 15, left: 15, right: 15),
-                  child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10.0),
-                        border: Border.all(
-                            color: Color.fromARGB(255, 202, 202, 202)),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              height: 15,
-                            ),
-
-                            Text(
-                              "Company ",
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(
-                              height: 5,
-                            ),
-
-                            Padding(
-                              padding: const EdgeInsets.only(right: 10),
-                              child: Column(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10.0),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                          color: Colors.grey, width: 1.0),
-                                      borderRadius: BorderRadius.circular(8.0),
-                                    ),
-                                    child: DropdownButton<int>(
-                                      isExpanded: true,
-                                      underline: SizedBox(),
-                                      hint: Text('Select a company'),
-                                      value: selectedCompanyId,
-                                      items: company.map((item) {
-                                        return DropdownMenuItem<int>(
-                                          value: item['id'],
-                                          child: Text(item['name']),
-                                        );
-                                      }).toList(),
-                                      onChanged: (value) {
-                                        setState(() {
-                                          selectedCompanyId = value;
-                                          // selectcomp = company
-                                          //     .firstWhere((item) => item['id'] == value)['name'];
-                                        });
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            SizedBox(
-                              height: 8,
-                            ),
-                            Text(
-                              "Family",
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(
-                              height: 5,
-                            ),
-
-                            Padding(
-                              padding: const EdgeInsets.only(right: 10),
-                              child: Container(
-                                height: 49,
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                      color: const Color.fromARGB(
-                                          255, 206, 206, 206)),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  children: [
-                                    SizedBox(width: 20),
-                                    Container(
-                                      width: 280,
-                                      child: InputDecorator(
-                                          decoration: InputDecoration(
-                                            border: InputBorder.none,
-                                            hintText: 'Select your class',
-                                            contentPadding:
-                                                EdgeInsets.symmetric(
-                                                    horizontal: 1),
-                                          ),
-                                          child: DropdownButtonHideUnderline(
-                                            child: DropdownButton<int>(
-                                              hint: Text(
-                                                'Select a Family',
-                                                style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.grey[600]),
-                                              ),
-                                              value: selectedFamilyId,
-                                              isExpanded: true,
-                                              dropdownColor:
-                                                  const Color.fromARGB(
-                                                      255, 255, 255, 255),
-                                              onChanged: (int? newValue) {
-                                                setState(() {
-                                                  selectedFamilyId =
-                                                      newValue; // Store the selected family ID
-                                                });
-                                              },
-                                              items: fam
-                                                  .map<DropdownMenuItem<int>>(
-                                                      (family) {
-                                                return DropdownMenuItem<int>(
-                                                  value: family['id'],
-                                                  child: Text(
-                                                    family['name'],
-                                                    style: TextStyle(
-                                                        color: Colors.black87,
-                                                        fontSize: 12),
-                                                  ),
-                                                );
-                                              }).toList(),
-                                              icon: Container(
-                                                alignment:
-                                                    Alignment.centerRight,
-                                                child:
-                                                    Icon(Icons.arrow_drop_down),
-                                              ),
-                                            ),
-                                          )),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            SizedBox(
-                              height: 8,
-                            ),
-                            Text(
-                              "Maneger",
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(
-                              height: 5,
-                            ),
-
-                            Padding(
-                              padding: const EdgeInsets.only(right: 10),
-                              child: Container(
-                                height: 49,
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  children: [
-                                    SizedBox(width: 20),
-                                    Container(
-                                      width: 276,
-                                      child: InputDecorator(
-                                        decoration: InputDecoration(
-                                          border: InputBorder.none,
-                                          hintText: '',
-                                          contentPadding: EdgeInsets.symmetric(
-                                              horizontal: 1),
-                                        ),
-                                        child: DropdownButton<int>(
-                                          value: selectedstaffId,
-                                          isExpanded: true,
-                                          underline:
-                                              Container(), // This removes the underline
-                                          onChanged: (int? newValue) {
-                                            setState(() {
-                                              selectedstaffId = newValue!;
-                                            });
-                                          },
-                                          items: sta.map<DropdownMenuItem<int>>(
-                                              (staff) {
-                                            return DropdownMenuItem<int>(
-                                              value: staff['id'],
-                                              child: Text(
-                                                staff['name'],
-                                                style: TextStyle(fontSize: 12),
-                                              ),
-                                            );
-                                          }).toList(),
-                                          icon: Container(
-                                            alignment: Alignment.centerRight,
-                                            child: Icon(Icons
-                                                .arrow_drop_down), // Dropdown arrow icon
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            SizedBox(
-                              height: 8,
-                            ),
-                            Text(
-                              "State",
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(
-                              height: 5,
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(right: 10),
-                              child: Container(
-                                height: 49,
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  children: [
-                                    SizedBox(width: 20),
-                                    Container(
-                                      width: 276,
-                                      child: InputDecorator(
-                                        decoration: InputDecoration(
-                                          border: InputBorder.none,
-                                          hintText: '',
-                                          contentPadding: EdgeInsets.symmetric(
-                                              horizontal: 1),
-                                        ),
-                                        child: DropdownButton<int>(
-                                          hint: Text(
-                                            'State',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: Theme.of(context)
-                                                    .hintColor),
-                                          ),
-                                          value: selectedstateId,
-                                          isExpanded: true,
-                                          underline:
-                                              Container(), // This removes the underline
-                                          onChanged: (int? newValue) {
-                                            setState(() {
-                                              selectedstateId = newValue!;
-                                            });
-                                          },
-                                          items: stat
-                                              .map<DropdownMenuItem<int>>(
-                                                  (State) {
-                                            return DropdownMenuItem<int>(
-                                              value: State['id'],
-                                              child: Text(State['name']),
-                                            );
-                                          }).toList(),
-                                          icon: Container(
-                                            padding: EdgeInsets.only(
-                                                left:
-                                                    190), // Adjust padding as needed
-                                            alignment: Alignment.centerRight,
-                                            child: Icon(Icons
-                                                .arrow_drop_down), // Dropdown arrow icon
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            SizedBox(height: 8),
-
-                            Text(
-                              "Customer",
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-
-                            SizedBox(height: 5),
-
-                            Padding(
-                              padding: const EdgeInsets.only(right: 10),
-                              child: DropdownButtonHideUnderline(
-                                child: Container(
-                                  height: 46,
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                        color: Colors.grey, width: 1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: DropdownButton2<String>(
-                                    isExpanded: true,
-                                    hint: Text(
-                                      'Select a Customer',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Theme.of(context).hintColor,
-                                      ),
-                                    ),
-                                    items: customer.map((item) {
-                                      return DropdownMenuItem<String>(
-                                        value: item['name'],
-                                        child: Text(
-                                          item['name'],
-                                          style: TextStyle(fontSize: 12),
-                                        ),
-                                      );
-                                    }).toList(),
-                                    value: selectedValue,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        selectedValue = value;
-
-                                        selectedCustomerId =
-                                            customer.firstWhere((item) =>
-                                                item['name'] == value)['id'];
-                                      });
-
-                                      getaddress(selectedCustomerId);
-                                    },
-                                    buttonStyleData: const ButtonStyleData(
-                                      padding:
-                                          EdgeInsets.symmetric(horizontal: 16),
-                                      height: 40,
-                                    ),
-                                    dropdownStyleData: const DropdownStyleData(
-                                      maxHeight: 250,
-                                    ),
-                                    menuItemStyleData: const MenuItemStyleData(
-                                      height: 40,
-                                    ),
-                                    dropdownSearchData: DropdownSearchData(
-                                      searchController: textEditingController,
-                                      searchInnerWidgetHeight: 60,
-                                      searchInnerWidget: Container(
-                                        height: 60,
-                                        padding: const EdgeInsets.all(8),
-                                        child: TextFormField(
-                                          controller: textEditingController,
-                                          expands: true,
-                                          maxLines: null,
-                                          decoration: InputDecoration(
-                                            isDense: true,
-                                            contentPadding:
-                                                EdgeInsets.symmetric(
-                                                    horizontal: 10,
-                                                    vertical: 8),
-                                            hintText:
-                                                'Search for a customer...',
-                                            hintStyle: TextStyle(fontSize: 12),
-                                            border: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                          ),
-                                          onChanged: (value) {
-                                            if (dep == "BDO" || dep == "BDM") {
-                                              getcustomer2(search: value);
-                                            } else {
-                                              getcustomer(search: value);
-                                            }
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                    onMenuStateChange: (isOpen) {
-                                      if (!isOpen) {
-                                        textEditingController.clear();
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            SizedBox(height: 8),
-                            Text("Shipping Address",
-                                style: TextStyle(
-                                    fontSize: 12, fontWeight: FontWeight.bold)),
-                            SizedBox(height: 5),
-                            Padding(
-                              padding: const EdgeInsets.only(right: 10),
-                              child: Container(
-                                height: 49,
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  children: [
-                                    SizedBox(width: 20),
-                                    Container(
-                                      width: 276,
-                                      child: InputDecorator(
-                                        decoration: InputDecoration(
-                                          border: InputBorder.none,
-                                          hintText: '',
-                                          contentPadding: EdgeInsets.symmetric(
-                                              horizontal: 1),
-                                        ),
-                                        child: DropdownButton<int>(
-                                          hint: Text(
-                                            'Address',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: Theme.of(context)
-                                                    .hintColor),
-                                          ),
-                                          value: selectedAddressId,
-                                          isExpanded: true,
-                                          underline:
-                                              Container(), // This removes the underline
-                                          onChanged: (int? newValue) {
-                                            setState(() {
-                                              selectedAddressId = newValue!;
-                                            });
-                                          },
-                                          items: addres
-                                              .map<DropdownMenuItem<int>>(
-                                                  (address) {
-                                            return DropdownMenuItem<int>(
-                                              value: address['id'],
-                                              child: Text(
-                                                  "${address['address']}",
-                                                  style:
-                                                      TextStyle(fontSize: 12)),
-                                            );
-                                          }).toList(),
-                                          selectedItemBuilder:
-                                              (BuildContext context) {
-                                            return addres
-                                                .map<Widget>((address) {
-                                              return Text(
-                                                selectedAddressId != null &&
-                                                        selectedAddressId ==
-                                                            address['id']
-                                                    ? "${address['address']}"
-                                                    : "Address",
-                                                style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.black),
-                                              );
-                                            }).toList();
-                                          },
-                                          icon: Container(
-                                            alignment: Alignment.centerRight,
-                                            child: Icon(
-                                              Icons.arrow_drop_down,
-                                              color: const Color.fromARGB(
-                                                  255, 151, 150, 150),
-                                            ), // Dropdown arrow icon
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            // Display the selected address below the dropdown
-                            if (selectedAddressId != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8.0),
-                                child: Text(
-                                  " ${addres.firstWhere((address) => address['id'] == selectedAddressId)['address']}",
-                                  style: TextStyle(
-                                      fontSize: 12, color: Colors.black),
-                                ),
-                              ),
-
-                            SizedBox(
-                              height: 8,
-                            ),
-                            Text(
-                              "Invoice Date",
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(
-                              height: 5,
-                            ),
-
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: <Widget>[
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 10),
-                                  child: Container(
-                                    height: 46,
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: Colors.grey,
-                                        width: 1.0,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8.0),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        SizedBox(
-                                          width: 25,
-                                        ),
-                                        Text(
-                                          '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              color: Color.fromARGB(
-                                                  255, 116, 116, 116)),
-                                        ),
-                                        SizedBox(
-                                          width: 162,
-                                        ),
-                                        GestureDetector(
-                                          onTap: () {
-                                            _selectDate(context);
-                                          },
-                                          child: Container(
-                                              padding: const EdgeInsets.only(
-                                                  left: 35),
-                                              child: Icon(Icons.date_range)),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            SizedBox(
-                              height: 20,
-                            ),
-                          ],
-                        ),
-                      )),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    addres
+                        .firstWhere(
+                          (address) =>
+                              address['id'] == selectedAddressId,
+                          orElse: () => {'address': ''},
+                        )['address']
+                        .toString(),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.45,
+                      color: Color(0xFF0B4A6F),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-          // Container(
-          //   child: Column(
-          //     children: [
-          //       Padding(
-          //         padding: const EdgeInsets.only(top: 15, left: 15, right: 15),
-          //         child: Container(
-          //             decoration: BoxDecoration(
-          //               color: Colors.white,
-          //               borderRadius: BorderRadius.circular(10.0),
-          //               border: Border.all(
-          //                   color: Color.fromARGB(255, 202, 202, 202)),
-          //             ),
-          //             child: Padding(
-          //               padding: const EdgeInsets.only(left: 10),
-          //               child: Column(
-          //                 crossAxisAlignment: CrossAxisAlignment.start,
-          //                 children: [
-          //                   SizedBox(
-          //                     height: 15,
-          //                   ),
-          //                   Text(
-          //                     "Bank Details ",
-          //                     style: TextStyle(
-          //                         fontSize: 13,
-          //                         fontWeight: FontWeight.bold,
-          //                         color: Colors.blue),
-          //                   ),
-          //                   SizedBox(
-          //                     height: 5,
-          //                   ),
-          //                   SizedBox(
-          //                     height: 15,
-          //                   ),
-          //                   Text(
-          //                     "Payment Status ",
-          //                     style: TextStyle(
-          //                         fontSize: 12, fontWeight: FontWeight.bold),
-          //                   ),
-          //                   SizedBox(
-          //                     height: 5,
-          //                   ),
-          //                   Padding(
-          //                     padding: const EdgeInsets.only(right: 10),
-          //                     child: Container(
-          //                       decoration: BoxDecoration(
-          //                         border: Border.all(color: Colors.grey),
-          //                         borderRadius: BorderRadius.circular(10.0),
-          //                       ),
-          //                       child: InputDecorator(
-          //                         decoration: InputDecoration(
-          //                           border: InputBorder.none,
-          //                           hintText: '',
-          //                           contentPadding:
-          //                               EdgeInsets.symmetric(horizontal: 1),
-          //                         ),
-          //                         child: DropdownButton<String>(
-          //                           value: selectpaystatus,
-          //                           underline:
-          //                               Container(), // Removes the underline
-          //                           onChanged: (String? newValue) {
-          //                             setState(() {
-          //                               selectpaystatus = newValue!;
+        ],
+      ],
+    );
+  }
 
-          //                             });
-          //                           },
-          //                           items: paystatus
-          //                               .map<DropdownMenuItem<String>>(
-          //                                   (String value) {
-          //                             return DropdownMenuItem<String>(
-          //                               value: value,
-          //                               child: Text(
-          //                                 value,
-          //                                 style: TextStyle(fontSize: 12),
-          //                               ),
-          //                             );
-          //                           }).toList(),
-          //                           icon: Container(
-          //                             padding: EdgeInsets.only(left: 240),
-          //                             alignment: Alignment.centerRight,
-          //                             child: Icon(Icons.arrow_drop_down),
-          //                           ),
-          //                         ),
-          //                       ),
-          //                     ),
-          //                   ),
-          //                   SizedBox(
-          //                     height: 8,
-          //                   ),
-          //                   Text(
-          //                     "Bank",
-          //                     style: TextStyle(
-          //                         fontSize: 12, fontWeight: FontWeight.bold),
-          //                   ),
-          //                   SizedBox(
-          //                     height: 5,
-          //                   ),
-          //                   Padding(
-          //                     padding: const EdgeInsets.only(right: 10),
-          //                     child: Container(
-          //                       height: 49,
-          //                       decoration: BoxDecoration(
-          //                         border: Border.all(
-          //                             color: const Color.fromARGB(
-          //                                 255, 206, 206, 206)),
-          //                         borderRadius: BorderRadius.circular(10),
-          //                       ),
-          //                       child: Row(
-          //                         children: [
-          //                           SizedBox(width: 20),
-          //                           Container(
-          //                             width: 280,
-          //                             child: InputDecorator(
-          //                                 decoration: InputDecoration(
-          //                                   border: InputBorder.none,
-          //                                   hintText: 'Select',
-          //                                   contentPadding:
-          //                                       EdgeInsets.symmetric(
-          //                                           horizontal: 1),
-          //                                 ),
-          //                                 child: DropdownButtonHideUnderline(
-          //                                   child: DropdownButton<int>(
-          //                                     hint: Text(
-          //                                       'Select',
-          //                                       style: TextStyle(
-          //                                           fontSize: 12,
-          //                                           color: Colors.grey[600]),
-          //                                     ),
-          //                                     value: selectedbankId,
-          //                                     isExpanded: true,
-          //                                     dropdownColor:
-          //                                         const Color.fromARGB(
-          //                                             255, 255, 255, 255),
-          //                                     icon: Icon(Icons.arrow_drop_down,
-          //                                         color: const Color.fromARGB(
-          //                                             255, 107, 107, 107)),
-          //                                     onChanged: (int? newValue) {
-          //                                       setState(() {
-          //                                         selectedbankId =
-          //                                             newValue; // Store the selected family ID
+  @override
+  Widget build(BuildContext context) {
+    final DateTime now = currentDate;
 
-          //                                       });
-          //                                     },
-          //                                     items: bank
-          //                                         .map<DropdownMenuItem<int>>(
-          //                                             (bank) {
-          //                                       return DropdownMenuItem<int>(
-          //                                         value: bank['id'],
-          //                                         child: Text(
-          //                                           bank['name'],
-          //                                           style: TextStyle(
-          //                                               color: Colors.black87,
-          //                                               fontSize: 12),
-          //                                         ),
-          //                                       );
-          //                                     }).toList(),
-          //                                   ),
-          //                                 )),
-          //                           ),
-          //                         ],
-          //                       ),
-          //                     ),
-          //                   ),
-          //                   SizedBox(
-          //                     height: 15,
-          //                   ),
-          //                   Text(
-          //                     "Payment Method ",
-          //                     style: TextStyle(
-          //                         fontSize: 12, fontWeight: FontWeight.bold),
-          //                   ),
-          //                   SizedBox(
-          //                     height: 5,
-          //                   ),
-          //                   Padding(
-          //                     padding: const EdgeInsets.only(right: 10),
-          //                     child: Container(
-          //                       decoration: BoxDecoration(
-          //                         border: Border.all(color: Colors.grey),
-          //                         borderRadius: BorderRadius.circular(10.0),
-          //                       ),
-          //                       child: InputDecorator(
-          //                         decoration: InputDecoration(
-          //                           border: InputBorder.none,
-          //                           hintText: '',
-          //                           contentPadding:
-          //                               EdgeInsets.symmetric(horizontal: 1),
-          //                         ),
-          //                         child: DropdownButton<String>(
-          //                           value: selectpaymethod,
-          //                           underline:
-          //                               Container(), // Removes the underline
-          //                           onChanged: (String? newValue) {
-          //                             setState(() {
-          //                               selectpaymethod = newValue!;
-
-          //                             });
-          //                           },
-          //                           items: paymethod
-          //                               .map<DropdownMenuItem<String>>(
-          //                                   (String value) {
-          //                             return DropdownMenuItem<String>(
-          //                               value: value,
-          //                               child: Text(
-          //                                 value,
-          //                                 style: TextStyle(fontSize: 12),
-          //                               ),
-          //                             );
-          //                           }).toList(),
-          //                           icon: Container(
-          //                             padding: EdgeInsets.only(left: 180),
-          //                             alignment: Alignment.centerRight,
-          //                             child: Icon(Icons.arrow_drop_down),
-          //                           ),
-          //                         ),
-          //                       ),
-          //                     ),
-          //                   ),
-          //                   SizedBox(
-          //                     height: 8,
-          //                   ),
-          //                   Padding(
-          //                     padding: const EdgeInsets.only(right: 10),
-          //                     child: SizedBox(
-          //                       width: double.infinity,
-          //                       child: ElevatedButton(
-          //                         onPressed: () async {
-
-          //                           showTotalDialog(context);
-          //                           // Navigator.push(context, MaterialPageRoute(builder: (context)=>order_products()));
-          //                         },
-          //                         style: ButtonStyle(
-          //                           backgroundColor:
-          //                               MaterialStateProperty.all<Color>(
-          //                             Colors.blue,
-          //                           ),
-          //                           shape: MaterialStateProperty.all<
-          //                               RoundedRectangleBorder>(
-          //                             RoundedRectangleBorder(
-          //                               borderRadius: BorderRadius.circular(10),
-          //                             ),
-          //                           ),
-          //                           fixedSize: MaterialStateProperty.all<Size>(
-          //                             Size(95, 15),
-          //                           ),
-          //                         ),
-          //                         child: Text("Generate Invoice",
-          //                             style: TextStyle(color: Colors.white)),
-          //                       ),
-          //                     ),
-          //                   ),
-          //                   SizedBox(
-          //                     height: 20,
-          //                   ),
-          //                 ],
-          //               ),
-          //             )),
-          //       ),
-          //       SizedBox(
-          //         height: 20,
-          //       ),
-
-          //     ],
-          //   ),
-          // ),
-
+    return Scaffold(
+      backgroundColor: _pageBackground,
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        leadingWidth: 72,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 14),
+          child: IconButton(
+            onPressed: () => Navigator.pop(context),
+            style: IconButton.styleFrom(
+              backgroundColor: const Color(0xFFF2F4F7),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            icon: const Icon(
+              Icons.arrow_back_rounded,
+              color: _textPrimary,
+            ),
+          ),
+        ),
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Create Proforma',
+              style: TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.w800,
+                color: _textPrimary,
+              ),
+            ),
+            SizedBox(height: 2),
+            Text(
+              'Prepare a new proforma order request',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                color: _textSecondary,
+              ),
+            ),
+          ],
+        ),
+        actions: [
           Padding(
-            padding: const EdgeInsets.all(15),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () async {
-                  showTotalDialog(context);
-                  // Navigator.push(context, MaterialPageRoute(builder: (context)=>order_products()));
-                },
-                style: ButtonStyle(
-                  backgroundColor: MaterialStateProperty.all<Color>(
-                    Colors.blue,
-                  ),
-                  shape: MaterialStateProperty.all<RoundedRectangleBorder>(
-                    RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  fixedSize: MaterialStateProperty.all<Size>(
-                    Size(95, 15),
-                  ),
+            padding: const EdgeInsets.only(right: 16),
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF8FF),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Image.asset(
+                  'lib/assets/profile.png',
+                  fit: BoxFit.contain,
                 ),
-                child: Text("Generate Invoice",
-                    style: TextStyle(color: Colors.white)),
               ),
             ),
           ),
         ],
-      )),
+      ),
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.only(
+            top: 18,
+            bottom: 32,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFF2563EB),
+                      Color(0xFF4F46E5),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x332563EB),
+                      blurRadius: 22,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  children: [
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Color(0x33FFFFFF),
+                        borderRadius: BorderRadius.all(
+                          Radius.circular(16),
+                        ),
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Icon(
+                          Icons.description_outlined,
+                          color: Colors.white,
+                          size: 26,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Proforma Order Request',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Confirm company, customer and delivery details before generating.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              height: 1.45,
+                              color: Color(0xFFE0E7FF),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              _sectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(
+                          Icons.business_center_outlined,
+                          color: _primaryColor,
+                          size: 22,
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Order Information',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: _textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _sectionLabel('Company', required: true),
+                    _buildDropdownField(
+                      value: selectedCompanyId,
+                      hint: 'Select a company',
+                      icon: Icons.apartment_outlined,
+                      items: company.map<DropdownMenuItem<int>>((item) {
+                        return DropdownMenuItem<int>(
+                          value: item['id'],
+                          child: Text(
+                            item['name']?.toString() ?? '',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          selectedCompanyId = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    _sectionLabel('Family', required: true),
+                    if (canChooseStaffAndFamily)
+                      _buildDropdownField(
+                        value: selectedFamilyId,
+                        hint: 'Select a family',
+                        icon: Icons.account_tree_outlined,
+                        items: fam.map<DropdownMenuItem<int>>((family) {
+                          return DropdownMenuItem<int>(
+                            value: family['id'],
+                            child: Text(
+                              family['name']?.toString() ?? '',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value == null) return;
+
+                          final Map<String, dynamic> selectedFamily =
+                              fam.firstWhere(
+                            (family) => family['id'] == value,
+                            orElse: () =>
+                                <String, dynamic>{'name': ''},
+                          );
+
+                          setState(() {
+                            selectedFamilyId = value;
+                            loggedInFamilyName =
+                                selectedFamily['name']?.toString() ?? '';
+                          });
+                        },
+                      )
+                    else
+                      _buildReadOnlyField(
+                        value: loggedInFamilyName,
+                        placeholder: 'Loading family details...',
+                        icon: Icons.account_tree_outlined,
+                        trailingIcon: Icons.lock_outline_rounded,
+                      ),
+                    const SizedBox(height: 16),
+                    _sectionLabel('Staff Name', required: true),
+                    if (canChooseStaffAndFamily)
+                      _buildDropdownField(
+                        value: selectedstaffId,
+                        hint: 'Select staff',
+                        icon: Icons.badge_outlined,
+                        items: sta.map<DropdownMenuItem<int>>((staff) {
+                          return DropdownMenuItem<int>(
+                            value: staff['id'],
+                            child: Text(
+                              staff['name']?.toString() ?? '',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value == null) return;
+
+                          setState(() {
+                            selectedstaffId = value;
+                          });
+                        },
+                      )
+                    else
+                      _buildReadOnlyField(
+                        value: loggedInStaffName,
+                        placeholder: 'Loading staff details...',
+                        icon: Icons.badge_outlined,
+                        trailingIcon: Icons.lock_outline_rounded,
+                      ),
+                    const SizedBox(height: 16),
+                    _sectionLabel('State', required: true),
+                    _buildDropdownField(
+                      value: selectedstateId,
+                      hint: 'Select a state',
+                      icon: Icons.map_outlined,
+                      items: stat.map<DropdownMenuItem<int>>((state) {
+                        return DropdownMenuItem<int>(
+                          value: state['id'],
+                          child: Text(
+                            state['name']?.toString() ?? '',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          selectedstateId = value;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              _sectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(
+                          Icons.person_pin_circle_outlined,
+                          color: _primaryColor,
+                          size: 22,
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Customer & Delivery',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: _textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _sectionLabel('Customer', required: true),
+                    _buildCustomerField(),
+                    if (selectedCustomerId != null) ...[
+                      const SizedBox(height: 16),
+                      _buildAddressSelector(),
+                    ],
+                    const SizedBox(height: 16),
+                    _sectionLabel('Invoice Date'),
+                    _buildReadOnlyField(
+                      value:
+                          '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}',
+                      placeholder: '',
+                      icon: Icons.calendar_today_outlined,
+                      trailingIcon: Icons.lock_outline_rounded,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0F9FF),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFFB9E6FE),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.verified_user_outlined,
+                        color: Color(0xFF026AA2),
+                        size: 20,
+                      ),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Staff and family follow department permissions. The current date is submitted automatically.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.4,
+                            color: Color(0xFF0B4A6F),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      showTotalDialog(context);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primaryColor,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    icon: const Icon(
+                      Icons.receipt_long_outlined,
+                      size: 22,
+                    ),
+                    label: const Text(
+                      'Generate Proforma',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

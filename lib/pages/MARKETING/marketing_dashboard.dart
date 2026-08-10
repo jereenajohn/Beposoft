@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:beposoft/pages/ACCOUNTS/add_self_attendance.dart';
 import 'package:beposoft/pages/ACCOUNTS/mailboxpage..dart';
+import 'package:beposoft/pages/ACCOUNTS/order_products.dart';
 import 'package:beposoft/pages/ADMIN/localpurchaseorderscreen.dart';
 import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
 import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
@@ -914,12 +915,7 @@ class _marketing_dashboardState extends State<marketing_dashboard>
                 //         MaterialPageRoute(builder: (context) => Graph()));
                 //   },
                 // ),
-                _buildDropdownTile(context, 'Customers', [
-                  'Add Customer',
-                  'Customers',
-                ]),
-
-                ListTile(
+                     ListTile(
                   leading: Icon(Icons.fingerprint),
                   title: Text('Add Attendance'),
                   onTap: () {
@@ -930,6 +926,16 @@ class _marketing_dashboardState extends State<marketing_dashboard>
                     // Navigate to the Settings page or perform any other action
                   },
                 ),
+                _buildDropdownTile(context, 'Customers', [
+                  'Add Customer',
+                  'Customers',
+                ]),
+
+           
+          _buildDropdownTile(context, 'Proforma Invoice', [
+                  'Create Proforma Invoice',
+                  'View Proforma Invoice',
+                ]),
 
                 // ListTile(
                 //   leading: Icon(Icons.mail_outline),
@@ -949,6 +955,18 @@ class _marketing_dashboardState extends State<marketing_dashboard>
                 //     await fetchInboxMailCount();
                 //   },
                 // ),
+
+                     ListTile(
+                  leading: const Icon(Icons.shopping_cart),
+                  title: Text('Create Orders'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => order_products()));
+                    // Navigate to the Settings page or perform any other action
+                  },
+                ),
 
                 ListTile(
                   leading: const Icon(Icons.receipt_long),
@@ -972,6 +990,7 @@ class _marketing_dashboardState extends State<marketing_dashboard>
                 //   },
                 // ),
 
+          
                 // _buildDropdownTile(context, 'Orders', [
                 //   'New Orders',
                 //   'Bepocart Orders List',

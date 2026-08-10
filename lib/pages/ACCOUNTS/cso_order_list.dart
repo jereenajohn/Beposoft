@@ -54,8 +54,7 @@ class _CsoOrderListState extends State<CsoOrderList> {
   bool hasNextPage = true;
   int totalPages = 1;
   int pageSize = 20; // DRF default page size
-  String? selectedStaff;
-
+  String? selectedStaff = 'All';
   List<Map<String, dynamic>> sta = [];
 
   DateTime? selectedDate; // For single date filter
@@ -125,6 +124,12 @@ class _CsoOrderListState extends State<CsoOrderList> {
     return prefs.getString('department');
   }
 
+  String getDisplayStatus(dynamic rawStatus) {
+    final String status = (rawStatus ?? '').toString().trim();
+
+    return status == 'Invoice Created' ? 'Waiting For Approval' : status;
+  }
+
   Future<void> getstaff() async {
     try {
       final token = await getTokenFromPrefs();
@@ -162,7 +167,7 @@ class _CsoOrderListState extends State<CsoOrderList> {
     try {
       final token = await getTokenFromPrefs();
 
-      Uri uri = Uri.parse("$api/api/orders/").replace(
+      Uri uri = Uri.parse("$api/api/orders/cycling/skating/").replace(
         queryParameters: {
           'page': currentPage.toString(),
           'search': searchQuery.isNotEmpty ? searchQuery : null,
@@ -173,7 +178,9 @@ class _CsoOrderListState extends State<CsoOrderList> {
           'end_date': endDate != null
               ? DateFormat('yyyy-MM-dd').format(endDate!)
               : null,
-          'staff': selectedStaff != null && selectedStaff!.isNotEmpty
+          'staff': selectedStaff != null &&
+                  selectedStaff!.isNotEmpty &&
+                  selectedStaff != 'All'
               ? selectedStaff
               : null,
         }..removeWhere((key, value) => value == null || value.isEmpty),
@@ -459,7 +466,7 @@ class _CsoOrderListState extends State<CsoOrderList> {
           item['price'] ?? '',
           item['tax'] ?? '',
           item['discount'] ?? '',
-          order['status'] ?? '',
+          getDisplayStatus(order['status']),
           order['total_amount'] ?? '',
           order['order_date'] ?? '',
         ]);
@@ -590,7 +597,9 @@ class _CsoOrderListState extends State<CsoOrderList> {
                     'Order Summary',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                   ),
-                  pw.Text('Status: ${order['status'] ?? ''}'),
+                  pw.Text(
+                    'Status: ${getDisplayStatus(order['status'])}',
+                  ),
                   pw.Text('Total Amount: ${order['total_amount'].toString()}'),
                   pw.Text('Order Date: ${order['order_date'] ?? ''}'),
                 ],
@@ -819,79 +828,88 @@ class _CsoOrderListState extends State<CsoOrderList> {
         ),
         body: Column(
           children: [
-          Padding(
-  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-  child: Row(
-    children: [
-      Expanded(
-        child: DropdownButtonFormField<String>(
-          value: selectedStatus,
-          isExpanded: true,
-          decoration: InputDecoration(
-            labelText: "Status",
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(30),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 8,
-            ),
-          ),
-          onChanged: (value) {
-            setState(() {
-              selectedStatus = value!;
-              currentPage = 1;
-            });
-            fetchOrderData();
-          },
-          items: orderStatuses.map((status) {
-            return DropdownMenuItem<String>(
-              value: status,
-              child: Text(
-                status,
-                overflow: TextOverflow.ellipsis,
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-      const SizedBox(width: 10),
-      Expanded(
-        child: DropdownButtonFormField<String>(
-          value: selectedStaff,
-          isExpanded: true,
-          decoration: InputDecoration(
-            labelText: "Staff",
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(30),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 8,
-            ),
-          ),
-          onChanged: (value) {
-            setState(() {
-              selectedStaff = value;
-              currentPage = 1;
-            });
-            fetchOrderData();
-          },
-          items: sta.map((staff) {
-            return DropdownMenuItem<String>(
-              value: staff['name'].toString(),
-              child: Text(
-                staff['name'].toString(),
-                overflow: TextOverflow.ellipsis,
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    ],
-  ),
-),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: selectedStatus,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: "Status",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          selectedStatus = value!;
+                          currentPage = 1;
+                        });
+                        fetchOrderData();
+                      },
+                      items: orderStatuses.map((status) {
+                        return DropdownMenuItem<String>(
+                          value: status,
+                          child: Text(
+                            getDisplayStatus(status),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: selectedStaff,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: "Staff",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          selectedStaff = value;
+                          currentPage = 1;
+                        });
 
+                        fetchOrderData();
+                      },
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: 'All',
+                          child: Text(
+                            'All',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        ...sta.map((staff) {
+                          return DropdownMenuItem<String>(
+                            value: staff['name'].toString(),
+                            child: Text(
+                              staff['name'].toString(),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
             SizedBox(
               height: 10,
             ),
@@ -912,7 +930,6 @@ class _CsoOrderListState extends State<CsoOrderList> {
                 onChanged: _filterOrders,
               ),
             ),
-
             SizedBox(height: 10),
             buildPagination(),
             SizedBox(height: 10),
@@ -1028,10 +1045,13 @@ class _CsoOrderListState extends State<CsoOrderList> {
                                                 ),
                                               ),
                                               Text(
-                                                '${order['status']}',
-                                                style: TextStyle(
-                                                    fontSize: 13,
-                                                    color: Colors.blue),
+                                                getDisplayStatus(
+                                                  order['status'],
+                                                ),
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.blue,
+                                                ),
                                               ),
                                             ],
                                           ),

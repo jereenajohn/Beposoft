@@ -365,6 +365,18 @@ class _OrderReviewState extends State<OrderReview> {
         },
       );
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'payment_screenshot_deleted',
+          beforeData: <String, dynamic>{
+            'image_id': Id,
+            'status': 'existing',
+          },
+          afterData: <String, dynamic>{
+            'image_id': Id,
+            'status': 'deleted',
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Image deleted successfully'),
@@ -391,6 +403,63 @@ class _OrderReviewState extends State<OrderReview> {
           duration: Duration(seconds: 2),
         ),
       );
+    }
+  }
+
+  Future<bool> createOrderActionLog({
+    required String action,
+    required Map<String, dynamic> beforeData,
+    required Map<String, dynamic> afterData,
+    Map<String, dynamic>? metadata,
+  }) async {
+    final String? token = await getTokenFromPrefs();
+
+    if (token == null || token.trim().isEmpty) {
+      debugPrint('ACTION LOG SKIPPED [$action]: token not found');
+      return false;
+    }
+
+    final Map<String, dynamic> normalizedBefore = <String, dynamic>{
+      'action': action,
+      ...beforeData,
+    };
+
+    final Map<String, dynamic> normalizedAfter = <String, dynamic>{
+      'action': action,
+      ...afterData,
+      if (metadata != null) 'metadata': metadata,
+      'logged_at': DateTime.now().toIso8601String(),
+    };
+
+    try {
+      final http.Response response = await http.post(
+        Uri.parse('$api/api/datalog/create/'),
+        headers: <String, String>{
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(<String, dynamic>{
+          'before_data': normalizedBefore,
+          'after_data': normalizedAfter,
+          'order': widget.id,
+        }),
+      );
+
+      final bool success =
+          response.statusCode == 200 || response.statusCode == 201;
+
+      if (!success) {
+        debugPrint(
+          'ACTION LOG FAILED [$action]: '
+          '${response.statusCode} ${response.body}',
+        );
+      }
+
+      return success;
+    } catch (error, stackTrace) {
+      debugPrint('ACTION LOG ERROR [$action]: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      return false;
     }
   }
 
@@ -494,6 +563,17 @@ class _OrderReviewState extends State<OrderReview> {
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
       if (response.statusCode == 201) {
+        await createOrderActionLog(
+          action: 'payment_screenshots_uploaded',
+          beforeData: <String, dynamic>{
+            'uploaded_image_count': selectedImageData.length,
+          },
+          afterData: <String, dynamic>{
+            'new_image_count': selectedImageslist.length,
+            'uploaded_at': DateFormat('yyyy-MM-dd').format(DateTime.now()),
+          },
+        );
+
         getimage();
         setState(() {
           selectedImageslist.clear(); // Clear the list after successful upload
@@ -731,279 +811,266 @@ class _OrderReviewState extends State<OrderReview> {
     balanceledger = Balance - customerledgerreceived;
   }
 
- Future<void> fetchCustomerLedgerDetails() async {
-  try {
-    final String? token = await getTokenFromPrefs();
+  Future<void> fetchCustomerLedgerDetails() async {
+    try {
+      final String? token = await getTokenFromPrefs();
 
-    if (token == null || token.trim().isEmpty) {
-      return;
-    }
-
-    final http.Response response = await http.get(
-      Uri.parse(
-        '$api/api/customer/${widget.customer}/ledger/',
-      ),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-
-    if (response.statusCode != 200) {
-      debugPrint(
-        'CUSTOMER LEDGER FAILED: '
-        '${response.statusCode} ${response.body}',
-      );
-      return;
-    }
-
-    final dynamic decoded = jsonDecode(response.body);
-
-    if (decoded is! Map ||
-        decoded['data'] is! Map) {
-      debugPrint('INVALID CUSTOMER LEDGER RESPONSE');
-      return;
-    }
-
-    final Map<String, dynamic> data =
-        Map<String, dynamic>.from(decoded['data']);
-
-    final List<dynamic> ledgerList =
-        data['ledger'] is List ? data['ledger'] : [];
-
-    final List<dynamic> advanceReceipts =
-        data['advance_receipts'] is List
-            ? data['advance_receipts']
-            : [];
-
-    final List<dynamic> paymentReceipts =
-        data['payment_receipts'] is List
-            ? data['payment_receipts']
-            : [];
-
-    final List<dynamic> commissionReceiptList =
-        data['commission_receipts'] is List
-            ? data['commission_receipts']
-            : [];
-
-    final List<dynamic> refundReceipts =
-        data['refund_receipts'] is List
-            ? data['refund_receipts']
-            : [];
-
-    final List<dynamic> grvList =
-        data['grv'] is List ? data['grv'] : [];
-
-    final List<dynamic> ledgerSentTransfers =
-        data['ledger_sent_transfers'] is List
-            ? data['ledger_sent_transfers']
-            : [];
-
-    final List<dynamic> advanceTransfers =
-        data['advance_transfers'] is List
-            ? data['advance_transfers']
-            : [];
-
-    double totalAmountSum = 0.0;
-    double receivedPaymentSum = 0.0;
-
-    double approvedGrvSum = 0.0;
-    double refundReceiptSum = 0.0;
-    double advanceTransferSum = 0.0;
-    double commissionReceiptSum = 0.0;
-
-    // ================= ORDER DEBIT =================
-    for (final dynamic order in ledgerList) {
-      if (order is! Map) continue;
-
-      final String status =
-          (order['status'] ?? '').toString().trim();
-
-      if (status != 'Invoice Created' &&
-          status != 'Invoice Rejected') {
-        totalAmountSum += double.tryParse(
-              (order['total_amount'] ?? 0).toString(),
-            ) ??
-            0.0;
+      if (token == null || token.trim().isEmpty) {
+        return;
       }
-    }
 
-    // ================= PAYMENT RECEIPTS =================
-    for (final dynamic payment in paymentReceipts) {
-      if (payment is! Map) continue;
+      final http.Response response = await http.get(
+        Uri.parse(
+          '$api/api/customer/${widget.customer}/ledger/',
+        ),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-      receivedPaymentSum += double.tryParse(
-            (payment['amount'] ?? 0).toString(),
-          ) ??
-          0.0;
-    }
+      if (response.statusCode != 200) {
+        debugPrint(
+          'CUSTOMER LEDGER FAILED: '
+          '${response.statusCode} ${response.body}',
+        );
+        return;
+      }
 
-    // ================= ADVANCE RECEIPTS =================
-    for (final dynamic advance in advanceReceipts) {
-      if (advance is! Map) continue;
+      final dynamic decoded = jsonDecode(response.body);
 
-      receivedPaymentSum += double.tryParse(
-            (advance['amount'] ?? 0).toString(),
-          ) ??
-          0.0;
-    }
+      if (decoded is! Map || decoded['data'] is! Map) {
+        debugPrint('INVALID CUSTOMER LEDGER RESPONSE');
+        return;
+      }
 
-    // ================= COMMISSION RECEIPTS =================
-    for (final dynamic commission
-        in commissionReceiptList) {
-      if (commission is! Map) continue;
+      final Map<String, dynamic> data =
+          Map<String, dynamic>.from(decoded['data']);
 
-      commissionReceiptSum += double.tryParse(
-            (commission['amount'] ?? 0).toString(),
-          ) ??
-          0.0;
-    }
+      final List<dynamic> ledgerList =
+          data['ledger'] is List ? data['ledger'] : [];
 
-    // Commission receipt is customer ledger credit.
-    receivedPaymentSum += commissionReceiptSum;
+      final List<dynamic> advanceReceipts =
+          data['advance_receipts'] is List ? data['advance_receipts'] : [];
 
-    // ================= LEDGER SENT TRANSFERS =================
-    for (final dynamic transfer
-        in ledgerSentTransfers) {
-      if (transfer is! Map) continue;
+      final List<dynamic> paymentReceipts =
+          data['payment_receipts'] is List ? data['payment_receipts'] : [];
 
-      totalAmountSum += double.tryParse(
-            (transfer['amount'] ?? 0).toString(),
-          ) ??
-          0.0;
-    }
+      final List<dynamic> commissionReceiptList =
+          data['commission_receipts'] is List
+              ? data['commission_receipts']
+              : [];
 
-    // ================= APPROVED GRV =================
-    for (final dynamic grv in grvList) {
-      if (grv is! Map) continue;
+      final List<dynamic> refundReceipts =
+          data['refund_receipts'] is List ? data['refund_receipts'] : [];
 
-      final String status =
-          (grv['status'] ?? '').toString().toLowerCase().trim();
+      final List<dynamic> grvList = data['grv'] is List ? data['grv'] : [];
 
-      if (status != 'approved') continue;
+      final List<dynamic> ledgerSentTransfers =
+          data['ledger_sent_transfers'] is List
+              ? data['ledger_sent_transfers']
+              : [];
 
-      final String remark =
-          (grv['remark'] ?? '').toString().toLowerCase().trim();
+      final List<dynamic> advanceTransfers =
+          data['advance_transfers'] is List ? data['advance_transfers'] : [];
 
-      final double quantity = double.tryParse(
-            (grv['quantity'] ?? 0).toString(),
-          ) ??
-          0.0;
+      double totalAmountSum = 0.0;
+      double receivedPaymentSum = 0.0;
 
-      final double price = double.tryParse(
-            (grv['price'] ?? 0).toString(),
-          ) ??
-          0.0;
+      double approvedGrvSum = 0.0;
+      double refundReceiptSum = 0.0;
+      double advanceTransferSum = 0.0;
+      double commissionReceiptSum = 0.0;
 
-      double grvAmount = quantity * price;
+      // ================= ORDER DEBIT =================
+      for (final dynamic order in ledgerList) {
+        if (order is! Map) continue;
 
-      if (remark == 'cod_return') {
-        final double codAmount = double.tryParse(
-              (grv['cod_amount'] ?? 0).toString(),
-            ) ??
-            0.0;
+        final String status = (order['status'] ?? '').toString().trim();
 
-        if (codAmount > 0) {
-          grvAmount = codAmount;
+        if (status != 'Invoice Created' && status != 'Invoice Rejected') {
+          totalAmountSum += double.tryParse(
+                (order['total_amount'] ?? 0).toString(),
+              ) ??
+              0.0;
         }
       }
 
-      approvedGrvSum += grvAmount;
+      // ================= PAYMENT RECEIPTS =================
+      for (final dynamic payment in paymentReceipts) {
+        if (payment is! Map) continue;
+
+        receivedPaymentSum += double.tryParse(
+              (payment['amount'] ?? 0).toString(),
+            ) ??
+            0.0;
+      }
+
+      // ================= ADVANCE RECEIPTS =================
+      for (final dynamic advance in advanceReceipts) {
+        if (advance is! Map) continue;
+
+        receivedPaymentSum += double.tryParse(
+              (advance['amount'] ?? 0).toString(),
+            ) ??
+            0.0;
+      }
+
+      // ================= COMMISSION RECEIPTS =================
+      for (final dynamic commission in commissionReceiptList) {
+        if (commission is! Map) continue;
+
+        commissionReceiptSum += double.tryParse(
+              (commission['amount'] ?? 0).toString(),
+            ) ??
+            0.0;
+      }
+
+      // Commission receipt is customer ledger credit.
+      receivedPaymentSum += commissionReceiptSum;
+
+      // ================= LEDGER SENT TRANSFERS =================
+      for (final dynamic transfer in ledgerSentTransfers) {
+        if (transfer is! Map) continue;
+
+        totalAmountSum += double.tryParse(
+              (transfer['amount'] ?? 0).toString(),
+            ) ??
+            0.0;
+      }
+
+      // ================= APPROVED GRV =================
+      for (final dynamic grv in grvList) {
+        if (grv is! Map) continue;
+
+        final String status =
+            (grv['status'] ?? '').toString().toLowerCase().trim();
+
+        if (status != 'approved') continue;
+
+        final String remark =
+            (grv['remark'] ?? '').toString().toLowerCase().trim();
+
+        final double quantity = double.tryParse(
+              (grv['quantity'] ?? 0).toString(),
+            ) ??
+            0.0;
+
+        final double price = double.tryParse(
+              (grv['price'] ?? 0).toString(),
+            ) ??
+            0.0;
+
+        double grvAmount = quantity * price;
+
+        if (remark == 'cod_return') {
+          final double codAmount = double.tryParse(
+                (grv['cod_amount'] ?? 0).toString(),
+              ) ??
+              0.0;
+
+          if (codAmount > 0) {
+            grvAmount = codAmount;
+          }
+        }
+
+        approvedGrvSum += grvAmount;
+      }
+
+      // GRV reduces the customer payable amount.
+      receivedPaymentSum += approvedGrvSum;
+
+      // ================= REFUND RECEIPTS =================
+      for (final dynamic refund in refundReceipts) {
+        if (refund is! Map) continue;
+
+        refundReceiptSum += double.tryParse(
+              (refund['amount'] ?? 0).toString(),
+            ) ??
+            0.0;
+      }
+
+      // Refund issued increases customer debit.
+      totalAmountSum += refundReceiptSum;
+
+      // ================= ADVANCE TRANSFER RECEIVED =================
+      for (final dynamic transfer in advanceTransfers) {
+        if (transfer is! Map) continue;
+
+        advanceTransferSum += double.tryParse(
+              (transfer['amount'] ?? 0).toString(),
+            ) ??
+            0.0;
+      }
+
+      // Advance transfer received is a customer credit.
+      receivedPaymentSum += advanceTransferSum;
+
+      final double ledgerDifference =
+          (totalAmountSum - receivedPaymentSum).abs();
+
+      final bool customerHasCredit = receivedPaymentSum > totalAmountSum;
+
+      if (!mounted) return;
+
+      setState(() {
+        customerledgertotal = totalAmountSum;
+        customerledgerreceived = receivedPaymentSum;
+        difference = ledgerDifference;
+
+        ledger = customerHasCredit;
+
+        approvedGrvAmount = approvedGrvSum;
+        refundReceiptAmount = refundReceiptSum;
+
+        commissionReceipts = commissionReceiptList
+            .whereType<Map>()
+            .map<Map<String, dynamic>>(
+              (Map item) => Map<String, dynamic>.from(item),
+            )
+            .toList();
+      });
+
+      calculatebalance();
+
+      debugPrint(
+        'CUSTOMER LEDGER TOTAL DEBIT: $totalAmountSum',
+      );
+
+      debugPrint(
+        'CUSTOMER LEDGER PAYMENT CREDIT: '
+        '${receivedPaymentSum - commissionReceiptSum}',
+      );
+
+      debugPrint(
+        'CUSTOMER LEDGER COMMISSION CREDIT: '
+        '$commissionReceiptSum',
+      );
+
+      debugPrint(
+        'CUSTOMER LEDGER FINAL CREDIT: '
+        '$receivedPaymentSum',
+      );
+
+      debugPrint(
+        'CUSTOMER LEDGER DIFFERENCE: '
+        '$ledgerDifference',
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        'CUSTOMER LEDGER ERROR: $error',
+      );
+
+      debugPrintStack(
+        stackTrace: stackTrace,
+      );
     }
-
-    // GRV reduces the customer payable amount.
-    receivedPaymentSum += approvedGrvSum;
-
-    // ================= REFUND RECEIPTS =================
-    for (final dynamic refund in refundReceipts) {
-      if (refund is! Map) continue;
-
-      refundReceiptSum += double.tryParse(
-            (refund['amount'] ?? 0).toString(),
-          ) ??
-          0.0;
-    }
-
-    // Refund issued increases customer debit.
-    totalAmountSum += refundReceiptSum;
-
-    // ================= ADVANCE TRANSFER RECEIVED =================
-    for (final dynamic transfer in advanceTransfers) {
-      if (transfer is! Map) continue;
-
-      advanceTransferSum += double.tryParse(
-            (transfer['amount'] ?? 0).toString(),
-          ) ??
-          0.0;
-    }
-
-    // Advance transfer received is a customer credit.
-    receivedPaymentSum += advanceTransferSum;
-
-    final double ledgerDifference =
-        (totalAmountSum - receivedPaymentSum).abs();
-
-    final bool customerHasCredit =
-        receivedPaymentSum > totalAmountSum;
-
-    if (!mounted) return;
-
-    setState(() {
-      customerledgertotal = totalAmountSum;
-      customerledgerreceived = receivedPaymentSum;
-      difference = ledgerDifference;
-
-      ledger = customerHasCredit;
-
-      approvedGrvAmount = approvedGrvSum;
-      refundReceiptAmount = refundReceiptSum;
-
-      commissionReceipts = commissionReceiptList
-          .whereType<Map>()
-          .map<Map<String, dynamic>>(
-            (Map item) =>
-                Map<String, dynamic>.from(item),
-          )
-          .toList();
-    });
-
-    calculatebalance();
-
-    debugPrint(
-      'CUSTOMER LEDGER TOTAL DEBIT: $totalAmountSum',
-    );
-
-    debugPrint(
-      'CUSTOMER LEDGER PAYMENT CREDIT: '
-      '${receivedPaymentSum - commissionReceiptSum}',
-    );
-
-    debugPrint(
-      'CUSTOMER LEDGER COMMISSION CREDIT: '
-      '$commissionReceiptSum',
-    );
-
-    debugPrint(
-      'CUSTOMER LEDGER FINAL CREDIT: '
-      '$receivedPaymentSum',
-    );
-
-    debugPrint(
-      'CUSTOMER LEDGER DIFFERENCE: '
-      '$ledgerDifference',
-    );
-  } catch (error, stackTrace) {
-    debugPrint(
-      'CUSTOMER LEDGER ERROR: $error',
-    );
-
-    debugPrintStack(
-      stackTrace: stackTrace,
-    );
   }
-}
+
   void showParcelServiceDialog(
       BuildContext context, var id, dynamic currentParcelServiceId) {
+    if (!isPrivilegedDepartment()) return;
+
     selectedserviceId = currentParcelServiceId != null
         ? int.tryParse(currentParcelServiceId.toString())
         : null;
@@ -1093,6 +1160,8 @@ class _OrderReviewState extends State<OrderReview> {
 
   void _showShippingChargeDialog(
       BuildContext context, Map<String, dynamic> boxDetails) {
+    if (!isPrivilegedDepartment()) return;
+
     final shippingController = TextEditingController(
         text: boxDetails['shipping_charge']?.toString() ?? '');
     final actualWeightController = TextEditingController(
@@ -1263,6 +1332,16 @@ class _OrderReviewState extends State<OrderReview> {
         ),
       );
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'cod_type_updated',
+          beforeData: <String, dynamic>{
+            'cod_status': ord?['cod_status'],
+          },
+          afterData: <String, dynamic>{
+            'cod_status': codStatusToSend,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
@@ -1295,6 +1374,15 @@ class _OrderReviewState extends State<OrderReview> {
     }
   }
 
+  dynamic orderStatusBeforeUpdate(dynamic warehouseDetailId) {
+    for (final Map<String, dynamic> box in warehouse) {
+      if (box['id']?.toString() == warehouseDetailId?.toString()) {
+        return box['status'];
+      }
+    }
+    return null;
+  }
+
   Future<void> updateboxstatus(var orderId) async {
     try {
       final token = await getTokenFromPrefs();
@@ -1312,6 +1400,18 @@ class _OrderReviewState extends State<OrderReview> {
       );
 
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'box_status_updated',
+          beforeData: <String, dynamic>{
+            'warehouse_detail_id': orderId,
+            'status': orderStatusBeforeUpdate(orderId),
+          },
+          afterData: <String, dynamic>{
+            'warehouse_detail_id': orderId,
+            'status': selectedStatus,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Shipping charge updated successfully'),
@@ -1339,6 +1439,8 @@ class _OrderReviewState extends State<OrderReview> {
   }
 
   void showStatusDialog(BuildContext context, var order) {
+    if (!isPrivilegedDepartment()) return;
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -1461,6 +1563,18 @@ class _OrderReviewState extends State<OrderReview> {
       );
 
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'parcel_details_updated',
+          beforeData: <String, dynamic>{
+            'parcel_service': ord?['parcel_service'],
+            'parcel_service_note': ord?['parcel_service_note'],
+          },
+          afterData: <String, dynamic>{
+            'parcel_service': selectedserviceId,
+            'parcel_service_note': parcelServiceNoteController.text.trim(),
+          },
+        );
+
         await fetchOrderItems();
 
         if (!mounted) return;
@@ -1511,6 +1625,19 @@ class _OrderReviewState extends State<OrderReview> {
       ;
 
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'tracking_id_sent',
+          beforeData: <String, dynamic>{
+            'tracking_id': trackingId,
+            'message_status': 'pending',
+          },
+          afterData: <String, dynamic>{
+            'tracking_id': trackingId,
+            'message_status': 'sent',
+            'recipient_phone': ord?['customer']?['phone'],
+          },
+        );
+
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
@@ -1701,8 +1828,17 @@ class _OrderReviewState extends State<OrderReview> {
       );
 
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'order_note_updated',
+          beforeData: <String, dynamic>{
+            'note': notebefore,
+          },
+          afterData: <String, dynamic>{
+            'note': noteController.text.trim(),
+          },
+        );
+
         fetchOrderItems();
-        Addnotelog(context, widget.id);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('status updated successfully'),
@@ -1797,6 +1933,27 @@ class _OrderReviewState extends State<OrderReview> {
       );
 
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'order_information_updated',
+          beforeData: <String, dynamic>{
+            'status': beforeStatus,
+            'billing_address': ord?['billing_address']?['id'],
+            'shipping_charge': ord?['shipping_charge'],
+            'accounts_note': ord?['accounts_note'],
+          },
+          afterData: <String, dynamic>{
+            'status': selectedStatus,
+            'billing_address': selectedAddressId,
+            'shipping_charge': shippingchargeController.text.trim().isNotEmpty
+                ? double.tryParse(
+                      shippingchargeController.text.trim(),
+                    ) ??
+                    0.0
+                : 0.0,
+            'accounts_note': accountsnoteController.text.trim(),
+          },
+        );
+
         setState(() {
           currentOrderStatus = selectedStatus;
           statusSubmitted = true;
@@ -1947,8 +2104,26 @@ class _OrderReviewState extends State<OrderReview> {
         body: jsonEncode(body),
       );
 
-      // print('updateOrderItem[$itemId] => ${res.statusCode} ${res.body}');
-      return res.statusCode >= 200 && res.statusCode < 300;
+      final bool success = res.statusCode >= 200 && res.statusCode < 300;
+
+      if (success) {
+        await createOrderActionLog(
+          action: 'rack_allocation_updated',
+          beforeData: <String, dynamic>{
+            'item_id': itemId,
+            'rack_details': items
+                .where((item) => item['id']?.toString() == itemId.toString())
+                .map((item) => item['rack_details'])
+                .toList(),
+          },
+          afterData: <String, dynamic>{
+            'item_id': itemId,
+            'rack_details': cleaned,
+          },
+        );
+      }
+
+      return success;
     } catch (e) {
       // print('updateOrderItem[$itemId] error: $e');
       return false;
@@ -1981,6 +2156,28 @@ class _OrderReviewState extends State<OrderReview> {
       ;
       ;
       if (response.statusCode == 200) {
+        final Map<String, dynamic>? previousBox =
+            warehouse.cast<Map<String, dynamic>?>().firstWhere(
+                  (box) => box?['id']?.toString() == warehouseId.toString(),
+                  orElse: () => null,
+                );
+
+        await createOrderActionLog(
+          action: 'box_postoffice_details_updated',
+          beforeData: <String, dynamic>{
+            'warehouse_detail_id': warehouseId,
+            'actual_weight': previousBox?['actual_weight'],
+            'parcel_amount': previousBox?['parcel_amount'],
+            'postoffice_date': previousBox?['postoffice_date'],
+          },
+          afterData: <String, dynamic>{
+            'warehouse_detail_id': warehouseId,
+            'actual_weight': actualWeight,
+            'parcel_amount': postOfficeAmount,
+            'postoffice_date': selectedDate,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(' updated successfully'),
@@ -2028,6 +2225,23 @@ class _OrderReviewState extends State<OrderReview> {
       ;
       ;
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'box_shipped_date_updated',
+          beforeData: <String, dynamic>{
+            'warehouse_detail_id': orderId,
+            'shipped_date': warehouse
+                .where(
+                  (box) => box['id']?.toString() == orderId.toString(),
+                )
+                .map((box) => box['shipped_date'])
+                .fold<dynamic>(null, (_, value) => value),
+          },
+          afterData: <String, dynamic>{
+            'warehouse_detail_id': orderId,
+            'shipped_date': formattedDate,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('updated successfully'),
@@ -2072,6 +2286,23 @@ class _OrderReviewState extends State<OrderReview> {
       print('updateparcel response: ${response.statusCode} ${response.body}');
 
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'box_parcel_service_updated',
+          beforeData: <String, dynamic>{
+            'warehouse_detail_id': orderId,
+            'parcel_service': warehouse
+                .where(
+                  (box) => box['id']?.toString() == orderId.toString(),
+                )
+                .map((box) => box['parcel_service_id'])
+                .fold<dynamic>(null, (_, value) => value),
+          },
+          afterData: <String, dynamic>{
+            'warehouse_detail_id': orderId,
+            'parcel_service': parcel,
+          },
+        );
+
         await fetchOrderItems();
 
         if (!mounted) return true;
@@ -2129,6 +2360,23 @@ class _OrderReviewState extends State<OrderReview> {
         ),
       );
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'box_tracking_id_updated',
+          beforeData: <String, dynamic>{
+            'warehouse_detail_id': orderId,
+            'tracking_id': warehouse
+                .where(
+                  (box) => box['id']?.toString() == orderId.toString(),
+                )
+                .map((box) => box['tracking_id'])
+                .fold<dynamic>(null, (_, value) => value),
+          },
+          afterData: <String, dynamic>{
+            'warehouse_detail_id': orderId,
+            'tracking_id': track,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(' updated successfully'),
@@ -2191,6 +2439,8 @@ class _OrderReviewState extends State<OrderReview> {
   }
 
   void showAddDialog(BuildContext context) {
+    if (!isPrivilegedDepartment()) return;
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -2348,6 +2598,18 @@ class _OrderReviewState extends State<OrderReview> {
         );
 
         if (response.statusCode == 200) {
+          await createOrderActionLog(
+            action: 'shipping_address_updated',
+            beforeData: <String, dynamic>{
+              'billing_address': ord?['billing_address']?['id'],
+              'note': ord?['note'],
+            },
+            afterData: <String, dynamic>{
+              'billing_address': selectedAddressId,
+              'note': noteController.text,
+            },
+          );
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               backgroundColor: Colors.green,
@@ -2403,6 +2665,20 @@ class _OrderReviewState extends State<OrderReview> {
       );
 
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'cod_details_updated',
+          beforeData: <String, dynamic>{
+            'adv_cod_amount': ord?['adv_cod_amount'],
+            'cod_amount': ord?['cod_amount'],
+            'shipping_mode': ord?['shipping_mode'],
+          },
+          afterData: <String, dynamic>{
+            'adv_cod_amount': advanceController.text,
+            'cod_amount': codamount.text,
+            'shipping_mode': shippingmethod.text,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
@@ -2452,6 +2728,16 @@ class _OrderReviewState extends State<OrderReview> {
         ),
       );
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'order_date_updated',
+          beforeData: <String, dynamic>{
+            'order_date': ord?['order_date'],
+          },
+          afterData: <String, dynamic>{
+            'order_date': picked.toString(),
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
@@ -2502,6 +2788,17 @@ class _OrderReviewState extends State<OrderReview> {
       );
 
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'order_family_updated',
+          beforeData: <String, dynamic>{
+            'family_id': ord?['family_id'],
+            'family_name': ord?['family'],
+          },
+          afterData: <String, dynamic>{
+            'family_id': selectedfamily,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
@@ -2552,6 +2849,17 @@ class _OrderReviewState extends State<OrderReview> {
       );
 
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'order_company_updated',
+          beforeData: <String, dynamic>{
+            'company_id': ord?['company']?['id'],
+            'company_name': ord?['company']?['name'],
+          },
+          afterData: <String, dynamic>{
+            'company_id': selectedCompany,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
@@ -2601,6 +2909,16 @@ class _OrderReviewState extends State<OrderReview> {
         ),
       );
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'payment_status_updated',
+          beforeData: <String, dynamic>{
+            'payment_status': ord?['payment_status'],
+          },
+          afterData: <String, dynamic>{
+            'payment_status': selectedPayStatus,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
@@ -2650,6 +2968,17 @@ class _OrderReviewState extends State<OrderReview> {
         ),
       );
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'order_bank_updated',
+          beforeData: <String, dynamic>{
+            'bank_id': ord?['bank']?['id'],
+            'bank_name': ord?['bank']?['name'],
+          },
+          afterData: <String, dynamic>{
+            'bank_id': selectedBank,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
@@ -2774,6 +3103,21 @@ class _OrderReviewState extends State<OrderReview> {
               }));
 
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'payment_receipt_created',
+          beforeData: const <String, dynamic>{
+            'receipt': null,
+          },
+          afterData: <String, dynamic>{
+            'amount': amountController.text,
+            'bank': selectedBank,
+            'transaction_id': transactionIdController.text,
+            'received_at': formattedReceivedDate,
+            'created_by': createdBy,
+            'remark': remarkController.text,
+          },
+        );
+
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
@@ -2810,6 +3154,24 @@ class _OrderReviewState extends State<OrderReview> {
       );
 
       if (response.statusCode == 200) {
+        final Map<String, dynamic>? deletedBox =
+            warehouse.cast<Map<String, dynamic>?>().firstWhere(
+                  (box) => box?['id']?.toString() == orderId.toString(),
+                  orElse: () => null,
+                );
+
+        await createOrderActionLog(
+          action: 'box_deleted',
+          beforeData: <String, dynamic>{
+            'warehouse_detail_id': orderId,
+            'box': deletedBox,
+          },
+          afterData: <String, dynamic>{
+            'warehouse_detail_id': orderId,
+            'status': 'deleted',
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Shipping charge updated successfully'),
@@ -3075,7 +3437,10 @@ class _OrderReviewState extends State<OrderReview> {
                       style: labelStyle),
                   pw.Text('Order Date: ${ord["order_date"] ?? ''}',
                       style: labelStyle),
-                  pw.Text('Status: ${ord["status"] ?? ''}', style: labelStyle),
+                  pw.Text(
+                    'Status: ${getDisplayStatus(ord["status"])}',
+                    style: labelStyle,
+                  ),
                 ],
               ),
               pw.Column(
@@ -3275,12 +3640,24 @@ class _OrderReviewState extends State<OrderReview> {
       sharePositionOrigin: Rect.fromLTWH(0, 0, 100, 100),
     );
 
+    await createOrderActionLog(
+      action: 'order_pdf_shared',
+      beforeData: const <String, dynamic>{
+        'pdf_share': null,
+      },
+      afterData: <String, dynamic>{
+        'file_name': 'order_details.pdf',
+        'recipient_phone': customerPhone,
+        'status': 'share_sheet_opened',
+      },
+    );
+
     // Optionally, open WhatsApp chat with the customer after sharing
     // final whatsappUrl = "https://wa.me/$customerPhone?text=${Uri.encodeComponent(message)}";
     // await launchUrl(Uri.parse(whatsappUrl), mode: LaunchMode.externalApplication);
   }
 
-  void sendWhatsAppMessage() {
+  Future<void> sendWhatsAppMessage() async {
     if (ord == null) return;
 
     final customerPhone = ord["customer"]["phone"]?.toString() ?? "";
@@ -3327,7 +3704,23 @@ class _OrderReviewState extends State<OrderReview> {
         "$billingSummary"
         "Thank you for your order!");
     final whatsappUrl = "https://wa.me/$customerPhone?text=$message";
-    launchUrl(Uri.parse(whatsappUrl), mode: LaunchMode.externalApplication);
+    final bool launched = await launchUrl(
+      Uri.parse(whatsappUrl),
+      mode: LaunchMode.externalApplication,
+    );
+
+    if (launched) {
+      await createOrderActionLog(
+        action: 'order_whatsapp_message_opened',
+        beforeData: const <String, dynamic>{
+          'whatsapp_message': null,
+        },
+        afterData: <String, dynamic>{
+          'recipient_phone': customerPhone,
+          'status': 'opened',
+        },
+      );
+    }
   }
 
   List<Map<String, dynamic>> grvList = [];
@@ -3580,6 +3973,24 @@ class _OrderReviewState extends State<OrderReview> {
       );
 
       if (response.statusCode == 200) {
+        final double previousAmount =
+            double.tryParse(ord?['total_amount']?.toString() ?? '0') ?? 0.0;
+
+        if ((previousAmount - updateamount).abs() > 0.009) {
+          await createOrderActionLog(
+            action: 'order_total_recalculated',
+            beforeData: <String, dynamic>{
+              'total_amount': previousAmount,
+            },
+            afterData: <String, dynamic>{
+              'total_amount': updateamount,
+            },
+            metadata: const <String, dynamic>{
+              'source': 'automatic_page_recalculation',
+            },
+          );
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Total updated successfully'),
@@ -3625,6 +4036,23 @@ class _OrderReviewState extends State<OrderReview> {
 
       ;
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'tracking_message_status_updated',
+          beforeData: <String, dynamic>{
+            'warehouse_detail_id': orderId,
+            'message_status': warehouse
+                .where(
+                  (box) => box['id']?.toString() == orderId.toString(),
+                )
+                .map((box) => box['message_status'])
+                .fold<dynamic>(null, (_, value) => value),
+          },
+          afterData: <String, dynamic>{
+            'warehouse_detail_id': orderId,
+            'message_status': 'sent',
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Message send successfully'),
@@ -3651,18 +4079,34 @@ class _OrderReviewState extends State<OrderReview> {
     }
   }
 
-  Future<void> removeproduct(int Id, Map<String, dynamic> item) async {
-    final token = await getTokenFromPrefs();
+  Future<void> removeproduct(
+    int id,
+    Map<String, dynamic> item,
+  ) async {
+    final String? token = await getTokenFromPrefs();
+
+    if (token == null || token.trim().isEmpty) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Authentication token not found'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     try {
-      final response = await http.delete(
-        Uri.parse('$api/api/remove/order/$Id/item/'),
+      final http.Response response = await http.delete(
+        Uri.parse('$api/api/remove/order/$id/item/'),
         headers: {
           'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
         },
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 204) {
         await sendOrderItemDatalogLog(
           context,
           {
@@ -3676,26 +4120,62 @@ class _OrderReviewState extends State<OrderReview> {
           },
           {
             'item_id': item['id'],
+            'product_name': item['name'] ?? item['product_name'] ?? 'Unknown',
+            'quantity': item['quantity'],
+            'rate': item['rate'],
+            'discount': item['discount'],
             'status': 'deleted',
             'action': 'delete',
           },
         );
 
+        await fetchOrderItems();
+        await fetchCustomerLedgerDetails();
+
+        if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             backgroundColor: Color.fromARGB(255, 49, 212, 4),
-            content: Text('Deleted sucessfully'),
+            content: Text('Deleted successfully'),
+            duration: Duration(seconds: 2),
           ),
         );
-        await fetchOrderItems();
+
+        return;
       }
 
-      if (response.statusCode == 204) {
-      } else {
-        throw Exception('Failed to delete wishlist ID: $Id');
-      }
-    } catch (error) {
-      debugPrint('removeproduct error: $error');
+      debugPrint(
+        'REMOVE PRODUCT FAILED: '
+        '${response.statusCode} ${response.body}',
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            response.body.trim().isNotEmpty
+                ? 'Failed to delete product: ${response.body}'
+                : 'Failed to delete product',
+          ),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('REMOVE PRODUCT ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error deleting product'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -3974,20 +4454,21 @@ class _OrderReviewState extends State<OrderReview> {
   }
 
   bool canEditProductPopup() {
-    final String dept = (dep ?? '').toString().trim().toLowerCase();
-    final String orderStatus =
-        (ord?['status'] ?? '').toString().trim().toLowerCase();
+    return isPrivilegedDepartment();
+  }
 
-    if (dept == 'bdo') {
-      return orderStatus == 'invoice created';
-    }
+  bool canDeleteProduct() {
+    return isPrivilegedDepartment();
+  }
 
-    if (dept == 'bdm') {
-      return orderStatus == 'invoice created' ||
-          orderStatus == 'invoice approved';
-    }
+  bool canManageRackSelection() {
+    final String dept =
+        (department ?? dep ?? '').toString().trim().toLowerCase();
 
-    return true;
+    return dept == 'admin' ||
+        dept == 'ceo' ||
+        dept == 'coo' ||
+        dept == 'accounts / accounting';
   }
 
   void showPopupDialog(BuildContext context, Map<String, dynamic> item) {
@@ -4246,6 +4727,18 @@ class _OrderReviewState extends State<OrderReview> {
       // print("body==================${body}");
 
       if (response.statusCode == 200) {
+        await createOrderActionLog(
+          action: 'order_customer_updated',
+          beforeData: <String, dynamic>{
+            'customer_id': ord?['customer']?['id'],
+            'customer_name': ord?['customer']?['name'],
+          },
+          afterData: <String, dynamic>{
+            'customer_id': selectedCustomer?['id'],
+            'customer_name': selectedCustomer?['name'],
+          },
+        );
+
         fetchOrderItems();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -4280,6 +4773,8 @@ class _OrderReviewState extends State<OrderReview> {
   }
 
   void _openCustomerSelector(BuildContext context) {
+    if (!isPrivilegedDepartment()) return;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -4693,18 +5188,20 @@ class _OrderReviewState extends State<OrderReview> {
       },
     );
   }
-double get totalCommissionReceiptAmount {
-  return commissionReceipts.fold<double>(
-    0.0,
-    (double total, Map<String, dynamic> receipt) {
-      return total +
-          (double.tryParse(
-                receipt['amount']?.toString() ?? '0',
-              ) ??
-              0.0);
-    },
-  );
-}
+
+  double get totalCommissionReceiptAmount {
+    return commissionReceipts.fold<double>(
+      0.0,
+      (double total, Map<String, dynamic> receipt) {
+        return total +
+            (double.tryParse(
+                  receipt['amount']?.toString() ?? '0',
+                ) ??
+                0.0);
+      },
+    );
+  }
+
   Future<bool?> _confirmCustomerUpdate(BuildContext context) {
     return showDialog<bool>(
       context: context,
@@ -4757,83 +5254,140 @@ double get totalCommissionReceiptAmount {
       ),
     );
   }
-Widget _buildProductImage(dynamic imagePath) {
-  final String rawImagePath = imagePath?.toString().trim() ?? '';
 
-  if (rawImagePath.isEmpty ||
-      rawImagePath.toLowerCase() == 'null') {
-    return Container(
-      color: Colors.grey.shade200,
-      alignment: Alignment.center,
-      child: Icon(
-        Icons.image_not_supported_outlined,
-        size: 24,
-        color: Colors.grey.shade500,
-      ),
-    );
-  }
+  Widget _buildProductImage(dynamic imagePath) {
+    final String rawImagePath = imagePath?.toString().trim() ?? '';
 
-  final String imageUrl = rawImagePath.startsWith('http')
-      ? rawImagePath
-      : '$api${rawImagePath.startsWith('/') ? '' : '/'}$rawImagePath';
-
-  return Image.network(
-    imageUrl,
-    fit: BoxFit.cover,
-    errorBuilder: (
-      BuildContext context,
-      Object error,
-      StackTrace? stackTrace,
-    ) {
+    if (rawImagePath.isEmpty || rawImagePath.toLowerCase() == 'null') {
       return Container(
         color: Colors.grey.shade200,
         alignment: Alignment.center,
         child: Icon(
-          Icons.broken_image_outlined,
+          Icons.image_not_supported_outlined,
           size: 24,
           color: Colors.grey.shade500,
         ),
       );
-    },
-  );
-}
+    }
 
-Widget _buildLedgerSummaryRow({
-  required String label,
-  required double amount,
-  Color valueColor = Colors.black87,
-  bool isBold = false,
-}) {
-  return Row(
-    crossAxisAlignment: CrossAxisAlignment.center,
-    children: [
-      Expanded(
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: isBold
-                ? FontWeight.w700
-                : FontWeight.w500,
-            color: Colors.black87,
+    final String imageUrl = rawImagePath.startsWith('http')
+        ? rawImagePath
+        : '$api${rawImagePath.startsWith('/') ? '' : '/'}$rawImagePath';
+
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (
+        BuildContext context,
+        Object error,
+        StackTrace? stackTrace,
+      ) {
+        return Container(
+          color: Colors.grey.shade200,
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.broken_image_outlined,
+            size: 24,
+            color: Colors.grey.shade500,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLedgerSummaryRow({
+    required String label,
+    required double amount,
+    Color valueColor = Colors.black87,
+    bool isBold = false,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
+              color: Colors.black87,
+            ),
           ),
         ),
-      ),
-      const SizedBox(width: 12),
-      Text(
-        '₹${amount.toStringAsFixed(2)}',
-        textAlign: TextAlign.right,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: isBold
-              ? FontWeight.w700
-              : FontWeight.w500,
-          color: valueColor,
+        const SizedBox(width: 12),
+        Text(
+          '₹${amount.toStringAsFixed(2)}',
+          textAlign: TextAlign.right,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
+            color: valueColor,
+          ),
         ),
-      ),
-    ],
-  );
-}
+      ],
+    );
+  }
+
+  String getDisplayStatus(dynamic rawStatus) {
+    final String value = (rawStatus ?? '').toString().trim();
+    return value == 'Invoice Created' ? 'Waiting For Approval' : value;
+  }
+
+  bool canManageApprovalControls() {
+    final String currentDepartment =
+        (department ?? dep ?? '').toString().trim().toLowerCase();
+
+    return currentDepartment == 'admin' ||
+        currentDepartment == 'accounts / accounting' ||
+        currentDepartment == 'ceo' ||
+        currentDepartment == 'coo';
+  }
+
+  bool canEditCompanyAndShippingCharge() {
+    return isPrivilegedDepartment();
+  }
+
+  bool canEditAccountsNote() {
+    final String currentStatus =
+        (ord?['status'] ?? currentOrderStatus ?? selectedStatus ?? '')
+            .toString()
+            .trim();
+
+    if (currentStatus == 'Invoice Created') {
+      return true;
+    }
+
+    return isPrivilegedDepartment();
+  }
+
+  bool isPrivilegedDepartment() {
+    final String dept =
+        (department ?? dep ?? '').toString().trim().toLowerCase();
+
+    return dept == 'admin' ||
+        dept == 'ceo' ||
+        dept == 'coo' ||
+        dept == 'accounts / accounting';
+  }
+
+  bool isWaitingForApprovalStatus() {
+    final String currentStatus =
+        (ord?['status'] ?? currentOrderStatus ?? selectedStatus ?? '')
+            .toString()
+            .trim();
+
+    // Backend value remains "Invoice Created".
+    return currentStatus == 'Invoice Created';
+  }
+
+  bool canEditShippingAddressInUpdateSection() {
+    return isPrivilegedDepartment();
+  }
+
+  bool canManagePaymentScreenshots() {
+    return isPrivilegedDepartment();
+  }
+
   @override
   Widget build(BuildContext context) {
     final String status = ord?['status']?.toString().toLowerCase() ?? '';
@@ -4850,8 +5404,9 @@ Widget _buildLedgerSummaryRow({
                     ord["status"] == "Invoice Approved" ||
                     ord["status"] == "Waiting For Confirmation")));
 
-    final bool showAddProductButton =
-        dept != 'bdo' || (dept == 'bdo' && status == 'invoice created');
+    final bool canAlwaysAddProduct = isPrivilegedDepartment();
+
+    final bool showAddProductButton = canAlwaysAddProduct;
 
     final visibleItems = showAllProducts ? items : items.take(3).toList();
     return WillPopScope(
@@ -4966,7 +5521,7 @@ Widget _buildLedgerSummaryRow({
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold),
                             ),
-                            if (dep != "BDO")
+                            if (isPrivilegedDepartment())
                               GestureDetector(
                                 onTap: () {
                                   _showDatePicker2(context, ord['id']);
@@ -5012,9 +5567,9 @@ Widget _buildLedgerSummaryRow({
                                 Spacer(),
                                 Text(
                                   ord != null
-                                      ? '${ord["status"]}'
+                                      ? getDisplayStatus(ord["status"])
                                       : 'Loading...',
-                                  style: TextStyle(fontSize: 12),
+                                  style: const TextStyle(fontSize: 12),
                                 ),
                               ],
                             ),
@@ -5026,7 +5581,8 @@ Widget _buildLedgerSummaryRow({
                                   _orderInfoLabel('Payment Method'),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: showPayStatusDropdown
+                                    child: showPayStatusDropdown &&
+                                            canEditCompanyAndShippingCharge()
                                         ? DropdownButtonFormField<String>(
                                             value: selectedPayStatus,
                                             isExpanded: true,
@@ -5070,17 +5626,18 @@ Widget _buildLedgerSummaryRow({
                                                 const TextStyle(fontSize: 12),
                                           ),
                                   ),
-                                  _simpleEditIcon(() {
-                                    setState(() {
-                                      showPayStatusDropdown =
-                                          !showPayStatusDropdown;
-                                      showCodTypeDropdown = false;
-                                      showFamilyDropdown = false;
-                                      showCompanyDropdown = false;
-                                      showParcelServiceDropdown = false;
-                                      showParcelNoteField = false;
-                                    });
-                                  }),
+                                  if (canEditCompanyAndShippingCharge())
+                                    _simpleEditIcon(() {
+                                      setState(() {
+                                        showPayStatusDropdown =
+                                            !showPayStatusDropdown;
+                                        showCodTypeDropdown = false;
+                                        showFamilyDropdown = false;
+                                        showCompanyDropdown = false;
+                                        showParcelServiceDropdown = false;
+                                        showParcelNoteField = false;
+                                      });
+                                    }),
                                 ],
                               ),
 
@@ -5093,7 +5650,8 @@ Widget _buildLedgerSummaryRow({
                                   _orderInfoLabel('COD Type'),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: showCodTypeDropdown
+                                    child: showCodTypeDropdown &&
+                                            canEditCompanyAndShippingCharge()
                                         ? DropdownButtonFormField<String>(
                                             value: cod_status == ""
                                                 ? null
@@ -5139,17 +5697,18 @@ Widget _buildLedgerSummaryRow({
                                                 const TextStyle(fontSize: 12),
                                           ),
                                   ),
-                                  _simpleEditIcon(() {
-                                    setState(() {
-                                      showCodTypeDropdown =
-                                          !showCodTypeDropdown;
-                                      showPayStatusDropdown = false;
-                                      showFamilyDropdown = false;
-                                      showCompanyDropdown = false;
-                                      showParcelServiceDropdown = false;
-                                      showParcelNoteField = false;
-                                    });
-                                  }),
+                                  if (canEditCompanyAndShippingCharge())
+                                    _simpleEditIcon(() {
+                                      setState(() {
+                                        showCodTypeDropdown =
+                                            !showCodTypeDropdown;
+                                        showPayStatusDropdown = false;
+                                        showFamilyDropdown = false;
+                                        showCompanyDropdown = false;
+                                        showParcelServiceDropdown = false;
+                                        showParcelNoteField = false;
+                                      });
+                                    }),
                                 ],
                               ),
 
@@ -5162,7 +5721,8 @@ Widget _buildLedgerSummaryRow({
                                   _orderInfoLabel('Division'),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: showFamilyDropdown
+                                    child: showFamilyDropdown &&
+                                            canEditCompanyAndShippingCharge()
                                         ? DropdownButtonFormField<String>(
                                             value: selectedfamily ??
                                                 (ord != null
@@ -5219,16 +5779,18 @@ Widget _buildLedgerSummaryRow({
                                                 const TextStyle(fontSize: 12),
                                           ),
                                   ),
-                                  _simpleEditIcon(() {
-                                    setState(() {
-                                      showFamilyDropdown = !showFamilyDropdown;
-                                      showPayStatusDropdown = false;
-                                      showCodTypeDropdown = false;
-                                      showCompanyDropdown = false;
-                                      showParcelServiceDropdown = false;
-                                      showParcelNoteField = false;
-                                    });
-                                  }),
+                                  if (canEditCompanyAndShippingCharge())
+                                    _simpleEditIcon(() {
+                                      setState(() {
+                                        showFamilyDropdown =
+                                            !showFamilyDropdown;
+                                        showPayStatusDropdown = false;
+                                        showCodTypeDropdown = false;
+                                        showCompanyDropdown = false;
+                                        showParcelServiceDropdown = false;
+                                        showParcelNoteField = false;
+                                      });
+                                    }),
                                 ],
                               ),
 
@@ -5240,7 +5802,8 @@ Widget _buildLedgerSummaryRow({
                                 _orderInfoLabel('Company'),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: showCompanyDropdown
+                                  child: showCompanyDropdown &&
+                                          canEditCompanyAndShippingCharge()
                                       ? DropdownButtonFormField<String>(
                                           value: selectedCompany ??
                                               (ord != null
@@ -5257,36 +5820,42 @@ Widget _buildLedgerSummaryRow({
                                           ),
                                           items: company
                                               .map<DropdownMenuItem<String>>(
-                                                  (companyItem) {
-                                            return DropdownMenuItem<String>(
-                                              value:
-                                                  companyItem['id'].toString(),
-                                              child: Text(
-                                                companyItem['name'],
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            );
-                                          }).toList(),
+                                            (companyItem) {
+                                              return DropdownMenuItem<String>(
+                                                value: companyItem['id']
+                                                    .toString(),
+                                                child: Text(
+                                                  companyItem['name'],
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              );
+                                            },
+                                          ).toList(),
                                           onChanged: (String? newValue) {
                                             setState(() {
                                               selectedCompany = newValue;
                                               showCompanyDropdown = false;
                                             });
+
                                             updateordercompany();
                                           },
                                           decoration: InputDecoration(
                                             isDense: true,
                                             contentPadding:
                                                 const EdgeInsets.symmetric(
-                                                    horizontal: 8, vertical: 8),
+                                              horizontal: 8,
+                                              vertical: 8,
+                                            ),
                                             border: OutlineInputBorder(
                                               borderRadius:
                                                   BorderRadius.circular(8),
                                             ),
                                           ),
                                           style: const TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.black),
+                                            fontSize: 12,
+                                            color: Colors.black,
+                                          ),
                                         )
                                       : Text(
                                           ord != null
@@ -5298,11 +5867,13 @@ Widget _buildLedgerSummaryRow({
                                           style: const TextStyle(fontSize: 12),
                                         ),
                                 ),
-                                _simpleEditIcon(() {
-                                  setState(() {
-                                    showCompanyDropdown = !showCompanyDropdown;
-                                  });
-                                }),
+                                if (canEditCompanyAndShippingCharge())
+                                  _simpleEditIcon(() {
+                                    setState(() {
+                                      showCompanyDropdown =
+                                          !showCompanyDropdown;
+                                    });
+                                  }),
                               ],
                             ),
 
@@ -5315,7 +5886,8 @@ Widget _buildLedgerSummaryRow({
                                   _orderInfoLabel('Parcel Service'),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: showParcelServiceDropdown
+                                    child: showParcelServiceDropdown &&
+                                            canEditCompanyAndShippingCharge()
                                         ? DropdownButtonFormField<int>(
                                             value: courierdata.any(
                                               (e) =>
@@ -5378,17 +5950,18 @@ Widget _buildLedgerSummaryRow({
                                                 const TextStyle(fontSize: 12),
                                           ),
                                   ),
-                                  _simpleEditIcon(() {
-                                    setState(() {
-                                      showParcelServiceDropdown =
-                                          !showParcelServiceDropdown;
-                                      showParcelNoteField = false;
-                                      showPayStatusDropdown = false;
-                                      showCodTypeDropdown = false;
-                                      showFamilyDropdown = false;
-                                      showCompanyDropdown = false;
-                                    });
-                                  }),
+                                  if (canEditCompanyAndShippingCharge())
+                                    _simpleEditIcon(() {
+                                      setState(() {
+                                        showParcelServiceDropdown =
+                                            !showParcelServiceDropdown;
+                                        showParcelNoteField = false;
+                                        showPayStatusDropdown = false;
+                                        showCodTypeDropdown = false;
+                                        showFamilyDropdown = false;
+                                        showCompanyDropdown = false;
+                                      });
+                                    }),
                                 ],
                               ),
 
@@ -5404,7 +5977,8 @@ Widget _buildLedgerSummaryRow({
                                   _orderInfoLabel('Parcel Note'),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: showParcelNoteField
+                                    child: showParcelNoteField &&
+                                            canEditCompanyAndShippingCharge()
                                         ? TextField(
                                             controller:
                                                 parcelServiceNoteController,
@@ -5446,7 +6020,8 @@ Widget _buildLedgerSummaryRow({
                                                 const TextStyle(fontSize: 12),
                                           ),
                                   ),
-                                  showParcelNoteField
+                                  showParcelNoteField &&
+                                          canEditCompanyAndShippingCharge()
                                       ? IconButton(
                                           padding: EdgeInsets.zero,
                                           constraints: const BoxConstraints(
@@ -5465,16 +6040,19 @@ Widget _buildLedgerSummaryRow({
                                             updateOrderParcelDetails();
                                           },
                                         )
-                                      : _simpleEditIcon(() {
-                                          setState(() {
-                                            showParcelNoteField = true;
-                                            showParcelServiceDropdown = false;
-                                            showPayStatusDropdown = false;
-                                            showCodTypeDropdown = false;
-                                            showFamilyDropdown = false;
-                                            showCompanyDropdown = false;
-                                          });
-                                        }),
+                                      : canEditCompanyAndShippingCharge()
+                                          ? _simpleEditIcon(() {
+                                              setState(() {
+                                                showParcelNoteField = true;
+                                                showParcelServiceDropdown =
+                                                    false;
+                                                showPayStatusDropdown = false;
+                                                showCodTypeDropdown = false;
+                                                showFamilyDropdown = false;
+                                                showCompanyDropdown = false;
+                                              });
+                                            })
+                                          : const SizedBox.shrink(),
                                 ],
                               ),
 
@@ -5577,6 +6155,7 @@ Widget _buildLedgerSummaryRow({
                           Expanded(
                             child: TextField(
                               controller: shippingmethod,
+                              readOnly: !canEditCompanyAndShippingCharge(),
                               decoration: InputDecoration(
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(
@@ -5590,6 +6169,7 @@ Widget _buildLedgerSummaryRow({
                           Expanded(
                             child: TextField(
                               controller: codamount,
+                              readOnly: !canEditCompanyAndShippingCharge(),
                               decoration: InputDecoration(
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(
@@ -5606,6 +6186,7 @@ Widget _buildLedgerSummaryRow({
                           Expanded(
                             child: TextField(
                               controller: advanceController,
+                              readOnly: !canEditCompanyAndShippingCharge(),
                               decoration: InputDecoration(
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(
@@ -5618,9 +6199,11 @@ Widget _buildLedgerSummaryRow({
                           Padding(
                             padding: const EdgeInsets.all(8.0),
                             child: ElevatedButton(
-                              onPressed: () {
-                                updatecod();
-                              },
+                              onPressed: canEditCompanyAndShippingCharge()
+                                  ? () {
+                                      updatecod();
+                                    }
+                                  : null,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor:
                                     Colors.blue, // Set background color
@@ -5659,7 +6242,9 @@ Widget _buildLedgerSummaryRow({
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        if (dep != "BDM" && dep != "BDO")
+                        if (dep != "BDM" &&
+                            dep != "BDO" &&
+                            canEditCompanyAndShippingCharge())
                           IconButton(
                             icon: const Icon(Icons.edit, size: 18),
                             onPressed: () async {
@@ -5818,14 +6403,14 @@ Widget _buildLedgerSummaryRow({
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 // Display the first image in a small container
-                              ClipRRect(
-  borderRadius: BorderRadius.circular(8),
-  child: SizedBox(
-    height: 50,
-    width: 50,
-    child: _buildProductImage(item['images']),
-  ),
-),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: SizedBox(
+                                    height: 50,
+                                    width: 50,
+                                    child: _buildProductImage(item['images']),
+                                  ),
+                                ),
                                 SizedBox(width: 10),
                                 // Display product details
                                 Expanded(
@@ -5895,7 +6480,7 @@ Widget _buildLedgerSummaryRow({
                                           const Spacer(),
 
                                           // 🔹 New button to show rack details
-                                          if (dep != "BDM" && dep != "BDO")
+                                          if (canManageRackSelection())
                                             IconButton(
                                               icon: const Icon(
                                                   Icons.inventory_2,
@@ -5960,15 +6545,16 @@ Widget _buildLedgerSummaryRow({
                                               },
                                             ),
 
-                                          if (dep != "BDM" && dep != "BDO")
+                                          if (canDeleteProduct())
                                             GestureDetector(
                                               onTap: () {
                                                 removeproduct(item["id"], item);
                                               },
                                               child: Image.asset(
-                                                  height: 25,
-                                                  width: 25,
-                                                  "lib/assets/delete.png"),
+                                                height: 25,
+                                                width: 25,
+                                                "lib/assets/delete.png",
+                                              ),
                                             )
                                         ],
                                       ),
@@ -6121,7 +6707,7 @@ Widget _buildLedgerSummaryRow({
                   ],
                 ),
               ),
-              if (dep != "BDM" && dep != "BDO")
+              if (canManageRackSelection())
                 Center(
                   child: ElevatedButton(
                     onPressed: _submittingAll
@@ -6195,27 +6781,29 @@ Widget _buildLedgerSummaryRow({
                                         ),
                                       ),
                                     ),
-                                    Positioned(
-                                      top: 2,
-                                      right: 2,
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            selectedImageslist.removeAt(index);
-                                          });
-                                        },
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            color:
-                                                Colors.black.withOpacity(0.6),
-                                            shape: BoxShape.circle,
+                                    if (canManagePaymentScreenshots())
+                                      Positioned(
+                                        top: 2,
+                                        right: 2,
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              selectedImageslist
+                                                  .removeAt(index);
+                                            });
+                                          },
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  Colors.black.withOpacity(0.6),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            padding: const EdgeInsets.all(2),
+                                            child: Icon(Icons.close,
+                                                color: Colors.white, size: 16),
                                           ),
-                                          padding: const EdgeInsets.all(2),
-                                          child: Icon(Icons.close,
-                                              color: Colors.white, size: 16),
                                         ),
                                       ),
-                                    ),
                                   ],
                                 );
                               },
@@ -6266,57 +6854,112 @@ Widget _buildLedgerSummaryRow({
                                         ),
                                       ),
                                     ),
-                                    Positioned(
-                                      top: 2,
-                                      right: 2,
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          deleteimage(imageItem['id']);
-                                        },
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            color:
-                                                Colors.black.withOpacity(0.6),
-                                            shape: BoxShape.circle,
+                                    if (canManagePaymentScreenshots())
+                                      Positioned(
+                                        top: 2,
+                                        right: 2,
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            deleteimage(imageItem['id']);
+                                          },
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  Colors.black.withOpacity(0.6),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            padding: const EdgeInsets.all(2),
+                                            child: Icon(Icons.close,
+                                                color: Colors.white, size: 16),
                                           ),
-                                          padding: const EdgeInsets.all(2),
-                                          child: Icon(Icons.close,
-                                              color: Colors.white, size: 16),
                                         ),
                                       ),
-                                    ),
                                   ],
                                 );
                               },
                             ),
                           ),
 
-                        // Buttons
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: selectMultipleImages,
-                              icon:
-                                  Icon(Icons.add_a_photo, color: Colors.black),
-                              label: Text("Add Images",
-                                  style: TextStyle(color: Colors.black)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.grey[300],
+                        const SizedBox(height: 12),
+
+                        if (canManagePaymentScreenshots())
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: selectMultipleImages,
+                                  icon: const Icon(
+                                      Icons.add_photo_alternate_outlined),
+                                  label: const Text('Add Images'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.blue.shade700,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 13,
+                                    ),
+                                    side: BorderSide(
+                                      color: Colors.blue.shade200,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                            ElevatedButton(
-                              onPressed: () {
-                                addimages(context);
-                              },
-                              child: Text("Submit Images",
-                                  style: TextStyle(color: Colors.white)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: selectedImageslist.isEmpty
+                                      ? null
+                                      : () {
+                                          addimages(context);
+                                        },
+                                  icon: const Icon(Icons.cloud_upload_outlined),
+                                  label: const Text('Submit Images'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                    disabledBackgroundColor:
+                                        Colors.grey.shade300,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 13,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
                               ),
+                            ],
+                          )
+                        else
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.shade300),
                             ),
-                          ],
-                        ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.lock_outline,
+                                  size: 18,
+                                  color: Colors.grey.shade600,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Payment screenshots can be managed by Accounts, CEO or COO after invoice approval.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     )),
               ),
@@ -6427,12 +7070,14 @@ Widget _buildLedgerSummaryRow({
                       Container(
                         width: MediaQuery.of(context).size.width * 0.85,
                         child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              showBankDropdown = !showBankDropdown;
-                            });
-                          },
-                          child: showBankDropdown
+                          onTap: isPrivilegedDepartment()
+                              ? () {
+                                  setState(() {
+                                    showBankDropdown = !showBankDropdown;
+                                  });
+                                }
+                              : null,
+                          child: showBankDropdown && isPrivilegedDepartment()
                               ? Container(
                                   width: 200,
                                   child: DropdownButtonFormField<String>(
@@ -6750,219 +7395,212 @@ Widget _buildLedgerSummaryRow({
                   ),
                 ),
               ),
-            Padding(
-  padding: const EdgeInsets.all(8.0),
-  child: Card(
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(15),
-    ),
-    color: Colors.white,
-    elevation: 4,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(14),
-          decoration: const BoxDecoration(
-            color: Colors.grey,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(15),
-              topRight: Radius.circular(15),
-            ),
-          ),
-          child: const Text(
-            'Ledger Summary',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              _buildLedgerSummaryRow(
-                label: 'Order Balance Amount',
-                amount: ledger ? 0.0 : Balance,
-                valueColor: Colors.red,
-                isBold: true,
-              ),
-              const SizedBox(height: 10),
-
-              _buildLedgerSummaryRow(
-                label: 'Customer Ledger Debit',
-                amount: double.tryParse(
-                      customerledgertotal?.toString() ?? '0',
-                    ) ??
-                    0.0,
-              ),
-              const SizedBox(height: 8),
-
-              _buildLedgerSummaryRow(
-                label: 'Total Customer Credits',
-                amount: double.tryParse(
-                      customerledgerreceived?.toString() ?? '0',
-                    ) ??
-                    0.0,
-                valueColor: Colors.green,
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 10),
-                child: Divider(height: 1),
-              ),
-
-              _buildLedgerSummaryRow(
-                label: 'Payment / Advance Credits',
-                amount: ((double.tryParse(
-                              customerledgerreceived?.toString() ?? '0',
-                            ) ??
-                            0.0) -
-                        totalCommissionReceiptAmount)
-                    .clamp(0.0, double.infinity),
-                valueColor: Colors.green.shade700,
-              ),
-              const SizedBox(height: 8),
-
-              _buildLedgerSummaryRow(
-                label: 'Commission Credit',
-                amount: totalCommissionReceiptAmount,
-                valueColor: Colors.teal,
-                isBold: true,
-              ),
-              const SizedBox(height: 8),
-
-              _buildLedgerSummaryRow(
-                label: 'Approved GRV Credit',
-                amount: approvedGrvAmount,
-                valueColor: Colors.orange.shade800,
-              ),
-              const SizedBox(height: 8),
-
-              _buildLedgerSummaryRow(
-                label: 'COD GRV Credit',
-                amount: approvedCodReturnAmount,
-                valueColor: Colors.orange.shade800,
-              ),
-              const SizedBox(height: 8),
-
-              _buildLedgerSummaryRow(
-                label: 'Refund Amount',
-                amount: refundReceiptAmount,
-                valueColor: Colors.red.shade700,
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Divider(
-                  height: 1,
-                  thickness: 1.2,
-                ),
-              ),
-
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: ledger
-                      ? Colors.green.shade50
-                      : Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: ledger
-                        ? Colors.green.shade200
-                        : Colors.red.shade200,
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      ledger
-                          ? Icons.account_balance_wallet_outlined
-                          : Icons.warning_amber_rounded,
-                      color: ledger ? Colors.green : Colors.red,
-                      size: 22,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        ledger
-                            ? 'Customer Ledger Credit'
-                            : 'Customer Ledger Debit',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: ledger
-                              ? Colors.green.shade800
-                              : Colors.red.shade800,
+                  color: Colors.white,
+                  elevation: 4,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: const BoxDecoration(
+                          color: Colors.grey,
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(15),
+                            topRight: Radius.circular(15),
+                          ),
+                        ),
+                        child: const Text(
+                          'Ledger Summary',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
                       ),
-                    ),
-                    Text(
-                      '₹${(double.tryParse(
-                            difference?.toString() ?? '0',
-                          ) ??
-                          0.0).toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: ledger
-                            ? Colors.green.shade800
-                            : Colors.red.shade800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-
-              if (dep != "BDM" && dep != "BDO")
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      backgroundColor: Colors.blue,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    onPressed: () {
-                      if (createdBy != null) {
-                        showAddDialog(context);
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Loading data, please wait...',
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            _buildLedgerSummaryRow(
+                              label: 'Order Balance Amount',
+                              amount: ledger ? 0.0 : Balance,
+                              valueColor: Colors.red,
+                              isBold: true,
                             ),
-                          ),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.add_card),
-                    label: const Text(
-                      'Add Receipt',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
+                            const SizedBox(height: 10),
+                            _buildLedgerSummaryRow(
+                              label: 'Customer Ledger Debit',
+                              amount: double.tryParse(
+                                    customerledgertotal?.toString() ?? '0',
+                                  ) ??
+                                  0.0,
+                            ),
+                            const SizedBox(height: 8),
+                            _buildLedgerSummaryRow(
+                              label: 'Total Customer Credits',
+                              amount: double.tryParse(
+                                    customerledgerreceived?.toString() ?? '0',
+                                  ) ??
+                                  0.0,
+                              valueColor: Colors.green,
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 10),
+                              child: Divider(height: 1),
+                            ),
+                            _buildLedgerSummaryRow(
+                              label: 'Payment / Advance Credits',
+                              amount: ((double.tryParse(
+                                            customerledgerreceived
+                                                    ?.toString() ??
+                                                '0',
+                                          ) ??
+                                          0.0) -
+                                      totalCommissionReceiptAmount)
+                                  .clamp(0.0, double.infinity),
+                              valueColor: Colors.green.shade700,
+                            ),
+                            const SizedBox(height: 8),
+                            _buildLedgerSummaryRow(
+                              label: 'Commission Credit',
+                              amount: totalCommissionReceiptAmount,
+                              valueColor: Colors.teal,
+                              isBold: true,
+                            ),
+                            const SizedBox(height: 8),
+                            _buildLedgerSummaryRow(
+                              label: 'Approved GRV Credit',
+                              amount: approvedGrvAmount,
+                              valueColor: Colors.orange.shade800,
+                            ),
+                            const SizedBox(height: 8),
+                            _buildLedgerSummaryRow(
+                              label: 'COD GRV Credit',
+                              amount: approvedCodReturnAmount,
+                              valueColor: Colors.orange.shade800,
+                            ),
+                            const SizedBox(height: 8),
+                            _buildLedgerSummaryRow(
+                              label: 'Refund Amount',
+                              amount: refundReceiptAmount,
+                              valueColor: Colors.red.shade700,
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Divider(
+                                height: 1,
+                                thickness: 1.2,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: ledger
+                                    ? Colors.green.shade50
+                                    : Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: ledger
+                                      ? Colors.green.shade200
+                                      : Colors.red.shade200,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    ledger
+                                        ? Icons.account_balance_wallet_outlined
+                                        : Icons.warning_amber_rounded,
+                                    color: ledger ? Colors.green : Colors.red,
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      ledger
+                                          ? 'Customer Ledger Credit'
+                                          : 'Customer Ledger Debit',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: ledger
+                                            ? Colors.green.shade800
+                                            : Colors.red.shade800,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    '₹${(double.tryParse(
+                                          difference?.toString() ?? '0',
+                                        ) ?? 0.0).toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: ledger
+                                          ? Colors.green.shade800
+                                          : Colors.red.shade800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            if (isPrivilegedDepartment())
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    backgroundColor: Colors.blue,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  onPressed: () {
+                                    if (createdBy != null) {
+                                      showAddDialog(context);
+                                    } else {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Loading data, please wait...',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(Icons.add_card),
+                                  label: const Text(
+                                    'Add Receipt',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  ),
-),
+              ),
               Padding(
                 padding: const EdgeInsets.only(left: 20, right: 20, top: 10),
                 child: Column(
@@ -7235,293 +7873,428 @@ Widget _buildLedgerSummaryRow({
                   ],
                 ),
               ),
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Container(
-                    padding: const EdgeInsets.all(16.0),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12.0),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withOpacity(0.3),
-                          spreadRadius: 4,
-                          blurRadius: 6,
-                          offset: Offset(0, 3),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 14,
+                ),
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.grey.shade200),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 18,
+                        offset: const Offset(0, 7),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 17,
                         ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (dep != "BDO")
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.grey,
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(15.0),
-                                topRight: Radius.circular(15.0),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.blue.shade700,
+                              Colors.blue.shade500,
+                            ],
+                          ),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(
+                              Icons.manage_accounts_outlined,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Update Informations',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 17,
+                                ),
                               ),
                             ),
-                            padding: const EdgeInsets.all(12.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  'Update Informations',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        if (dep != "BDO")
-                          SizedBox(
-                            height: 10,
-                          ),
-                        if (dep != "BDO")
-                          Builder(
-                            builder: (context) {
-                              // 🔒 Freeze dropdown during status update
-                              final statusItems = isUpdatingStatus
-                                  ? [selectedStatus ?? currentOrderStatus]
-                                      .whereType<String>()
-                                      .toList()
-                                  : getFilteredStatuses();
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (canManageApprovalControls()) ...[
+                              Builder(
+                                builder: (context) {
+                                  final statusItems = isUpdatingStatus
+                                      ? [selectedStatus ?? currentOrderStatus]
+                                          .whereType<String>()
+                                          .toList()
+                                      : getFilteredStatuses();
 
-                              return DropdownButtonFormField<String>(
-                                value: statusItems.contains(selectedStatus)
-                                    ? selectedStatus
-                                    : (statusItems.isNotEmpty
-                                        ? statusItems.first
-                                        : null),
-                                items: statusItems
-                                    .map(
-                                      (s) => DropdownMenuItem<String>(
-                                        value: s,
-                                        child: Text(s),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: isUpdatingStatus
-                                    ? null // 🔒 disable change during update
-                                    : (value) {
-                                        setState(() {
-                                          selectedStatus = value;
-                                        });
-                                      },
-                                decoration: const InputDecoration(
-                                  border: OutlineInputBorder(),
-                                  labelText: 'Status',
-                                ),
-                              );
-                            },
-                          ),
-                        if (dep != "BDO") SizedBox(height: 8),
-                        if (dep != "BDO")
-                          Text("Shipping Address",
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold)),
-                        SizedBox(height: 5),
-                        if (dep != "BDO")
-                          Padding(
-                            padding: const EdgeInsets.only(),
-                            child: Container(
-                              height: 50,
-                              width: MediaQuery.of(context).size.width *
-                                  0.9, // Adjust width based on device size
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey),
-                              ),
-                              child: Row(
-                                children: [
-                                  SizedBox(width: 20),
-                                  Container(
-                                    width: MediaQuery.of(context).size.width *
-                                        0.7, // Adjust width based on device size
-                                    child: InputDecorator(
-                                        decoration: InputDecoration(
-                                          border: InputBorder.none,
-                                          hintText: '',
-                                          contentPadding: EdgeInsets.symmetric(
-                                              horizontal: 1),
-                                        ),
-                                        child: DropdownButton<int>(
-                                          hint: const Text(
-                                            'Address',
-                                            style: TextStyle(fontSize: 12),
+                                  return DropdownButtonFormField<String>(
+                                    value: statusItems.contains(selectedStatus)
+                                        ? selectedStatus
+                                        : (statusItems.isNotEmpty
+                                            ? statusItems.first
+                                            : null),
+                                    isExpanded: true,
+                                    items: statusItems
+                                        .map(
+                                          (s) => DropdownMenuItem<String>(
+                                            value: s,
+                                            child: Text(
+                                              getDisplayStatus(s),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           ),
-                                          value: addres.any((a) =>
-                                                  a['id'] == selectedAddressId)
-                                              ? selectedAddressId
-                                              : null,
-                                          isExpanded: true,
-                                          underline: Container(),
-                                          onChanged: (int? newValue) {
+                                        )
+                                        .toList(),
+                                    onChanged: isUpdatingStatus
+                                        ? null
+                                        : (value) {
                                             setState(() {
-                                              selectedAddressId = newValue;
+                                              selectedStatus = value;
                                             });
                                           },
-                                          items: addres
-                                              .map<DropdownMenuItem<int>>(
-                                                  (address) {
-                                            return DropdownMenuItem<int>(
-                                              value: address['id'],
-                                              child: Text(
-                                                address['address'],
-                                                style: const TextStyle(
-                                                    fontSize: 12),
-                                              ),
-                                            );
-                                          }).toList(),
-                                        )),
+                                    decoration: InputDecoration(
+                                      labelText: 'Status',
+                                      prefixIcon: const Icon(
+                                        Icons.fact_check_outlined,
+                                      ),
+                                      filled: true,
+                                      fillColor: Colors.grey.shade50,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 16,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 18),
+                            ],
+                            const Text(
+                              'Shipping Address',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            DropdownButtonFormField<int>(
+                              value: addres.any(
+                                (a) => a['id'] == selectedAddressId,
+                              )
+                                  ? selectedAddressId
+                                  : null,
+                              isExpanded: true,
+                              menuMaxHeight: 360,
+                              onChanged: canEditShippingAddressInUpdateSection()
+                                  ? (int? newValue) {
+                                      setState(() {
+                                        selectedAddressId = newValue;
+                                      });
+                                    }
+                                  : null,
+                              items: addres.map<DropdownMenuItem<int>>(
+                                (address) {
+                                  final String fullAddress = [
+                                    address['name'],
+                                    address['address'],
+                                    address['city'],
+                                    address['state'],
+                                    address['zipcode'],
+                                  ]
+                                      .where(
+                                        (value) =>
+                                            value != null &&
+                                            value.toString().trim().isNotEmpty,
+                                      )
+                                      .join(', ');
+
+                                  return DropdownMenuItem<int>(
+                                    value: address['id'],
+                                    child: Text(
+                                      fullAddress,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  );
+                                },
+                              ).toList(),
+                              decoration: InputDecoration(
+                                hintText: 'Select shipping address',
+                                prefixIcon: const Icon(
+                                  Icons.location_on_outlined,
+                                ),
+                                suffixIcon:
+                                    canEditShippingAddressInUpdateSection()
+                                        ? null
+                                        : const Icon(
+                                            Icons.lock_outline,
+                                            size: 18,
+                                          ),
+                                filled: true,
+                                fillColor:
+                                    canEditShippingAddressInUpdateSection()
+                                        ? Colors.white
+                                        : Colors.grey.shade100,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 17,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                disabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
                                   ),
-                                ],
+                                ),
                               ),
                             ),
-                          ),
-                        SizedBox(height: 16.0),
-                        //  TextField(
-                        //   controller: actualweightController,
-
-                        //   decoration: InputDecoration(
-                        //     border: OutlineInputBorder(),
-                        //     labelText: 'Add Actual Weight',
-                        //   ),
-                        // ),
-
-                        // SizedBox(height: 16.0),
-
-                        //  TextField(
-                        //   controller: postofficeamountController,
-
-                        //   decoration: InputDecoration(
-                        //     border: OutlineInputBorder(),
-                        //     labelText: 'Add Post Office Amount',
-                        //   ),
-                        // ),
-                        // SizedBox(height: 16.0),
-                        if (dep != "BDO")
-                          TextField(
-                            controller: shippingchargeController,
-                            decoration: InputDecoration(
-                              border: OutlineInputBorder(),
-                              labelText: 'Add Shipping Charge',
-                            ),
-                          ),
-
-                        SizedBox(height: 16.0),
-                        TextField(
-                          controller: accountsnoteController,
-                          maxLines: 3,
-                          readOnly: (dep == "BDM" || dep == "BDO") &&
-                              ord != null &&
-                              ord['status'] != 'Invoice Created',
-                          decoration: InputDecoration(
-                            border: OutlineInputBorder(),
-                            labelText: 'Add Accounts Note',
-                          ),
-                        ),
-                        SizedBox(height: 10.0),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                Colors.blue, // Button background color
-                            foregroundColor:
-                                Colors.white, // Text (and icon) color
-                            padding: EdgeInsets.symmetric(
-                                horizontal: 24, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          onPressed: () {
-                            AddStatusTime(context);
-
-                            final String paymentStatus = (selectedPayStatus ??
-                                    ord?['payment_status'] ??
-                                    '')
-                                .toString()
-                                .trim()
-                                .toLowerCase();
-
-                            final String codType =
-                                (cod_status ?? ord?['cod_status'] ?? '')
-                                    .toString()
-                                    .trim()
-                                    .toUpperCase();
-
-                            if (selectedStatus == "Invoice Rejected") {
-                              updatestatus();
-                              return;
-                            }
-
-                            if (paymentStatus == "cod" ||
-                                codType == "FULL_COD" ||
-                                codType == "PARTIAL_COD") {
-                              updatestatus();
-                              return;
-                            }
-
-                            if (selectedPayStatus == "credit") {
-                              updatestatus();
-                              return;
-                            }
-
-                            if (selectedImageData.isNotEmpty) {
-                              updatestatus();
-                              return;
-                            }
-
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    'Please upload proof image for Payment.'),
-                                backgroundColor: Colors.red,
+                            if (!canManageApprovalControls()) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                canEditShippingAddressInUpdateSection()
+                                    ? 'Shipping address can be updated while the order is Waiting For Approval.'
+                                    : 'Shipping address is locked for this status or department.',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: canEditShippingAddressInUpdateSection()
+                                      ? Colors.green.shade700
+                                      : Colors.grey.shade600,
+                                ),
                               ),
-                            );
-                          },
-                          child: Text('Submit'),
-                        ),
+                            ],
+                            const SizedBox(height: 18),
+                            TextField(
+                              controller: shippingchargeController,
 
-                        if (dep != "BDM" && dep != "BDO")
-                          SizedBox(height: 16.0),
+                              // Waiting For Approval: everyone can edit.
+                              // Invoice Approved onward:
+                              // ADMIN, CEO, COO, Accounts / Accounting only.
+                              readOnly: !canEditCompanyAndShippingCharge(),
 
-                        TextField(
-                          controller: noteController,
-                          maxLines: 3,
-                          readOnly: (dep == "BDM" || dep == "BDO") &&
-                              ord != null &&
-                              ord['status'] != 'Invoice Created',
-                          decoration: InputDecoration(
-                            border: OutlineInputBorder(),
-                            labelText: 'Add a Note',
-                          ),
-                        ),
-
-                        SizedBox(height: 10.0),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                Colors.blue, // Button background color
-                            foregroundColor:
-                                Colors.white, // Text (and icon) color
-                            padding: EdgeInsets.symmetric(
-                                horizontal: 24, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              decoration: InputDecoration(
+                                labelText: 'Shipping Charge',
+                                prefixIcon: const Icon(
+                                  Icons.local_shipping_outlined,
+                                ),
+                                suffixIcon: canEditCompanyAndShippingCharge()
+                                    ? null
+                                    : const Icon(
+                                        Icons.lock_outline,
+                                        size: 18,
+                                      ),
+                                filled: true,
+                                fillColor: canEditCompanyAndShippingCharge()
+                                    ? Colors.grey.shade50
+                                    : Colors.grey.shade100,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 16,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
                             ),
-                          ),
-                          onPressed: () {
-                            updatenote();
-                          },
-                          child: Text('Add Note'),
+                            const SizedBox(height: 18),
+                            TextField(
+                              controller: accountsnoteController,
+                              minLines: 3,
+                              maxLines: 5,
+                              readOnly: !canEditAccountsNote(),
+                              decoration: InputDecoration(
+                                labelText: 'Accounts Note',
+                                alignLabelWithHint: true,
+                                prefixIcon:
+                                    const Icon(Icons.account_balance_outlined),
+                                filled: true,
+                                fillColor: Colors.grey.shade50,
+                                contentPadding: const EdgeInsets.all(16),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue.shade700,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 15,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(13),
+                                  ),
+                                ),
+                                onPressed: canEditAccountsNote()
+                                    ? () {
+                                        // For non-privileged departments in
+                                        // Waiting For Approval, allow submission
+                                        // of Accounts Note without granting any
+                                        // other edit permission.
+                                        if (!isPrivilegedDepartment() &&
+                                            isWaitingForApprovalStatus()) {
+                                          updatestatus();
+                                          return;
+                                        }
+
+                                        AddStatusTime(context);
+
+                                        final String paymentStatus =
+                                            (selectedPayStatus ??
+                                                    ord?['payment_status'] ??
+                                                    '')
+                                                .toString()
+                                                .trim()
+                                                .toLowerCase();
+
+                                        final String codType = (cod_status ??
+                                                ord?['cod_status'] ??
+                                                '')
+                                            .toString()
+                                            .trim()
+                                            .toUpperCase();
+
+                                        if (selectedStatus ==
+                                            "Invoice Rejected") {
+                                          updatestatus();
+                                          return;
+                                        }
+
+                                        if (paymentStatus == "cod" ||
+                                            codType == "FULL_COD" ||
+                                            codType == "PARTIAL_COD") {
+                                          updatestatus();
+                                          return;
+                                        }
+
+                                        if (selectedPayStatus == "credit") {
+                                          updatestatus();
+                                          return;
+                                        }
+
+                                        if (selectedImageData.isNotEmpty) {
+                                          updatestatus();
+                                          return;
+                                        }
+
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Please upload proof image for Payment.',
+                                            ),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      }
+                                    : null,
+                                icon: const Icon(Icons.save_outlined),
+                                label: const Text(
+                                  'Submit Updates',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 22),
+                            Divider(color: Colors.grey.shade300),
+                            const SizedBox(height: 18),
+                            TextField(
+                              controller: noteController,
+                              minLines: 3,
+                              maxLines: 5,
+                              readOnly: !isPrivilegedDepartment(),
+                              decoration: InputDecoration(
+                                labelText: 'Warehouse Note',
+                                alignLabelWithHint: true,
+                                prefixIcon: const Icon(Icons.notes_outlined),
+                                filled: true,
+                                fillColor: Colors.grey.shade50,
+                                contentPadding: const EdgeInsets.all(16),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.blue.shade700,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  side: BorderSide(
+                                    color: Colors.blue.shade300,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(13),
+                                  ),
+                                ),
+                                onPressed: isPrivilegedDepartment()
+                                    ? updatenote
+                                    : null,
+                                icon: const Icon(
+                                  Icons.add_comment_outlined,
+                                ),
+                                label: const Text(
+                                  'Add Note',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -7555,11 +8328,12 @@ Widget _buildLedgerSummaryRow({
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 8.0),
                                 child: GestureDetector(
-                                  onTap: () {
-                                    if (dep != "BDM" && dep != "BDO") {
-                                      _showShippingChargeDialog(context, order);
-                                    }
-                                  },
+                                  onTap: isPrivilegedDepartment()
+                                      ? () {
+                                          _showShippingChargeDialog(
+                                              context, order);
+                                        }
+                                      : null,
                                   child: Container(
                                     padding: EdgeInsets.all(12.0),
                                     decoration: BoxDecoration(
@@ -7621,7 +8395,7 @@ Widget _buildLedgerSummaryRow({
                                                 ),
                                               ),
                                             ),
-                                            if (dep != "BDM" && dep != "BDO")
+                                            if (isPrivilegedDepartment())
                                               order['status'] == "Shipped" &&
                                                       order['message_status'] ==
                                                           "pending"
@@ -7669,7 +8443,7 @@ Widget _buildLedgerSummaryRow({
                                                     ),
                                             // Delete Button
                                             SizedBox(width: 5),
-                                            if (dep != "BDM" && dep != "BDO")
+                                            if (isPrivilegedDepartment())
                                               GestureDetector(
                                                 onTap: () {
                                                   deletebox(order['id']);
@@ -7806,77 +8580,86 @@ Widget _buildLedgerSummaryRow({
                                         SizedBox(height: 6),
 
                                         GestureDetector(
-                                          onTap: () {
-                                            if (dep != "BDM" && dep != "BDO") {
-                                              showDialog(
-                                                context: context,
-                                                builder:
-                                                    (BuildContext context) {
-                                                  return AlertDialog(
-                                                    title: Text(
-                                                        'Enter Tracking ID'),
-                                                    content: TextField(
-                                                      controller:
-                                                          trackingIdController,
-                                                      decoration:
-                                                          InputDecoration(
-                                                        labelText:
-                                                            '${order['tracking_id']}',
-                                                        border:
-                                                            OutlineInputBorder(),
-                                                      ),
-                                                    ),
-                                                    actions: [
-                                                      TextButton(
-                                                        onPressed: () {
-                                                          Navigator.of(context)
-                                                              .pop(); // Close the dialog
-                                                        },
-                                                        child: Text('Cancel'),
-                                                      ),
-                                                      ElevatedButton(
-                                                        style: ElevatedButton
-                                                            .styleFrom(
-                                                          backgroundColor: Colors
-                                                              .blue, // Button background color
-                                                          foregroundColor: Colors
-                                                              .white, // Button text color
+                                          onTap: isPrivilegedDepartment()
+                                              ? () {
+                                                  showDialog(
+                                                    context: context,
+                                                    builder:
+                                                        (BuildContext context) {
+                                                      return AlertDialog(
+                                                        title: Text(
+                                                            'Enter Tracking ID'),
+                                                        content: TextField(
+                                                          controller:
+                                                              trackingIdController,
+                                                          decoration:
+                                                              InputDecoration(
+                                                            labelText:
+                                                                '${order['tracking_id']}',
+                                                            border:
+                                                                OutlineInputBorder(),
+                                                          ),
                                                         ),
-                                                        onPressed: () {
-                                                          String trackingId =
-                                                              trackingIdController
-                                                                  .text
-                                                                  .trim();
-                                                          if (trackingId
-                                                              .isNotEmpty) {
-                                                            updatetrackid(
-                                                                trackingId,
-                                                                order['id']);
-                                                            ;
-                                                            Navigator.of(
-                                                                    context)
-                                                                .pop(); // Close the dialog
-                                                          } else {
-                                                            ScaffoldMessenger
-                                                                    .of(context)
-                                                                .showSnackBar(
-                                                              SnackBar(
-                                                                content: Text(
-                                                                    'Please enter a valid Tracking ID'),
-                                                                backgroundColor:
-                                                                    Colors.red,
-                                                              ),
-                                                            );
-                                                          }
-                                                        },
-                                                        child: Text('Submit'),
-                                                      ),
-                                                    ],
+                                                        actions: [
+                                                          TextButton(
+                                                            onPressed: () {
+                                                              Navigator.of(
+                                                                      context)
+                                                                  .pop(); // Close the dialog
+                                                            },
+                                                            child:
+                                                                Text('Cancel'),
+                                                          ),
+                                                          ElevatedButton(
+                                                            style:
+                                                                ElevatedButton
+                                                                    .styleFrom(
+                                                              backgroundColor:
+                                                                  Colors
+                                                                      .blue, // Button background color
+                                                              foregroundColor:
+                                                                  Colors
+                                                                      .white, // Button text color
+                                                            ),
+                                                            onPressed: () {
+                                                              String
+                                                                  trackingId =
+                                                                  trackingIdController
+                                                                      .text
+                                                                      .trim();
+                                                              if (trackingId
+                                                                  .isNotEmpty) {
+                                                                updatetrackid(
+                                                                    trackingId,
+                                                                    order[
+                                                                        'id']);
+                                                                ;
+                                                                Navigator.of(
+                                                                        context)
+                                                                    .pop(); // Close the dialog
+                                                              } else {
+                                                                ScaffoldMessenger.of(
+                                                                        context)
+                                                                    .showSnackBar(
+                                                                  SnackBar(
+                                                                    content: Text(
+                                                                        'Please enter a valid Tracking ID'),
+                                                                    backgroundColor:
+                                                                        Colors
+                                                                            .red,
+                                                                  ),
+                                                                );
+                                                              }
+                                                            },
+                                                            child:
+                                                                Text('Submit'),
+                                                          ),
+                                                        ],
+                                                      );
+                                                    },
                                                   );
-                                                },
-                                              );
-                                            }
-                                          },
+                                                }
+                                              : null,
                                           child: Row(
                                             mainAxisAlignment:
                                                 MainAxisAlignment.spaceBetween,
@@ -7917,9 +8700,12 @@ Widget _buildLedgerSummaryRow({
                                           height: 5,
                                         ),
                                         GestureDetector(
-                                          onTap: () {
-                                            showStatusDialog(context, order);
-                                          },
+                                          onTap: isPrivilegedDepartment()
+                                              ? () {
+                                                  showStatusDialog(
+                                                      context, order);
+                                                }
+                                              : null,
                                           child: Row(
                                             mainAxisAlignment:
                                                 MainAxisAlignment.spaceBetween,
@@ -7958,14 +8744,15 @@ Widget _buildLedgerSummaryRow({
                                         SizedBox(height: 6),
 
                                         GestureDetector(
-                                          onTap: () {
-                                            if (dep != "BDM" && dep != "BDO") {
-                                              showParcelServiceDialog(
-                                                  context,
-                                                  order['id'],
-                                                  order['parcel_service_id']);
-                                            }
-                                          },
+                                          onTap: isPrivilegedDepartment()
+                                              ? () {
+                                                  showParcelServiceDialog(
+                                                      context,
+                                                      order['id'],
+                                                      order[
+                                                          'parcel_service_id']);
+                                                }
+                                              : null,
                                           child: Row(
                                             mainAxisAlignment:
                                                 MainAxisAlignment.spaceBetween,
@@ -8016,12 +8803,12 @@ Widget _buildLedgerSummaryRow({
 
                                         // Shipped Date
                                         GestureDetector(
-                                          onTap: () {
-                                            if (dep != "BDM" && dep != "BDO") {
-                                              _showDatePicker(
-                                                  context, order['id']);
-                                            }
-                                          },
+                                          onTap: isPrivilegedDepartment()
+                                              ? () {
+                                                  _showDatePicker(
+                                                      context, order['id']);
+                                                }
+                                              : null,
                                           child: Row(
                                             mainAxisAlignment:
                                                 MainAxisAlignment.spaceBetween,

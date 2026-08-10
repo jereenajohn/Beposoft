@@ -2303,20 +2303,15 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
     }
   }
 
-  Future<void> _navigateBack() async {
-    Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (context) => WarehouseOrderView(status: null)));
-  }
 
   @override
   Widget build(BuildContext context) {
     final visibleItems = showAllProducts ? items : items.take(2).toList();
     return WillPopScope(
       onWillPop: () async {
+               Navigator.pop(context);
+        
         // Trigger the navigation logic when the back swipe occurs
-        _navigateBack();
         return false; // Prevent the default back navigation behavior
       },
       child: Scaffold(
@@ -2342,37 +2337,53 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
                 child: Column(
                   children: [
                     SizedBox(height: 50),
-                    Row(
-                      children: [
-                        SizedBox(width: 13),
-                        Container(
-                          height: 70,
-                          width: 70,
-                          decoration: BoxDecoration(
-                            color: const Color.fromARGB(255, 220, 220, 220),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(Icons.local_shipping,
-                              size: 40, color: Colors.blue),
-                        ),
-                        SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              ord != null
-                                  ? ord['invoice'] ?? 'Invoice Number'
-                                  : 'Loading...',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: const Color.fromARGB(255, 0, 0, 0),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                   Row(
+  children: [
+    /// 🔹 Back Button
+ IconButton(
+  icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+  onPressed: () {
+    Navigator.pop(context);
+  },
+),
+
+    const SizedBox(width: 5),
+
+    /// 🔹 Icon Container
+    Container(
+      height: 60,
+      width: 60,
+      decoration: BoxDecoration(
+        color: const Color.fromARGB(255, 220, 220, 220),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: const Icon(
+        Icons.local_shipping,
+        size: 32,
+        color: Colors.blue,
+      ),
+    ),
+
+    const SizedBox(width: 10),
+
+    /// 🔹 Invoice Details
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          ord != null
+              ? ord['invoice'] ?? 'Invoice Number'
+              : 'Loading...',
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
+          ),
+        ),
+      ],
+    ),
+  ],
+),
                     SizedBox(
                       height: 5,
                     ),
@@ -2755,12 +2766,8 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
                     SizedBox(height: 10),
 
                     // Display each item in the visibleItems list within a card
-                    for (var item in visibleItems)
-                      GestureDetector(
-                        onTap: () {
-                          showPopupDialog(context, item);
-                        },
-                        child: Card(
+                   for (var item in visibleItems)
+  Card(
                           color: Colors.white,
                           margin: const EdgeInsets.only(bottom: 8.0),
                           shape: RoundedRectangleBorder(
@@ -2860,7 +2867,7 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
                             ),
                           ),
                         ),
-                      ),
+                      
 
                     // "See More" or "See Less" Button
                     if (items.length >
@@ -3271,22 +3278,22 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
                               ),
                             ),
                             SizedBox(width: 8),
-                            IconButton(
-                              icon: Icon(Icons.qr_code_scanner,
-                                  size: 28, color: Colors.blue),
-                              onPressed: () async {
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => BarcodeScannerPage(
-                                      onScan: (value) {
-                                        transactionid.text = value;
-                                      },
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
+                            // IconButton(
+                            //   icon: Icon(Icons.qr_code_scanner,
+                            //       size: 28, color: Colors.blue),
+                            //   onPressed: () async {
+                            //     await Navigator.push(
+                            //       context,
+                            //       MaterialPageRoute(
+                            //         builder: (context) => BarcodeScannerPage(
+                            //           onScan: (value) {
+                            //             transactionid.text = value;
+                            //           },
+                            //         ),
+                            //       ),
+                            //     );
+                            //   },
+                            // ),
                           ],
                         ),
 

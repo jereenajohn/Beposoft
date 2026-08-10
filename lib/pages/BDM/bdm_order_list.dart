@@ -139,6 +139,14 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
     return prefs.getString('department');
   }
 
+  String getDisplayStatus(dynamic rawStatus) {
+    final String status = (rawStatus ?? '').toString().trim();
+
+    return status == 'Invoice Created'
+        ? 'Waiting For Approval'
+        : status;
+  }
+
   var family = '';
   String familyName = '';
 
@@ -665,7 +673,7 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
         order['cod_amount']?.toString() ?? '',
         order['cod_status']?.toString() ?? '',
         order['adv_cod_amount']?.toString() ?? '',
-        order['status']?.toString() ?? '',
+        getDisplayStatus(order['status']),
         order['total_amount']?.toString() ?? '',
         order['order_date']?.toString() ?? '',
         order['note']?.toString() ?? '',
@@ -789,7 +797,9 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
                     'Order Summary',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                   ),
-                  pw.Text('Status: ${order['status'] ?? ''}'),
+                  pw.Text(
+                    'Status: ${getDisplayStatus(order['status'])}',
+                  ),
                   pw.Text(
                       'Total Amount: ${order['total_amount']?.toString() ?? ''}'),
                   pw.Text('Order Date: ${order['order_date'] ?? ''}'),
@@ -902,7 +912,7 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
                     return DropdownMenuItem<String>(
                       value: status,
                       child: Text(
-                        status,
+                        getDisplayStatus(status),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 13),
@@ -1419,7 +1429,7 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
                       const SizedBox(height: 10),
                       _infoRow(
                         title: 'Status',
-                        value: '${order['status'] ?? ''}',
+                        value: getDisplayStatus(order['status']),
                         valueColor: Colors.blue.shade700,
                       ),
                       const SizedBox(height: 10),

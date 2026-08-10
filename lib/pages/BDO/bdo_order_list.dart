@@ -91,6 +91,14 @@ class _bod_oredr_listState extends State<bod_oredr_list> {
     return prefs.getString('department');
   }
 
+  String getDisplayStatus(dynamic rawStatus) {
+    final String status = (rawStatus ?? '').toString().trim();
+
+    return status == 'Invoice Created'
+        ? 'Waiting For Approval'
+        : status;
+  }
+
   Future<void> fetchOrderData({int page = 1}) async {
     try {
       final token = await getTokenFromPrefs();
@@ -381,7 +389,7 @@ class _bod_oredr_listState extends State<bod_oredr_list> {
           item['price'] ?? '',
           item['tax'] ?? '',
           item['discount'] ?? '',
-          order['status'] ?? '',
+          getDisplayStatus(order['status']),
           order['total_amount'] ?? '',
           order['order_date'] ?? '',
         ]);
@@ -512,7 +520,9 @@ class _bod_oredr_listState extends State<bod_oredr_list> {
                     'Order Summary',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                   ),
-                  pw.Text('Status: ${order['status'] ?? ''}'),
+                  pw.Text(
+                    'Status: ${getDisplayStatus(order['status'])}',
+                  ),
                   pw.Text('Total Amount: ${order['total_amount'].toString()}'),
                   pw.Text('Order Date: ${order['order_date'] ?? ''}'),
                 ],
@@ -875,10 +885,13 @@ class _bod_oredr_listState extends State<bod_oredr_list> {
                                               ),
                                             ),
                                             Text(
-                                              '${order['status']}',
-                                              style: TextStyle(
-                                                  fontSize: 13,
-                                                  color: Colors.blue),
+                                              getDisplayStatus(
+                                                order['status'],
+                                              ),
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.blue,
+                                              ),
                                             ),
                                           ],
                                         ),

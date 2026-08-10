@@ -7453,9 +7453,9 @@ final double marketingExpenseGrandTotal =
                     'Daily Goods Movement'
                   ]),
                   _buildDropdownTile(context, 'Orders', [
-                    'New Orders',
+                    // 'New Orders',
                     'Orders List',
-                    'Invoice Created',
+                    'Waiting For Approval',
                     'Invoice Approved',
                     'Pre Booked',
                     'Waiting For Confirmation',

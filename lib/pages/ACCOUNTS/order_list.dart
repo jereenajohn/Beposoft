@@ -39,7 +39,7 @@ import 'package:open_filex/open_filex.dart';
 
 class OrderList extends StatefulWidget {
   var status;
-  OrderList({super.key, required this.status}); 
+  OrderList({super.key, required this.status});
 
   @override
   State<OrderList> createState() => _OrderListState();
@@ -119,6 +119,14 @@ class _OrderListState extends State<OrderList> {
   Future<String?> getdepFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('department');
+  }
+
+  String getDisplayStatus(dynamic rawStatus) {
+    final String status = (rawStatus ?? '').toString().trim();
+
+    return status == 'Invoice Created'
+        ? 'Waiting For Approval'
+        : status;
   }
 
   Future<void> fetchOrderData() async {
@@ -413,7 +421,7 @@ class _OrderListState extends State<OrderList> {
           item['price'] ?? '',
           item['tax'] ?? '',
           item['discount'] ?? '',
-          order['status'] ?? '',
+          getDisplayStatus(order['status']),
           order['total_amount'] ?? '',
           order['order_date'] ?? '',
         ]);
@@ -544,7 +552,9 @@ class _OrderListState extends State<OrderList> {
                     'Order Summary',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                   ),
-                  pw.Text('Status: ${order['status'] ?? ''}'),
+                  pw.Text(
+                    'Status: ${getDisplayStatus(order['status'])}',
+                  ),
                   pw.Text('Total Amount: ${order['total_amount'].toString()}'),
                   pw.Text('Order Date: ${order['order_date'] ?? ''}'),
                 ],
@@ -576,7 +586,18 @@ class _OrderListState extends State<OrderList> {
             builder: (context) =>
                 bdo_dashbord()), // Replace AnotherPage with your target page
       );
-    } else if (dep == "BDM") {
+    } else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
+      );
+    }
+    else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => cso_dashboard()),
+      );
+    }else if (dep == "BDM") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -672,7 +693,18 @@ class _OrderListState extends State<OrderList> {
                       builder: (context) =>
                           WarehouseDashboard()), // Replace AnotherPage with your target page
                 );
-              } else if (dep == "CEO") {
+              }else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => ceo_dashboard()),
+      );
+    }
+    else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => cso_dashboard()),
+      );
+    } else if (dep == "CEO") {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
@@ -784,7 +816,7 @@ class _OrderListState extends State<OrderList> {
                 items: orderStatuses.map((status) {
                   return DropdownMenuItem<String>(
                     value: status,
-                    child: Text(status),
+                    child: Text(getDisplayStatus(status)),
                   );
                 }).toList(),
               ),
@@ -923,10 +955,13 @@ class _OrderListState extends State<OrderList> {
                                                 ),
                                               ),
                                               Text(
-                                                '${order['status']}',
-                                                style: TextStyle(
-                                                    fontSize: 13,
-                                                    color: Colors.blue),
+                                                getDisplayStatus(
+                                                  order['status'],
+                                                ),
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.blue,
+                                                ),
                                               ),
                                             ],
                                           ),

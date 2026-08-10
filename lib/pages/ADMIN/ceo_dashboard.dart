@@ -3497,54 +3497,61 @@ Future<void> fetchTeamWiseAttendanceCount() async {
     );
   }
 
-  Widget _buildEmployeeColumnItem({
-    required String title,
-    required String value,
-    required IconData icon,
-  }) {
-    return Container(
-      width: double.infinity,
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 9),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.14),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.22),
+ Widget _buildEmployeeColumnItem({
+  required String title,
+  required String value,
+  required IconData icon,
+  bool isGreen = false,
+}) {
+  return Container(
+    width: double.infinity,
+    height: 32,
+    padding: const EdgeInsets.symmetric(horizontal: 9),
+    decoration: BoxDecoration(
+      color: isGreen
+          ? Colors.green
+          : Colors.white.withOpacity(0.14),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: isGreen
+            ? Colors.white.withOpacity(0.35)
+            : Colors.white.withOpacity(0.22),
+      ),
+    ),
+    child: Row(
+      children: [
+        Icon(
+          icon,
+          color: Colors.white,
+          size: 14,
         ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            icon,
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.88),
+              fontSize: 11,
+              fontWeight:
+                  isGreen ? FontWeight.w800 : FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
             color: Colors.white,
-            size: 14,
+            fontSize: 12,
+            fontWeight:
+                isGreen ? FontWeight.w900 : FontWeight.w800,
           ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.88),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildAssetCategoryDashboardItem({
     required String categoryName,
@@ -3616,59 +3623,66 @@ Future<void> fetchTeamWiseAttendanceCount() async {
     );
   }
 
-  Widget _buildDashboardLineItem({
-    required String title,
-    required String value,
-    IconData? icon,
-  }) {
-    return Container(
-      width: double.infinity,
-      height: 26,
-      padding: const EdgeInsets.symmetric(horizontal: 9),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.14),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.22),
-        ),
+Widget _buildDashboardLineItem({
+  required String title,
+  required String value,
+  IconData? icon,
+  bool isGreen = false,
+}) {
+  return Container(
+    width: double.infinity,
+    height: 26,
+    padding: const EdgeInsets.symmetric(horizontal: 9),
+    decoration: BoxDecoration(
+      color: isGreen
+          ? Colors.green
+          : Colors.white.withOpacity(0.14),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: isGreen
+            ? Colors.white.withOpacity(0.35)
+            : Colors.white.withOpacity(0.22),
       ),
-      child: Row(
-        children: [
-          if (icon != null) ...[
-            Icon(
-              icon,
-              color: Colors.white,
-              size: 14,
-            ),
-            const SizedBox(width: 6),
-          ],
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.88),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+    ),
+    child: Row(
+      children: [
+        if (icon != null) ...[
+          Icon(
+            icon,
+            color: Colors.white,
+            size: 14,
           ),
-          if (value.isNotEmpty)
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+          const SizedBox(width: 6),
         ],
-      ),
-    );
-  }
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.88),
+              fontSize: 11,
+              fontWeight:
+                  isGreen ? FontWeight.w800 : FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (value.isNotEmpty)
+          Text(
+            value,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight:
+                  isGreen ? FontWeight.w900 : FontWeight.w800,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+      ],
+    ),
+  );
+}
 
   Widget _buildMarketingExpenseItem({
     required String expenseType,
@@ -3948,9 +3962,10 @@ Future<void> fetchTeamWiseAttendanceCount() async {
         childAspectRatio: 0.72,
         children: [
           _buildDashboardCard(
-            title: "Sales",
-            value:
-                "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}",
+  title: "Sales",
+  value:
+      "M.Total- ${_formatDashboardAmount(productsData?['month_total_amount'])}",
+  greenValueTab: true,
             lines: [
               "MT. Invoices: ${_asInt(productsData?['month_count'])}",
               "T Paid: ${_asInt(todayPaid['count'])} | ${_formatDashboardAmount(todayPaid['total'])}",
@@ -3965,101 +3980,108 @@ Future<void> fetchTeamWiseAttendanceCount() async {
               );
             },
           ),
-          _buildDashboardCard(
-            title: "Finance",
-            valueLabel: "TCB",
-            value: _formatDashboardAmount(todayClosingBalance),
-            lines: const [],
-            bottomTopSpacing: 0,
-            bottom: Column(
-              children: [
-                _buildDashboardLineItem(
-                  title: "TCT",
-                  value: _formatDashboardAmount(todayCredit),
-                ),
-                const SizedBox(height: 6),
-                _buildDashboardLineItem(
-                  title: "TDT",
-                  value: _formatDashboardAmount(todayDebit),
-                ),
-                const SizedBox(height: 6),
-                _buildDashboardLineItem(
-                  title: "DAC",
-                  value: _formatDashboardAmount(dac),
-                ),
-                const SizedBox(height: 6),
-                _buildDashboardLineItem(
-                  title: "MCT",
-                  value: _formatDashboardAmount(monthCredit),
-                ),
-                const SizedBox(height: 6),
-                _buildDashboardLineItem(
-                  title: "MDT",
-                  value: _formatDashboardAmount(monthDebit),
-                ),
-                const SizedBox(height: 6),
-                _buildDashboardLineItem(
-                  title: "MAC",
-                  value: _formatDashboardAmount(mac),
-                ),
-              ],
-            ),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => FinancialReport()),
-              );
-            },
-          ),
-          _buildDashboardCard(
-            title: "Logistics (DGM)",
-            value: dgmLoading
-                ? "Loading..."
-                : _formatDashboardAmount(monthTotalOrderAmount),
-            lines: [
-              dgmLoading
-                  ? "Today Invoices: Loading..."
-                  : "Today INV: $todayTotalOrders",
-              dgmLoading
-                  ? "Today Amount: Loading..."
-                  : "T.Amount: ${_formatDashboardAmount(
-                      todayTotalOrderAmount,
-                    )}",
-              dgmLoading
-                  ? "Today Weight: Loading..."
-                  : "T.Weight: ${_asDouble(
-                      dgmTodaySummary['total_weight_field_kg'],
-                    ).toStringAsFixed(3)} kg",
-              dgmLoading
-                  ? "Month Invoices: Loading..."
-                  : "Month INV: $monthTotalOrders",
-              dgmLoading
-                  ? "Month Amount: Loading..."
-                  : "M.Amount: ${_formatDashboardAmount(monthTotalOrderAmount)}",
-              dgmLoading
-                  ? "Weight: Loading..."
-                  : "M.Weight: ${dgmWeightFieldKg.toStringAsFixed(3)} kg",
-              dgmLoading
-                  ? "PO Amount: Loading..."
-                  : "PO Amount: ${_formatDashboardAmount(
-                      monthTotalParcelAmount,
-                    )}",
-              dgmLoading
-                  ? "Avg: Loading..."
-                  : "Avg: ₹${monthAverage.toStringAsFixed(2)}/kg",
-            ],
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => daily_goods_movementt(),
-                ),
-              );
-            },
-          ),
        _buildDashboardCard(
+  title: "Finance",
+  valueLabel: "TCB",
+  value: _formatDashboardAmount(todayClosingBalance),
+  greenValueTab: true,
+  lines: const [],
+  bottomTopSpacing: 0,
+  bottom: Column(
+    children: [
+      _buildDashboardLineItem(
+        title: "TCT",
+        value: _formatDashboardAmount(todayCredit),
+      ),
+      const SizedBox(height: 6),
+      _buildDashboardLineItem(
+        title: "TDT",
+        value: _formatDashboardAmount(todayDebit),
+      ),
+      const SizedBox(height: 6),
+      _buildDashboardLineItem(
+        title: "DAC",
+        value: _formatDashboardAmount(dac),
+      ),
+      const SizedBox(height: 6),
+      _buildDashboardLineItem(
+        title: "MCT",
+        value: _formatDashboardAmount(monthCredit),
+      ),
+      const SizedBox(height: 6),
+      _buildDashboardLineItem(
+        title: "MDT",
+        value: _formatDashboardAmount(monthDebit),
+      ),
+      const SizedBox(height: 6),
+      _buildDashboardLineItem(
+        title: "MAC",
+        value: _formatDashboardAmount(mac),
+      ),
+    ],
+  ),
+  onTap: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FinancialReport(),
+      ),
+    );
+  },
+),
+         _buildDashboardCard(
+  title: "Logistics (DGM)",
+  value: dgmLoading
+      ? "Loading..."
+      : _formatDashboardAmount(monthTotalOrderAmount),
+  greenValueTab: true,
+  lines: [
+    dgmLoading
+        ? "Today Invoices: Loading..."
+        : "Today INV: $todayTotalOrders",
+    dgmLoading
+        ? "Today Amount: Loading..."
+        : "T.Amount: ${_formatDashboardAmount(
+            todayTotalOrderAmount,
+          )}",
+    dgmLoading
+        ? "Today Weight: Loading..."
+        : "T.Weight: ${_asDouble(
+            dgmTodaySummary['total_weight_field_kg'],
+          ).toStringAsFixed(3)} kg",
+    dgmLoading
+        ? "Month Invoices: Loading..."
+        : "Month INV: $monthTotalOrders",
+    dgmLoading
+        ? "Month Amount: Loading..."
+        : "M.Amount: ${_formatDashboardAmount(
+            monthTotalOrderAmount,
+          )}",
+    dgmLoading
+        ? "Weight: Loading..."
+        : "M.Weight: ${dgmWeightFieldKg.toStringAsFixed(3)} kg",
+    dgmLoading
+        ? "PO Amount: Loading..."
+        : "PO Amount: ${_formatDashboardAmount(
+            monthTotalParcelAmount,
+          )}",
+    dgmLoading
+        ? "Avg: Loading..."
+        : "Avg: ₹${monthAverage.toStringAsFixed(2)}/kg",
+  ],
+  onTap: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => daily_goods_movementt(),
+      ),
+    );
+  },
+),
+  _buildDashboardCard(
   title: "Employees",
   value: "Total $teamWiseTotalMembers",
+  greenValueTab: true,
   lines: const [],
   bottomTopSpacing: 0,
   bottom: Column(
@@ -4070,27 +4092,34 @@ Future<void> fetchTeamWiseAttendanceCount() async {
         icon: Icons.person_pin_circle_rounded,
       ),
       const SizedBox(height: 6),
+
       _buildEmployeeColumnItem(
         title: "Absent",
         value: "$teamWiseTotalAbsent",
         icon: Icons.cancel_rounded,
       ),
       const SizedBox(height: 6),
+
       _buildEmployeeColumnItem(
         title: "Half Day",
         value: "$teamWiseTotalHalfDay",
         icon: Icons.access_time_filled_rounded,
       ),
       const SizedBox(height: 6),
+
       _buildEmployeeColumnItem(
         title: "T Att. %",
-        value: "${todayAttendancePercentage.toStringAsFixed(2)}%",
+        value:
+            "${todayAttendancePercentage.toStringAsFixed(2)}%",
         icon: Icons.today_rounded,
+        isGreen: true,
       ),
       const SizedBox(height: 6),
+
       _buildEmployeeColumnItem(
         title: "M Att. %",
-        value: "${monthAttendancePercentage.toStringAsFixed(2)}%",
+        value:
+            "${monthAttendancePercentage.toStringAsFixed(2)}%",
         icon: Icons.calendar_month_rounded,
       ),
     ],
@@ -4253,89 +4282,102 @@ Future<void> fetchTeamWiseAttendanceCount() async {
               );
             },
           ),
-          _buildDashboardCard(
-            title: "Sales Return",
-            value: salesReturnLoading ? "Loading..." : "",
-            lines: const [],
-            bottomTopSpacing: 4,
-            bottom: salesReturnLoading
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    ),
-                  )
-                : Column(
-                    children: [
-                      _buildDashboardLineItem(
-                        title: "Today COD SR INV",
-                        value: "$todayCodReturnCount",
-                      ),
-                      const SizedBox(height: 6),
-                      _buildDashboardLineItem(
-                        title: "Amount",
-                        value: _formatDashboardAmount(
-                          todayCodReturnAmount,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      _buildDashboardLineItem(
-                        title: "Today Cash SR INV",
-                        value: "$todayCashReturnCount",
-                      ),
-                      const SizedBox(height: 6),
-                      _buildDashboardLineItem(
-                        title: "Amount",
-                        value: _formatDashboardAmount(
-                          todayCashReturnAmount,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      _buildDashboardLineItem(
-                        title: "M.COD SR INV",
-                        value: "$monthCodReturnCount",
-                      ),
-                      const SizedBox(height: 6),
-                      _buildDashboardLineItem(
-                        title: "Amount",
-                        value: _formatDashboardAmount(
-                          monthCodReturnAmount,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      _buildDashboardLineItem(
-                        title: "M.Cash SR INV",
-                        value: "$monthCashReturnCount",
-                      ),
-                      const SizedBox(height: 6),
-                      _buildDashboardLineItem(
-                        title: "Amount",
-                        value: _formatDashboardAmount(
-                          monthCashReturnAmount,
-                        ),
-                      ),
-                    ],
-                  ),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => GrvFamilyPaymentSummaryPage(),
-                ),
-              );
-            },
+         _buildDashboardCard(
+  title: "Sales Return",
+  value: salesReturnLoading ? "Loading..." : "",
+  lines: const [],
+  bottomTopSpacing: 4,
+  bottom: salesReturnLoading
+      ? const Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: CircularProgressIndicator(
+              color: Colors.white,
+              strokeWidth: 2,
+            ),
           ),
-          _buildDashboardCard(
-            title: "Inventory",
-            valueLabel: "WH",
-            value: dashboardInventoryLoading
-                ? "Loading..."
-                : _formatDashboardAmount(
-                    dashboardTotalSellingAmount,
-                  ),
+        )
+      : Column(
+          children: [
+            _buildDashboardLineItem(
+              title: "Today COD SR INV",
+              value: "$todayCodReturnCount",
+            ),
+            const SizedBox(height: 6),
+
+            _buildDashboardLineItem(
+              title: "Amount",
+              value: _formatDashboardAmount(
+                todayCodReturnAmount,
+              ),
+            ),
+            const SizedBox(height: 6),
+
+            _buildDashboardLineItem(
+              title: "Today Cash SR INV",
+              value: "$todayCashReturnCount",
+            ),
+            const SizedBox(height: 6),
+
+            _buildDashboardLineItem(
+              title: "Amount",
+              value: _formatDashboardAmount(
+                todayCashReturnAmount,
+              ),
+            ),
+            const SizedBox(height: 6),
+
+            _buildDashboardLineItem(
+              title: "M.COD SR INV",
+              value: "$monthCodReturnCount",
+            ),
+            const SizedBox(height: 6),
+
+            // GREEN - circled monthly COD amount
+            _buildDashboardLineItem(
+              title: "Amount",
+              value: _formatDashboardAmount(
+                monthCodReturnAmount,
+              ),
+              isGreen: true,
+            ),
+            const SizedBox(height: 6),
+
+            _buildDashboardLineItem(
+              title: "M.Cash SR INV",
+              value: "$monthCashReturnCount",
+            ),
+            const SizedBox(height: 6),
+
+            // GREEN - circled monthly Cash amount
+            _buildDashboardLineItem(
+              title: "Amount",
+              value: _formatDashboardAmount(
+                monthCashReturnAmount,
+              ),
+              isGreen: true,
+            ),
+          ],
+        ),
+  onTap: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            GrvFamilyPaymentSummaryPage(),
+      ),
+    );
+  },
+),
+        _buildDashboardCard(
+  title: "Inventory",
+  valueLabel: "WH",
+  value: dashboardInventoryLoading
+      ? "Loading..."
+      : _formatDashboardAmount(
+          dashboardTotalSellingAmount,
+        ),
+  greenValueTab: true,
             lines: [
               dashboardInventoryLoading
                   ? "Retail: Loading..."
@@ -4424,16 +4466,17 @@ Future<void> fetchTeamWiseAttendanceCount() async {
               );
             },
           ),
-          _buildDashboardCard(
-            title:
-                "CO EX Analysis\n(${DateFormat('MMM yyyy').format(DateTime.now())})",
-            value: marketingExpenseGrandTotal <= 0
-                ? "₹0.00"
-                : _formatDashboardAmount(
-                    marketingExpenseGrandTotal,
-                  ),
-            valueLabel: "Total",
-            lines: const [],
+         _buildDashboardCard(
+  title:
+      "CO EX Analysis\n(${DateFormat('MMM yyyy').format(DateTime.now())})",
+  value: marketingExpenseGrandTotal <= 0
+      ? "₹0.00"
+      : _formatDashboardAmount(
+          marketingExpenseGrandTotal,
+        ),
+  valueLabel: "Total",
+  greenValueTab: true,
+  lines: const [],
             bottomTopSpacing: 2,
             bottom: expenseTypeWiseTotals.isEmpty
                 ? Container(
@@ -4677,202 +4720,223 @@ Future<void> fetchTeamWiseAttendanceCount() async {
         : cleanName.toUpperCase();
   }
 
-  Widget _buildDashboardCard({
-    required String title,
-    required String value,
-    required List<dynamic> lines,
-    required VoidCallback onTap,
-    String valueLabel = "",
-    Widget? bottom,
-    bool enableSeeMore = false,
-    double bottomTopSpacing = 8,
-    double titleBottomSpacing = 8,
-  }) {
-    final bool isExpanded = dashboardCardExpanded[title] ?? false;
+ Widget _buildDashboardCard({
+  required String title,
+  required String value,
+  required List<dynamic> lines,
+  required VoidCallback onTap,
+  String valueLabel = "",
+  Widget? bottom,
+  bool enableSeeMore = false,
+  double bottomTopSpacing = 8,
+  double titleBottomSpacing = 8,
+  bool greenValueTab = false,
+}) {
+  final bool isExpanded = dashboardCardExpanded[title] ?? false;
 
-    final bool canExpand = enableSeeMore && lines.length > 1;
+  final bool canExpand = enableSeeMore && lines.length > 1;
 
-    final List<dynamic> displayLines = canExpand
-        ? isExpanded
-            ? lines
-            : lines.take(1).toList()
-        : lines;
+  final List<dynamic> displayLines = canExpand
+      ? isExpanded
+          ? lines
+          : lines.take(1).toList()
+      : lines;
 
-    Widget buildLine(dynamic line) {
-      if (line is Widget) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(
-              minHeight: 32,
-            ),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 6,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.14),
-              borderRadius: BorderRadius.circular(11),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.22),
-              ),
-            ),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: line,
-            ),
-          ),
-        );
-      }
-
-      final String text = line?.toString() ?? '';
-      final List<String> parts = text.split(':');
-
-      final String titleText =
-          parts.length > 1 ? parts.first.trim() : text.trim();
-
-      final String valueText =
-          parts.length > 1 ? parts.sublist(1).join(':').trim() : '';
-
+  Widget buildLine(dynamic line) {
+    if (line is Widget) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 6),
-        child: _buildDashboardLineItem(
-          title: titleText,
-          value: valueText,
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(
+            minHeight: 32,
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 6,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.14),
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.22),
+            ),
+          ),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: line,
+          ),
         ),
       );
     }
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: const LinearGradient(
-              colors: [
-                Color(0xFF56AFFF),
-                Color(0xFF2C74FF),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF2C74FF).withOpacity(0.28),
-                blurRadius: 12,
-                spreadRadius: 1,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(11),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          height: 1.25,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: titleBottomSpacing),
-                const SizedBox(height: 5),
-                if (value.isNotEmpty) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    height: 22,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          valueLabel.isNotEmpty
-                              ? "$valueLabel - $value"
-                              : value,
-                          maxLines: 1,
-                          softWrap: false,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                ],
-                Expanded(
-                  child: SingleChildScrollView(
-                    primary: false,
-                    physics: const ClampingScrollPhysics(),
-                    padding: const EdgeInsets.only(
-                      bottom: 4,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ...displayLines.map(buildLine),
-                        if (bottom != null) ...[
-                          if (bottomTopSpacing > 0)
-                            SizedBox(height: bottomTopSpacing),
-                          bottom,
-                        ],
-                        if (canExpand)
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: InkWell(
-                              onTap: () {
-                                setState(() {
-                                  dashboardCardExpanded[title] = !isExpanded;
-                                });
-                              },
-                              borderRadius: BorderRadius.circular(8),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                  vertical: 6,
-                                ),
-                                child: Text(
-                                  isExpanded ? "See less" : "See more",
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+    final String text = line?.toString() ?? '';
+    final List<String> parts = text.split(':');
+
+    final String titleText =
+        parts.length > 1 ? parts.first.trim() : text.trim();
+
+    final String valueText =
+        parts.length > 1 ? parts.sublist(1).join(':').trim() : '';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: _buildDashboardLineItem(
+        title: titleText,
+        value: valueText,
       ),
     );
   }
 
+  return Material(
+    color: Colors.transparent,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Ink(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xFF56AFFF),
+              Color(0xFF2C74FF),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF2C74FF).withOpacity(0.28),
+              blurRadius: 12,
+              spreadRadius: 1,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(11),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        height: 1.25,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+
+              SizedBox(height: titleBottomSpacing),
+
+              const SizedBox(height: 5),
+
+              if (value.isNotEmpty) ...[
+                Container(
+                  width: double.infinity,
+                  height: 32,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: greenValueTab ? 9 : 0,
+                  ),
+                  decoration: greenValueTab
+                      ? BoxDecoration(
+                          color: Colors.green,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.35),
+                          ),
+                        )
+                      : null,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        valueLabel.isNotEmpty
+                            ? "$valueLabel - $value"
+                            : value,
+                        maxLines: 1,
+                        softWrap: false,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 7),
+              ],
+
+              Expanded(
+                child: SingleChildScrollView(
+                  primary: false,
+                  physics: const ClampingScrollPhysics(),
+                  padding: const EdgeInsets.only(
+                    bottom: 4,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ...displayLines.map(buildLine),
+
+                      if (bottom != null) ...[
+                        if (bottomTopSpacing > 0)
+                          SizedBox(height: bottomTopSpacing),
+                        bottom,
+                      ],
+
+                      if (canExpand)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                dashboardCardExpanded[title] =
+                                    !isExpanded;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 6,
+                              ),
+                              child: Text(
+                                isExpanded
+                                    ? "See less"
+                                    : "See more",
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
   Widget _buildDashboardMiniChip({
     required String title,
     required String value,
@@ -8174,9 +8238,9 @@ Future<void> fetchTeamWiseAttendanceCount() async {
                     'Daily Goods Movement'
                   ]),
                   _buildDropdownTile(context, 'Orders', [
-                    'New Orders',
+                    // 'New Orders',
                     'Orders List',
-                    'Invoice Created',
+                    'Waiting For Approval',
                     'Invoice Approved',
                     'Pre Booked',
                     'Waiting For Confirmation',
