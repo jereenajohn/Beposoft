@@ -2528,7 +2528,11 @@ void dispose() {
                   'Proforma Invoice List',
                 ]),
                 _buildDropdownTile(
-                    context, 'Orders', ['New Orders', 'Orders List']),
+                    context, 'Orders', 
+                    [
+                      // 'New Orders',
+                     'Orders List'
+                     ]),
                 _buildDropdownTile(context, 'Approve BDO DSR', [
                   'Add Team',
                   'Add Team Members',

@@ -1,24 +1,31 @@
 import 'dart:convert';
+import 'dart:async';
+
 import 'package:beposoft/Sales%20Directors/SD_dashboard.dart';
 import 'package:beposoft/loginpage.dart';
-import 'package:beposoft/pages/ACCOUNTS/csodashboard.dart';
 import 'package:beposoft/pages/ACCOUNTS/dashboard.dart';
 import 'package:beposoft/pages/ACCOUNTS/dorwer.dart';
-import 'package:beposoft/pages/ACCOUNTS/performa_cart.dart';
-import 'package:beposoft/pages/ADMIN/admin_dashboard.dart';
 import 'package:beposoft/pages/ADMIN/ceo_dashboard.dart';
 import 'package:beposoft/pages/BDM/bdm_dshboard.dart';
 import 'package:beposoft/pages/BDO/bdo_dashboard.dart';
+import 'package:beposoft/pages/MARKETING/marketing_dashboard.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_admin.dart';
 import 'package:beposoft/pages/WAREHOUSE/warehouse_dashboard.dart';
+import 'package:beposoft/pages/ACCOUNTS/performa_cart.dart';
+import 'package:beposoft/pages/ACCOUNTS/csodashboard.dart';
 import 'package:beposoft/pages/api.dart';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:async'; // Import for Timer
 
 class CreatePerformaProduct_List extends StatefulWidget {
-  const CreatePerformaProduct_List({super.key});
+  final int? proformaOrderId;
+
+  const CreatePerformaProduct_List({
+    super.key,
+    this.proformaOrderId,
+  });
 
   @override
   State<CreatePerformaProduct_List> createState() =>
@@ -28,125 +35,242 @@ class CreatePerformaProduct_List extends StatefulWidget {
 class _CreatePerformaProduct_ListState
     extends State<CreatePerformaProduct_List> {
   drower d = drower();
-  Timer? timer; // Declare the timer variable
-  Widget _buildDropdownTile(
-      BuildContext context, String title, List<String> options) {
-    return ExpansionTile(
-      title: Text(title),
-      children: options.map((option) {
-        return ListTile(
-          title: Text(option),
-          onTap: () {
-            Navigator.pop(context);
-            d.navigateToSelectedPage(
-                context, option); // Navigate to selected page
-          },
-        );
-      }).toList(),
-    );
-  }
 
-  var mainid;
-  var varid;
-  Map<int, bool> expandedProducts = {}; // Track expanded state for products
-  List<Map<String, dynamic>> fam = [];
   List<Map<String, dynamic>> products = [];
-  List<bool> _checkboxValues = [];
   List<Map<String, dynamic>> filteredProducts = [];
-  List<Map<String, dynamic>> variant = [];
-  int? selectedwarehouseId; // Variable to store the selected department's ID
-  String? selectedwarehouseName;
-
   List<Map<String, dynamic>> Warehouses = [];
 
-  TextEditingController searchController =
-      TextEditingController(); // Search controller
+  Map<int, bool> expandedProducts = {};
+
+  String? dep;
+  var warehouse;
+
+  String? selectedCategoryId;
+
+  List<String> categories = ["All Categories"];
+  String selectedCategory = "All Categories";
+
+  int currentPage = 1;
+  int totalProductCount = 0;
+
+  String? nextPageUrl;
+  String? previousPageUrl;
+
+  bool isProductLoading = false;
+
+  String searchQuery = "";
+
+  Timer? _searchDebounce;
+
+  TextEditingController searchController = TextEditingController();
+
+  bool isDefaultWarehouse = true;
+  String? defaultWarehouse;
 
   @override
   void initState() {
     super.initState();
+
     initdata();
     getwarehouse();
   }
 
-  var warehouse;
-  Future<void> initdata() async {
-    final dep = await getdepFromPrefs();
-    warehouse = await getwarehouseFromPrefs();
-
-    // Fetch product list based on warehouse
-    await fetchProductListid(warehouse);
-
-    // Check if the widget is still mounted before calling setState
-    if (mounted) {
-      setState(() {
-        filteredProducts = products;
-      });
+  Future<void> _navigateBack() async {
+    if (widget.proformaOrderId != null) {
+      if (mounted) {
+        Navigator.of(context).pop(false);
+      }
+      return;
     }
-  }
 
-  Future<void> _getAndShowVariants(int productId) async {
-    await getvariant(
-        productId, "type"); // Call your existing getvariant function
-    setState(() {
-      expandedProducts[productId] = !(expandedProducts[productId] ?? false);
-    });
-  }
+    final dep = await getdepFromPrefs();
 
-  void _filterProducts(String query) {
-    if (query.isEmpty) {
-      setState(() {
-        filteredProducts = products; // Show all products if search is cleared
-      });
+    if (!mounted) return;
+
+    if (dep == "BDO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => bdo_dashbord(),
+        ),
+      );
+    } else if (dep == "Marketing") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => marketing_dashboard(),
+        ),
+      );
+    } else if (dep == "SD") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SdDashboard(),
+        ),
+      );
+    } else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ceo_dashboard(),
+        ),
+      );
+    } else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => cso_dashboard(),
+        ),
+      );
+    } else if (dep == "BDM") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => bdm_dashbord(),
+        ),
+      );
+    } else if (dep == "warehouse") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => WarehouseDashboard(),
+        ),
+      );
+    } else if (dep == "CEO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ceo_dashboard(),
+        ),
+      );
+    } else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ceo_dashboard(),
+        ),
+      );
+    } else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => cso_dashboard(),
+        ),
+      );
+    } else if (dep == "Warehouse Admin") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => WarehouseAdmin(),
+        ),
+      );
+    } else if (dep == "Marketing") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => marketing_dashboard(),
+        ),
+      );
     } else {
-      setState(() {
-        filteredProducts = products
-            .where((product) =>
-                product['name'].toLowerCase().contains(query.toLowerCase()))
-            .toList(); // Filter products by name (case-insensitive)
-      });
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => dashboard(),
+        ),
+      );
     }
   }
 
   Future<String?> getTokenFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
+
     return prefs.getString('token');
   }
 
   Future<String?> getdepFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
+
     return prefs.getString('department');
   }
 
   Future<String?> getwarehouseFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
+
     int? warehouseId = prefs.getInt('warehouse');
 
-    // Check if warehouseId is null before converting to String
     return warehouseId?.toString();
+  }
+
+  bool get canViewStock {
+    final department = dep?.trim().toUpperCase();
+
+    return department == "CEO" ||
+        department == "COO" ||
+        department == "ADMIN";
+  }
+
+  // ============================================================
+  // LOCKED INVOICE PERMISSION
+  // Only CEO, COO and Accounts / Accounting can see locked invoices
+  // ============================================================
+
+  bool get canViewLockedInvoices {
+    final String department = dep?.trim().toUpperCase() ?? '';
+
+    return department == "CEO" ||
+        department == "COO" ||
+        department == "ADMIN" ||
+        department == "ACCOUNTS / ACCOUNTING";
+  }
+
+  Future<void> initdata() async {
+    dep = await getdepFromPrefs();
+
+    defaultWarehouse = await getwarehouseFromPrefs();
+
+    warehouse = defaultWarehouse;
+
+    await fetchProductListid(warehouse);
+
+    if (!mounted) return;
+
+    setState(() {
+      filteredProducts = products;
+      isDefaultWarehouse = true;
+    });
   }
 
   Future<void> getwarehouse() async {
     final token = await getTokenFromPrefs();
 
     try {
-      final response =
-          await http.get(Uri.parse('$api/api/warehouse/add/'), headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      });
-      List<Map<String, dynamic>> warehouselist = [];
+      final response = await http.get(
+        Uri.parse(
+          '$api/api/warehouse/add/',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
 
       if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
+        final parsed = jsonDecode(
+          response.body,
+        );
 
-        for (var productData in parsed) {
+        List<Map<String, dynamic>> warehouselist = [];
+
+        for (var w in parsed) {
           warehouselist.add({
-            'id': productData['id'],
-            'name': productData['name'],
-            'location': productData['location']
+            'id': w['id'],
+            'name': w['name'],
+            'location': w['location'],
           });
         }
+
+        if (!mounted) return;
+
         setState(() {
           Warehouses = warehouselist;
         });
@@ -154,325 +278,174 @@ class _CreatePerformaProduct_ListState
     } catch (e) {}
   }
 
-//    Future<void> fetchProductList() async {
-//   final token = await getTokenFromPrefs();
+  Future<void> fetchProductListid(
+    var warehouse, {
+    int page = 1,
+    String search = "",
+  }) async {
+    final token = await getTokenFromPrefs();
 
-//   try {
-//     final response = await http.get(
-//       Uri.parse("$api/api/products/"),
-//       headers: {
-//         'Content-Type': 'application/json',
-//         'Authorization': 'Bearer $token',
-//       },
-//     );
+    dep = await getdepFromPrefs();
 
-//     if (response.statusCode == 200) {
-//       final parsed = jsonDecode(response.body);
-//       var productsData = parsed['data'];
-//       List<Map<String, dynamic>> productList = [];
+    if (mounted) {
+      setState(() {
+        isProductLoading = true;
+      });
+    }
 
-//
+    try {
+      final uri = Uri.parse(
+        "$api/api/warehouse/products/$warehouse/get/",
+      ).replace(
+        queryParameters: {
+          'page': page.toString(),
+          if (search.trim().isNotEmpty) 'search': search.trim(),
+        },
+      );
 
-//       for (var productData in productsData) {
-//         List<String> familyNames = (productData['family'] as List<dynamic>?)?.map((id) => id as int).map<String>((id) => fam.firstWhere(
-//             (famItem) => famItem['id'] == id,
-//             orElse: () => {'name': 'Unknown'})['name'] as String).toList() ?? [];
-//         var imgurl = '$api/${productData['image']}';
-//
-//         // Check if the product type is 'variant'
-//         if (productData['type'] == "variant") {
-//
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
 
-//           for (var variant in productData['variant_products']) {
-//
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(
+          response.body,
+        );
 
-//             if (variant['is_variant'] == true && variant['sizes'] != null) {
+        totalProductCount = parsed['count'] ?? 0;
 
-//                productList.add({
-//               'mainid':productData['id'],
-//               'id': variant['id'],
-//               'is_vaiant':variant['is_variant'],
-//               'name': variant['name'],
-//               'color': variant['color'],
-//               'stock': variant['stock'],
-//               'created_user': variant['created_user'],
-//               'family': familyNames,
-//               'image': variant['variant_images'].isNotEmpty
-//                   ? '${variant['variant_images'][0]['image']}'
-//                   : imgurl, // Use variant image or fallback to main image
-//                'sizes': variant['sizes'],
-//             });
+        nextPageUrl = parsed['next'];
 
-//             }
-//             // Process each variant product
-//             else{
-//             productList.add({
-//               'mainid':productData['id'],
-//               'type':productData['type'],
-//               'id': variant['id'],
-//               'name': variant['name'],
-//               'color': variant['color'],
-//               'is_vaiant':variant['is_variant'],
-//               'stock': variant['stock'],
-//               'created_user': variant['created_user'],
-//               'family': familyNames,
-//               'image': variant['variant_images'].isNotEmpty
-//                   ? '${variant['variant_images'][0]['image']}'
-//                   : imgurl, // Use variant image or fallback to main image
-//             });}
-//           }
-//         } else {
-//           // Process non-variant products
-//           productList.add({
-//             'id': productData['id'],
-//             'name': productData['name'],
-//             'hsn_code': productData['hsn_code'],
-//             'type': productData['type'],
-//             'unit': productData['unit'],
-//             'purchase_rate': productData['purchase_rate'],
-//             'tax': productData['tax'],
-//             'exclude_price': productData['exclude_price'],
-//             'selling_price': productData['selling_price'],
-//             'stock': productData['stock'],
-//             'created_user': productData['created_user'],
-//             'family': familyNames,
-//             'image': imgurl,
-//           });
-//         }
-//       }
+        previousPageUrl = parsed['previous'];
 
-//       setState(() {
-//         products = productList;
-//
-//         filteredProducts = products;
-//       });
-//     }
-//   } catch (error) {
-//
-//   }
-// }
-  var dep;
-  void handleAddToCart2(BuildContext context, varid, quantity) async {
-    final result = await addtocart2(varid, quantity);
+        currentPage = page;
 
-    if (!mounted) return; // Prevent invalid context error
+        final List<dynamic> productsData =
+            parsed['results']['data'] ?? [];
 
-    if (result == "success") {
-      showCustomPopup("Success", "Product added to cart successfully!");
-    } else if (result == "failed") {
-      showCustomPopup("Success", "Product already in cart!");
-    } else {
-      showCustomPopup("Success", "Failed to add Product!");
+        List<Map<String, dynamic>> productList = [];
+
+        Set<String> categorySet = {};
+
+        for (final p in productsData) {
+          if ((p['approval_status'] ?? '') != 'Approved') {
+            continue;
+          }
+
+          if (p['product_category_name'] != null &&
+              p['product_category_name']
+                  .toString()
+                  .trim()
+                  .isNotEmpty) {
+            categorySet.add(
+              p['product_category_name'],
+            );
+          }
+
+          final product = Map<String, dynamic>.from(p);
+
+          final approvedVariants =
+              (product['variantIDs'] as List<dynamic>? ?? [])
+                  .where(
+                    (variant) =>
+                        (variant['approval_status'] ?? '') ==
+                        'Approved',
+                  )
+                  .map(
+                    (variant) => Map<String, dynamic>.from(
+                      variant,
+                    ),
+                  )
+                  .toList();
+
+          product['variantIDs'] = approvedVariants;
+
+          productList.add(
+            product,
+          );
+        }
+
+        if (!mounted) return;
+
+        setState(() {
+          products = productList;
+
+          categories = [
+            "All Categories",
+            ...categorySet,
+          ];
+
+          if (!categories.contains(
+            selectedCategory,
+          )) {
+            selectedCategory = "All Categories";
+          }
+
+          filteredProducts = products.where((product) {
+            if (selectedCategory == "All Categories") {
+              return true;
+            }
+
+            return product['product_category_name'] ==
+                selectedCategory;
+          }).toList();
+        });
+      }
+    } catch (e) {
+    } finally {
+      if (mounted) {
+        setState(() {
+          isProductLoading = false;
+        });
+      }
     }
   }
 
-  Future<void> fetchProductList() async {
-    final token = await getTokenFromPrefs();
+  // ============================================================
+  // LOCKED INVOICE API
+  // Same API used in normal order_products page
+  // ============================================================
 
-    dep = await getdepFromPrefs();
-
-    try {
-      final response = await http.get(
-        Uri.parse("$api/api/products/"),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-        var productsData = parsed['data'];
-        List<Map<String, dynamic>> productList = [];
-
-        for (var productData in productsData) {
-          // Ensure that 'family', 'single_products', and 'variant_products' are non-null and lists
-          List<String> familyNames = (productData['family'] as List<dynamic>?)
-                  ?.map((id) => id as int)
-                  .map<String>((id) => fam.firstWhere(
-                      (famItem) => famItem['id'] == id,
-                      orElse: () => {'name': 'Unknown'})['name'] as String)
-                  .toList() ??
-              [];
-
-          // Add the product data to the list
-          productList.add({
-            'id': productData['id'],
-            'variantIDs': productData['variantIDs'],
-            'name': productData['name'],
-            'hsn_code': productData['hsn_code'],
-            'type': productData['type'],
-            'unit': productData['unit'],
-            'purchase_rate': productData['purchase_rate'],
-            'tax': productData['tax'],
-            'exclude_price': productData['exclude_price'],
-            'selling_price': productData['selling_price'],
-            'stock': productData['stock'],
-            'created_user': productData['created_user'],
-            'family': familyNames, // Add family names here
-            'image': productData['image'], // Main product image
-            // Don't process single_products or variant_products
-          });
-        }
-
-        setState(() {
-          products = productList;
-          filteredProducts = products;
-        });
-      }
-    } catch (error) {}
-  }
-
-  Future<void> fetchProductListid(var warehouse) async {
-    final token = await getTokenFromPrefs();
-
-    dep = await getdepFromPrefs();
-
-    try {
-      final response = await http.get(
-        Uri.parse("$api/api/warehouse/products/$warehouse/"),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-        var productsData = parsed['data'];
-        List<Map<String, dynamic>> productList = [];
-
-        for (var productData in productsData) {
-          if (productData['approval_status'] == "Approved") {
-            // Ensure that 'family', 'single_products', and 'variant_products' are non-null and lists
-            List<String> familyNames = (productData['family'] as List<dynamic>?)
-                    ?.map((id) => id as int)
-                    .map<String>((id) => fam.firstWhere(
-                        (famItem) => famItem['id'] == id,
-                        orElse: () => {'name': 'Unknown'})['name'] as String)
-                    .toList() ??
-                [];
-
-            // Add the product data to the list
-            productList.add({
-              'id': productData['id'],
-              'variantIDs': productData['variantIDs'],
-              'name': productData['name'],
-              'hsn_code': productData['hsn_code'],
-              'type': productData['type'],
-              'unit': productData['unit'],
-              'purchase_rate': productData['purchase_rate'],
-              'tax': productData['tax'],
-              'exclude_price': productData['exclude_price'],
-              'selling_price': productData['selling_price'],
-              'stock': productData['stock'],
-              'locked_stock': productData['locked_stock'],
-              'created_user': productData['created_user'],
-              'family': familyNames, // Add family names here
-              'image': productData['image'], // Main product image
-              // Don't process single_products or variant_products
-            });
-          }
-        }
-
-        setState(() {
-          products = productList;
-          filteredProducts = products;
-        });
-      }
-    } catch (error) {}
-  }
-
-  void logout() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.remove('userId');
-    await prefs.remove('token');
-
-    // Use a post-frame callback to show the SnackBar after the current frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (ScaffoldMessenger.of(context).mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Logged out successfully'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    });
-
-    // Wait for the SnackBar to disappear before navigating
-    await Future.delayed(Duration(seconds: 2));
-
-    // Navigate to the HomePage after the snackbar is shown
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => login()),
-    );
-  }
-
-  Future<void> getvariant(int id, var type) async {
+  Future<List<Map<String, dynamic>>> showlockedstockinvoice(
+    int productId,
+  ) async {
     try {
       final token = await getTokenFromPrefs();
-      List<Map<String, dynamic>> productList = [];
 
-      var response = await http.get(
-        Uri.parse('$api/api/products/$id/variants/'),
+      final response = await http.get(
+        Uri.parse(
+          '$api/api/product/$productId/locked-invoices/',
+        ),
         headers: {
+          "Content-Type": "application/json",
           'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
         },
       );
 
       if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-        var productsData = parsed['products'];
+        final data = jsonDecode(
+          response.body,
+        );
 
-        for (var product in productsData) {
-          if (product['is_variant'] == false) {
-            // Add product details for non-variant product
-            productList.add({
-              'name': product['name'],
-              'color': product['color'],
-              'stock': product['stock'],
-            });
-          } else {
-            // Add product details including the first image and sizes for variant product
-            String firstImageUrl = product['variant_images'].isNotEmpty
-                ? product['variant_images'][0]['image']
-                : '';
-            var imgurl = "$firstImageUrl";
-
-            // Extract sizes as a list of maps with attribute and stock
-            List<Map<String, dynamic>> sizesList =
-                product['sizes'].map<Map<String, dynamic>>((size) {
-              return {
-                'attribute': size['attribute'],
-                'stock': size['stock'],
-              };
-            }).toList();
-
-            productList.add({
-              'name': product['name'],
-              'color': product['color'],
-              'image': imgurl,
-              'is_variant': product['is_variant'],
-              'sizes': sizesList, // Add sizes list
-            });
-          }
-        }
-
-        setState(() {
-          variant = productList;
-        });
+        return List<Map<String, dynamic>>.from(
+          data['locked_invoices'] ?? [],
+        );
       }
-    } catch (error) {}
+    } catch (e) {}
+
+    return [];
   }
 
-  void showCustomPopup(String title, String message) {
-    if (!mounted) return;
-
+  void showCustomPopup(
+    String title,
+    String message,
+  ) {
     showDialog(
-      context: context, // 👈 Use context directly
+      context: context,
       builder: (BuildContext ctx) {
         return AlertDialog(
           title: Text(title),
@@ -482,7 +455,9 @@ class _CreatePerformaProduct_ListState
               onPressed: () {
                 Navigator.of(ctx).pop();
               },
-              child: Text("OK"),
+              child: const Text(
+                "OK",
+              ),
             ),
           ],
         );
@@ -490,25 +465,112 @@ class _CreatePerformaProduct_ListState
     );
   }
 
-  void handleAddToCart(BuildContext context, varid, quantity) async {
-    final result = await addtocart(varid, quantity);
+  Future<String> addtocart(
+    varid,
+    quantity,
+  ) async {
+    final token = await getTokenFromPrefs();
 
-    if (!mounted) return; // Prevent invalid context error
+    try {
+      final response = await http.post(
+        Uri.parse(
+          '$api/api/cart/product/',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'product': varid,
+          'quantity': quantity,
+        }),
+      );
 
-    if (result == "success") {
-      showCustomPopup("Success", "Product added to cart successfully!");
-    } else if (result == "failed") {
-      showCustomPopup("Success", "Product already in cart!");
-    } else {
-      showCustomPopup("Success", "Failed to add Product!");
+      if (response.statusCode == 201) {
+        return "success";
+      }
+
+      if (response.statusCode == 400) {
+        return "failed";
+      }
+
+      return "error";
+    } catch (e) {
+      return "exception";
     }
   }
 
-  Future<String> addtocart(varid, quantity) async {
+  void handleAddToCart(
+    BuildContext context,
+    varid,
+    quantity,
+  ) async {
+    final result = await addtocart(
+      varid,
+      quantity,
+    );
+
+    if (!mounted) return;
+
+    if (result == "success") {
+      showCustomPopup(
+        "Success",
+        "Product added to cart successfully!",
+      );
+    } else if (result == "failed") {
+      showCustomPopup(
+        "Notice",
+        "Product already in cart!",
+      );
+    } else {
+      showCustomPopup(
+        "Error",
+        "Failed to add Product!",
+      );
+    }
+  }
+
+  void handleAddToCart2(
+    BuildContext context,
+    dynamic varid,
+    dynamic quantity,
+  ) async {
+    final result = await addtocart2(
+      varid,
+      quantity,
+    );
+
+    if (!mounted) return;
+
+    if (result == "success") {
+      showCustomPopup(
+        "Success",
+        "Product added to cart successfully!",
+      );
+    } else if (result == "failed") {
+      showCustomPopup(
+        "Notice",
+        "Product already in cart!",
+      );
+    } else {
+      showCustomPopup(
+        "Error",
+        "Failed to add Product!",
+      );
+    }
+  }
+
+  Future<String> addtocart2(
+    varid,
+    quantity,
+  ) async {
     final token = await getTokenFromPrefs();
+
     try {
       final response = await http.post(
-        Uri.parse('$api/api/cart/product/'),
+        Uri.parse(
+          '$api/api/cart/product/',
+        ),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -531,843 +593,1707 @@ class _CreatePerformaProduct_ListState
     }
   }
 
-  Future<String> addtocart2(mainid, quantity) async {
-    final token = await getTokenFromPrefs();
+  Map<String, dynamic>? _findProductDataById(dynamic productId) {
+    final String targetId = productId?.toString() ?? '';
+
+    for (final Map<String, dynamic> product in products) {
+      if (product['id']?.toString() == targetId) {
+        return product;
+      }
+
+      final List<dynamic> variants =
+          product['variantIDs'] as List<dynamic>? ?? [];
+
+      for (final dynamic variantData in variants) {
+        final Map<String, dynamic> variant =
+            Map<String, dynamic>.from(variantData);
+
+        if (variant['id']?.toString() == targetId) {
+          return variant;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  double _readItemNumber(
+    Map<String, dynamic>? item,
+    List<String> keys,
+  ) {
+    if (item == null) return 0.0;
+
+    for (final String key in keys) {
+      final dynamic value = item[key];
+
+      if (value == null) continue;
+
+      if (value is num) {
+        return value.toDouble();
+      }
+
+      final double? parsed =
+          double.tryParse(value.toString());
+
+      if (parsed != null) {
+        return parsed;
+      }
+    }
+
+    return 0.0;
+  }
+
+  Future<bool> _addProductDirectlyToProforma({
+    required dynamic productId,
+    required int quantity,
+  }) async {
+    final int? orderId = widget.proformaOrderId;
+
+    if (orderId == null || orderId <= 0) {
+      return false;
+    }
+
+    final String? token = await getTokenFromPrefs();
+
+    if (token == null || token.trim().isEmpty) {
+      if (mounted) {
+        showCustomPopup(
+          "Error",
+          "Authentication token not found.",
+        );
+      }
+      return false;
+    }
+
+    final Map<String, dynamic>? item =
+        _findProductDataById(productId);
+
+    final double rate = _readItemNumber(
+      item,
+      [
+        'rate',
+        'selling_price',
+        'price',
+        'actual_price',
+        'mrp',
+      ],
+    );
+
+    final double discount = _readItemNumber(
+      item,
+      ['discount'],
+    );
+
+    final double tax = _readItemNumber(
+      item,
+      ['tax'],
+    );
+
+    final String rawDescription =
+        item?['description']?.toString().trim() ?? '';
+
+    final String description =
+        rawDescription.isNotEmpty
+            ? rawDescription
+            : 'Additional product';
+
     try {
-      final response = await http.post(
-        Uri.parse('$api/api/cart/product/'),
+      final http.Response response = await http.post(
+        Uri.parse(
+          '$api/api/perfoma/order/$orderId/item/add/',
+        ),
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
-          'product': mainid,
+          'product': productId,
           'quantity': quantity,
+          'rate': rate,
+          'discount': discount,
+          'tax': tax,
+          'description': description,
         }),
       );
 
-      if (response.statusCode == 201) {
-        return "success";
-      } else if (response.statusCode == 400) {
-        return "failed";
-      } else {
-        return "error";
+      debugPrint(
+        "ADD PRODUCT STATUS: ${response.statusCode}",
+      );
+
+      debugPrint(
+        "ADD PRODUCT RESPONSE: ${response.body}",
+      );
+
+      debugPrint(
+        "ADD PRODUCT PAYLOAD: ${jsonEncode({
+          'product': productId,
+          'quantity': quantity,
+          'rate': rate,
+          'discount': discount,
+          'tax': tax,
+          'description': description,
+        })}",
+      );
+
+      if (!mounted) return false;
+
+      if (response.statusCode == 200 ||
+          response.statusCode == 201) {
+        return true;
       }
-    } catch (e) {
-      return "exception";
-    }
-  }
 
-  void showSizeDialog2(BuildContext context, List variants) {
-    // Filter only approved variants
-    List approvedVariants =
-        variants.where((v) => v['approval_status'] == 'Approved').toList();
+      String message = "Failed to add Product!";
 
-    ValueNotifier<Map<String, dynamic>?> selectedProductNotifier =
-        ValueNotifier(null);
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (BuildContext context) {
-        TextEditingController quantityController = TextEditingController();
-
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Padding(
-            padding: EdgeInsets.all(20),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    "Select Variant",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 20),
-
-                  // Display the selected product as the "Selected Option"
-                  ValueListenableBuilder<Map<String, dynamic>?>(
-                    valueListenable: selectedProductNotifier,
-                    builder: (context, selectedProduct, child) {
-                      if (selectedProduct != null) {
-                        return Column(
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                border:
-                                    Border.all(color: Colors.blue, width: 2),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              padding: EdgeInsets.all(10),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  selectedProduct['image'] != null &&
-                                          selectedProduct['image'].isNotEmpty
-                                      ? Image.network(
-                                          '$api${selectedProduct['image']}',
-                                          width: 50,
-                                          height: 50,
-                                          fit: BoxFit.cover,
-                                        )
-                                      : Container(
-                                          width: 50,
-                                          height: 50,
-                                          color: Colors.grey[300],
-                                          child: Icon(Icons.image_not_supported,
-                                              color: Colors.grey),
-                                        ),
-                                  SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          selectedProduct['name'],
-                                          style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold),
-                                        ),
-                                        Text(
-                                            "Stock: ${selectedProduct['stock']}"),
-                                        Text(
-                                            "Price: ${selectedProduct['selling_price']}"),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            SizedBox(height: 20),
-                          ],
-                        );
-                      } else {
-                        return SizedBox.shrink();
-                      }
-                    },
-                  ),
-
-                  // Display the approved variants
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: NeverScrollableScrollPhysics(),
-                    itemCount: approvedVariants.length,
-                    itemBuilder: (context, index) {
-                      var variant = approvedVariants[index];
-                      return ListTile(
-                        leading: variant['image'] != null &&
-                                variant['image'].isNotEmpty
-                            ? Image.network(
-                                '$api${variant['image']}',
-                                width: 50,
-                                height: 50,
-                                fit: BoxFit.cover,
-                              )
-                            : Container(
-                                width: 50,
-                                height: 50,
-                                color: Colors.grey[300],
-                                child: Icon(Icons.image_not_supported,
-                                    color: Colors.grey),
-                              ),
-                        title: Text(variant['name']),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("Stock: ${variant['stock']}"),
-                            Text("Locked Stock: ${variant['locked_stock']}",
-                                style: TextStyle(
-                                    color: Colors.grey,
-                                    fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                        trailing: selectedProductNotifier.value == variant
-                            ? Icon(Icons.check_circle, color: Colors.green)
-                            : null,
-                        onTap: () {
-                          selectedProductNotifier.value = variant;
-                        },
-                      );
-                    },
-                  ),
-
-                  SizedBox(height: 20),
-
-                  // Quantity input
-                  TextField(
-                    controller: quantityController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: "Enter Quantity",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-
-                  SizedBox(height: 20),
-
-                  // Add to Cart button
-                  SizedBox(
-                    height: 50,
-                    width: 300,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        if (selectedProductNotifier.value == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                                content:
-                                    Text("Please select a product first!")),
-                          );
-                          return;
-                        }
-
-                        var selectedProduct = selectedProductNotifier.value;
-                        int quantity =
-                            int.tryParse(quantityController.text) ?? 1;
-
-                        if (quantity >
-                            (selectedProduct!['stock'] -
-                                selectedProduct['locked_stock'])) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                                content:
-                                    Text("Quantity exceeds available stock!")),
-                          );
-                          return;
-                        }
-                        if (selectedProduct!['stock'] == 0) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("No stock Available")),
-                          );
-                          return;
-                        }
-
-                        handleAddToCart(
-                            context, selectedProduct['id'], quantity);
-
-                        Navigator.of(context).pop();
-                      },
-                      child: Text("ADD TO CART",
-                          style: TextStyle(color: Colors.white)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+      try {
+        final dynamic decoded = jsonDecode(
+          response.body,
         );
-      },
-    );
-  }
 
-  void showSizeDialog3(BuildContext context, mainid, stock, lockedstock) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (BuildContext context) {
-        String selectedColor = '';
-        String selectedSize = '';
-        int? selectedSizeId;
-        int? selectedStock; // Variable to store the selected stock
-        TextEditingController quantityController =
-            TextEditingController(); // Controller for quantity input
-
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setState) {
-            return Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: SingleChildScrollView(
-                  // Make the content scrollable if needed
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      if (stock !=
-                          null) // Show stock info only if a size is selected
-                        Container(
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Text(
-                              'Available Stock: $stock',
-                              style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black),
-                            ),
-                          ),
-                        ),
-                      if (lockedstock !=
-                          null) // Show locked stock info only if a size is selected
-                        Container(
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Text(
-                              'Locked Stock: $lockedstock',
-                              style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color:
-                                      const Color.fromARGB(255, 128, 128, 128)),
-                            ),
-                          ),
-                        ),
-                      SizedBox(height: 10),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: SizedBox(
-                          width: 300, // Set the desired width here
-                          height: 40,
-                          child: TextField(
-                            controller: quantityController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: 'Enter Quantity',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        height: 50,
-                        width: 300,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            // Get the entered quantity value
-                            int quantity =
-                                int.tryParse(quantityController.text) ?? 1;
-
-                            // Add logic for adding to cart, using selectedSizeId and quantity
-
-                            if (quantity > (stock - lockedstock)) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                    content: Text(
-                                        "Quantity exceeds available stock!")),
-                              );
-                              return;
-                            }
-                            if (stock == 0) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text("No stock Available")),
-                              );
-                              return;
-                            }
-                            // Call add to cart function
-                            handleAddToCart2(context, mainid, quantity);
-
-                            // Close the dialog after adding to cart
-                            Navigator.of(context).pop();
-                          },
-                          child: Text("ADD TO CART",
-                              style: TextStyle(color: Colors.white)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  List<Map<String, dynamic>> extractSizeList(List<dynamic> sizes) {
-    return sizes.map((size) {
-      return {
-        'id': size['id'],
-        'attribute': size['attribute'],
-        'stock': size['stock'],
-      };
-    }).toList();
-  }
-
-  List<String> extractStringList(List<dynamic> list, String key) {
-    if (list is List) {
-      return list.map((item) {
-        if (item is Map && item.containsKey(key)) {
-          return item[key]?.toString() ?? '';
+        if (decoded is Map) {
+          message =
+              decoded['message']?.toString() ??
+              decoded['detail']?.toString() ??
+              decoded['error']?.toString() ??
+              message;
         }
-        return '';
-      }).toList();
+      } catch (_) {}
+
+      showCustomPopup(
+        "Error",
+        message,
+      );
+
+      return false;
+    } catch (_) {
+      if (mounted) {
+        showCustomPopup(
+          "Error",
+          "Failed to add Product!",
+        );
+      }
+
+      return false;
     }
-    return [];
   }
 
-  Future<void> _navigateBack() async {
-    final dep = await getdepFromPrefs();
-    if (dep == "BDO") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) =>
-                bdo_dashbord()), // Replace AnotherPage with your target page
+  // ============================================================
+  // QUANTITY DIALOG
+  // Added locked invoice fetching without changing cart logic
+  // ============================================================
+
+  Future<void> showSizeDialog3(
+    BuildContext context,
+    dynamic mainid,
+    dynamic availableStockValue,
+    dynamic stockValue,
+  ) async {
+    final num stock =
+        stockValue is num
+            ? stockValue
+            : num.tryParse(
+                  stockValue?.toString() ?? "0",
+                ) ??
+                0;
+
+    final num rawAvailableStock =
+        availableStockValue is num
+            ? availableStockValue
+            : num.tryParse(
+                  availableStockValue?.toString() ?? "0",
+                ) ??
+                0;
+
+    final num availableStock =
+        stock <= 0 || rawAvailableStock <= 0
+            ? 0
+            : rawAvailableStock;
+
+    // Locked invoices are fetched only for permitted departments.
+    List<Map<String, dynamic>> lockedInvoices = [];
+
+    if (canViewLockedInvoices) {
+      lockedInvoices = await showlockedstockinvoice(
+        int.tryParse(
+              mainid.toString(),
+            ) ??
+            0,
       );
     }
-        else if (dep == "SD") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) =>
-                SdDashboard()), // Replace AnotherPage with your target page
-      );
+
+    if (!mounted) return;
+
+    final int? quantity = await showDialog<int>(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext dialogContext) {
+        return _PerformaQuantityDialog(
+          availableStock: availableStock,
+          stock: stock,
+          canViewStock: canViewStock,
+          canAddToCart: isDefaultWarehouse,
+          canViewLockedInvoices: canViewLockedInvoices,
+          lockedInvoices: lockedInvoices,
+        );
+      },
+    );
+
+    if (quantity == null || !mounted) {
+      return;
     }
-     else if (dep == "BDM") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) =>
-                bdm_dashbord()), // Replace AnotherPage with your target page
+
+    if (widget.proformaOrderId != null) {
+      final bool added =
+          await _addProductDirectlyToProforma(
+        productId: mainid,
+        quantity: quantity,
       );
-    } else if (dep == "warehouse") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) =>
-                WarehouseDashboard()), // Replace AnotherPage with your target page
-      );
-    } else if (dep == "CEO") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) =>
-                ceo_dashboard()), // Replace AnotherPage with your target page
-      );
-    } else if (dep == "COO") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) =>
-                ceo_dashboard()), // Replace AnotherPage with your target page
-      );
-    } else if (dep == "CSO") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) =>
-                cso_dashboard()), // Replace AnotherPage with your target page
-      );
-    } else if (dep == "Warehouse Admin") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) =>
-                WarehouseAdmin()), // Replace AnotherPage with your target page
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => dashboard()),
-      );
+
+      if (!mounted || !added) return;
+
+      Navigator.of(this.context).pop(true);
+      return;
     }
+
+    handleAddToCart2(
+      this.context,
+      mainid,
+      quantity,
+    );
+  }
+
+  void _applyFilters() {
+    searchQuery = searchController.text.trim();
+
+    if (_searchDebounce?.isActive ?? false) {
+      _searchDebounce!.cancel();
+    }
+
+    _searchDebounce = Timer(
+      const Duration(
+        milliseconds: 500,
+      ),
+      () {
+        if (!mounted) return;
+
+        fetchProductListid(
+          warehouse,
+          page: 1,
+          search: searchQuery,
+        );
+      },
+    );
   }
 
   @override
-  Widget build(BuildContext context) {
+  void dispose() {
+    _searchDebounce?.cancel();
+
+    searchController.dispose();
+
+    super.dispose();
+  }
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
     return WillPopScope(
       onWillPop: () async {
-        // Prevent the swipe-back gesture (and back button)
-        _navigateBack();
+        await _navigateBack();
+
         return false;
       },
       child: Scaffold(
-        backgroundColor: const Color.fromARGB(246, 255, 255, 255),
+        backgroundColor: Colors.white,
         appBar: AppBar(
-          title: Text(
+          title: const Text(
             "Product List",
-            style: TextStyle(color: Colors.grey, fontSize: 14),
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: 14,
+            ),
           ),
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back), // Custom back arrow
+            icon: const Icon(
+              Icons.arrow_back,
+            ),
             onPressed: () async {
+              if (widget.proformaOrderId != null) {
+                Navigator.of(context).pop(false);
+                return;
+              }
+
               final dep = await getdepFromPrefs();
+
               if (dep == "BDO") {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                      builder: (context) =>
-                          bdo_dashbord()), // Replace AnotherPage with your target page
+                    builder: (context) =>
+                        bdo_dashbord(),
+                  ),
                 );
-              }
-                  else if (dep == "SD") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) =>
-                SdDashboard()), // Replace AnotherPage with your target page
-      );
-    }
-               else if (dep == "BDM") {
+              } else if (dep == "SD") {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                      builder: (context) =>
-                          bdm_dashbord()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "warehouse") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          WarehouseDashboard()), // Replace AnotherPage with your target page
-                );
-              } else if (dep == "CEO") {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          ceo_dashboard()), // Replace AnotherPage with your target page
+                    builder: (context) =>
+                        SdDashboard(),
+                  ),
                 );
               } else if (dep == "COO") {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                      builder: (context) =>
-                          ceo_dashboard()), // Replace AnotherPage with your target page
+                    builder: (context) =>
+                        ceo_dashboard(),
+                  ),
                 );
               } else if (dep == "CSO") {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                      builder: (context) =>
-                          cso_dashboard()), // Replace AnotherPage with your target page
+                    builder: (context) =>
+                        cso_dashboard(),
+                  ),
+                );
+              } else if (dep == "BDM") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        bdm_dashbord(),
+                  ),
+                );
+              } else if (dep == "warehouse") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        WarehouseDashboard(),
+                  ),
+                );
+              } else if (dep == "CEO") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        ceo_dashboard(),
+                  ),
+                );
+              } else if (dep == "COO") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        ceo_dashboard(),
+                  ),
+                );
+              } else if (dep == "CSO") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        cso_dashboard(),
+                  ),
                 );
               } else if (dep == "Warehouse Admin") {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                      builder: (context) =>
-                          WarehouseAdmin()), // Replace AnotherPage with your target page
+                    builder: (context) =>
+                        WarehouseAdmin(),
+                  ),
+                );
+              } else if (dep == "Marketing") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        marketing_dashboard(),
+                  ),
                 );
               } else {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                      builder: (context) =>
-                          dashboard()), // Replace AnotherPage with your target page
+                    builder: (context) =>
+                        dashboard(),
+                  ),
                 );
               }
             },
           ),
           actions: [
-            // Cart icon with badge
-            Padding(
-              padding: const EdgeInsets.only(right: 16.0),
-              child: Stack(
-                children: <Widget>[
-                  IconButton(
-                    icon: Icon(Icons.shopping_cart, color: Colors.grey),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => Performa_Cart()),
-                      );
-                    },
+            IconButton(
+              icon: const Icon(
+                Icons.shopping_cart,
+                color: Colors.grey,
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        Performa_Cart(),
                   ),
-                  Positioned(
-                    right: 6,
-                    top: 6,
-                    child: Container(
-                      padding: EdgeInsets.all(2),
-                      constraints: BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
+                );
+              },
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(
+                8.0,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: "Select Warehouse",
+                        border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(
+                            30.0,
+                          ),
+                        ),
+                        contentPadding:
+                            const EdgeInsets.symmetric(
+                          horizontal: 15,
+                          vertical: 10,
+                        ),
                       ),
+                      value: warehouse,
+                      items: Warehouses.map(
+                        (wh) {
+                          return DropdownMenuItem<String>(
+                            value: wh['id'].toString(),
+                            child: Text(
+                              "${wh['name']} (${wh['location']})",
+                              overflow:
+                                  TextOverflow.ellipsis,
+                              style:
+                                  const TextStyle(
+                                fontSize: 12,
+                              ),
+                            ),
+                          );
+                        },
+                      ).toList(),
+                      onChanged:
+                          (selectedId) async {
+                        if (selectedId != null) {
+                          if (!mounted) {
+                            return;
+                          }
+
+                          setState(() {
+                            warehouse = selectedId;
+
+                            selectedCategory =
+                                "All Categories";
+
+                            categories = [
+                              "All Categories"
+                            ];
+
+                            products = [];
+
+                            filteredProducts = [];
+
+                            isDefaultWarehouse =
+                                selectedId ==
+                                    defaultWarehouse;
+                          });
+
+                          searchQuery =
+                              searchController.text
+                                  .trim();
+
+                          await fetchProductListid(
+                            selectedId,
+                            page: 1,
+                            search: searchQuery,
+                          );
+                        }
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(
+                    width: 10,
+                  ),
+
+                  Expanded(
+                    child:
+                        DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText:
+                            "Select Category",
+                        border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(
+                            30.0,
+                          ),
+                        ),
+                        contentPadding:
+                            const EdgeInsets.symmetric(
+                          horizontal: 15,
+                          vertical: 10,
+                        ),
+                      ),
+                      value: selectedCategory,
+                      items: categories.map(
+                        (cat) {
+                          return DropdownMenuItem<String>(
+                            value: cat,
+                            child: Text(
+                              cat,
+                              overflow:
+                                  TextOverflow.ellipsis,
+                              style:
+                                  const TextStyle(
+                                fontSize: 12,
+                              ),
+                            ),
+                          );
+                        },
+                      ).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          if (!mounted) {
+                            return;
+                          }
+
+                          setState(() {
+                            selectedCategory = value;
+                          });
+
+                          filteredProducts =
+                              products.where(
+                            (product) {
+                              if (selectedCategory ==
+                                  "All Categories") {
+                                return true;
+                              }
+
+                              return product[
+                                      'product_category_name'] ==
+                                  selectedCategory;
+                            },
+                          ).toList();
+
+                          setState(() {});
+                        }
+                      },
                     ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
-        body: Container(
-          child: Column(
-            children: [
-              if (dep == 'COO' || dep == 'ADMIN' || dep == 'Accounts')
-                Padding(
-                  padding: const EdgeInsets.all(10.0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(30.0),
-                      border: Border.all(color: Colors.grey),
-                    ),
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: DropdownButton<int>(
-                      isExpanded: true,
-                      value: selectedwarehouseId,
-                      hint: Text('Select a Warehouse'),
-                      underline: SizedBox(), // Remove the default underline
-                      onChanged: (int? newValue) {
-                        setState(() {
-                          selectedwarehouseId = newValue;
-                          selectedwarehouseName = Warehouses.firstWhere(
-                              (element) => element['id'] == newValue)['name'];
-                          fetchProductListid(newValue!);
-                        });
-                      },
-                      items:
-                          Warehouses.map<DropdownMenuItem<int>>((Warehouses) {
-                        return DropdownMenuItem<int>(
-                          value: Warehouses['id'],
-                          child: Text(Warehouses['name']),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: TextField(
-                  controller: searchController,
-                  decoration: InputDecoration(
-                    hintText: "Search products...",
-                    prefixIcon: Icon(Icons.search),
-                    fillColor:
-                        Colors.white, // Set your desired background color
-                    filled: true, // Enable background color
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(30.0),
-                      borderSide: BorderSide(
-                        color: Colors.grey,
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(30.0),
-                      borderSide: BorderSide(
-                        color: Colors.blue,
-                        width: 2.0,
-                      ),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(30.0),
-                      borderSide: BorderSide(
-                        color: Colors.grey,
-                        width: 1.0,
-                      ),
-                    ),
-                  ),
-                  onChanged: (query) {
-                    _filterProducts(
-                        query); // Filter the products as the user types
-                  },
-                ),
+
+            Padding(
+              padding: const EdgeInsets.all(
+                8,
               ),
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () {
-                    return fetchProductListid(warehouse);
-                  },
-                  child: ListView.builder(
-                    itemCount: filteredProducts.length,
-                    itemBuilder: (context, index) {
-                      final product = filteredProducts[index];
+              child: TextField(
+                controller: searchController,
+                decoration: InputDecoration(
+                  hintText: "Search products...",
+                  prefixIcon: const Icon(
+                    Icons.search,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(
+                      30.0,
+                    ),
+                  ),
+                ),
+                onChanged: (_) =>
+                    _applyFilters(),
+              ),
+            ),
 
-                      final isExpanded =
-                          expandedProducts[product['id']] ?? false;
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
+              color: Colors.white,
+              child: Row(
+                mainAxisAlignment:
+                    MainAxisAlignment.spaceBetween,
+                children: [
+                  ElevatedButton(
+                    style:
+                        ElevatedButton.styleFrom(
+                      backgroundColor:
+                          Colors.blue,
+                      foregroundColor:
+                          Colors.white,
+                    ),
+                    onPressed:
+                        previousPageUrl == null ||
+                                isProductLoading
+                            ? null
+                            : () {
+                                fetchProductListid(
+                                  warehouse,
+                                  page:
+                                      currentPage - 1,
+                                  search:
+                                      searchQuery,
+                                );
+                              },
+                    child: const Text(
+                      "Previous",
+                    ),
+                  ),
 
-                      return Padding(
-                        padding:
-                            const EdgeInsets.only(top: 10, left: 10, right: 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Container(
-                              height: 90,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(10.0),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color:
-                                        const Color.fromARGB(255, 210, 209, 209)
-                                            .withOpacity(0.5),
-                                    spreadRadius: 2,
-                                    blurRadius: 5,
-                                    offset: Offset(0, 3),
+                  Text(
+                    "Page $currentPage",
+                    style: const TextStyle(
+                      fontWeight:
+                          FontWeight.bold,
+                    ),
+                  ),
+
+                  ElevatedButton(
+                    style:
+                        ElevatedButton.styleFrom(
+                      backgroundColor:
+                          Colors.blue,
+                      foregroundColor:
+                          Colors.white,
+                    ),
+                    onPressed:
+                        nextPageUrl == null ||
+                                isProductLoading
+                            ? null
+                            : () {
+                                fetchProductListid(
+                                  warehouse,
+                                  page:
+                                      currentPage + 1,
+                                  search:
+                                      searchQuery,
+                                );
+                              },
+                    child: const Text(
+                      "Next",
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () =>
+                    fetchProductListid(
+                  warehouse,
+                  page: currentPage,
+                  search: searchQuery,
+                ),
+                child: ListView.builder(
+                  itemCount:
+                      filteredProducts.length,
+                  itemBuilder:
+                      (context, index) {
+                    final product =
+                        filteredProducts[index];
+
+                    final isExpanded =
+                        expandedProducts[
+                                product['id']] ??
+                            false;
+
+                    return Padding(
+                      padding:
+                          const EdgeInsets.only(
+                        top: 10,
+                        left: 10,
+                        right: 10,
+                      ),
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment
+                                .stretch,
+                        children: [
+                          Container(
+                            height: 90,
+                            decoration:
+                                BoxDecoration(
+                              color: Colors.white,
+                              borderRadius:
+                                  BorderRadius
+                                      .circular(
+                                10.0,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      const Color
+                                              .fromARGB(
+                                            255,
+                                            210,
+                                            209,
+                                            209,
+                                          )
+                                          .withOpacity(
+                                    0.5,
                                   ),
+                                  spreadRadius: 2,
+                                  blurRadius: 5,
+                                  offset:
+                                      const Offset(
+                                    0,
+                                    3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            child: ListTile(
+                              leading:
+                                  product['image'] !=
+                                              null &&
+                                          product[
+                                                  'image']
+                                              .isNotEmpty
+                                      ? Image.network(
+                                          '$api${product['image']}',
+                                          width: 50,
+                                          height: 50,
+                                          fit: BoxFit
+                                              .cover,
+                                          errorBuilder:
+                                              (
+                                            context,
+                                            error,
+                                            stackTrace,
+                                          ) =>
+                                                  const Icon(
+                                            Icons
+                                                .error,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons
+                                              .image_not_supported,
+                                        ),
+                              title: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment
+                                        .start,
+                                children: [
+                                  Text(
+                                    "${product['name']}",
+                                    style:
+                                        const TextStyle(
+                                      fontSize:
+                                          14,
+                                    ),
+                                    maxLines: 1,
+                                    overflow:
+                                        TextOverflow
+                                            .ellipsis,
+                                  ),
+                                  if (product[
+                                              'color'] !=
+                                          null &&
+                                      product[
+                                              'color']
+                                          .isNotEmpty)
+                                    Text(
+                                      "Color: ${product['color']}",
+                                      style:
+                                          const TextStyle(
+                                        fontSize:
+                                            12,
+                                        color:
+                                            Colors.grey,
+                                      ),
+                                    ),
                                 ],
                               ),
-                              child: ListTile(
-                                leading: product['image'] != null &&
-                                        product['image'].isNotEmpty
-                                    ? Image.network(
-                                        '$api${product['image']}',
-                                        width: 50,
-                                        height: 50,
-                                        fit: BoxFit.cover,
-                                        errorBuilder:
-                                            (context, error, stackTrace) =>
-                                                Icon(Icons.error),
-                                      )
-                                    : Icon(Icons.image_not_supported),
-                                title: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      "${product['name']}",
-                                      style: TextStyle(fontSize: 14),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    if (product['color'] != null &&
-                                        product['color']
-                                            .isNotEmpty) // Display color if it exists
-                                      Text(
-                                        "Color: ${product['color']}",
-                                        style: TextStyle(
-                                            fontSize: 12, color: Colors.grey),
-                                      ),
-                                  ],
+                              trailing:
+                                  ElevatedButton
+                                      .icon(
+                                onPressed: () {
+                                  if (product[
+                                          'type'] ==
+                                      'variant') {
+                                    setState(
+                                      () {
+                                        expandedProducts[
+                                                product[
+                                                    'id']] =
+                                            !isExpanded;
+                                      },
+                                    );
+                                  } else if (product[
+                                          'type'] ==
+                                      'single') {
+                                    showSizeDialog3(
+                                      context,
+                                      product['id'],
+                                      product[
+                                              'available_stock'] ??
+                                          0,
+                                      product[
+                                              'stock'] ??
+                                          0,
+                                    );
+                                  }
+                                },
+                                icon: Icon(
+                                  product['type'] ==
+                                          'single'
+                                      ? Icons.add
+                                      : isExpanded
+                                          ? Icons
+                                              .keyboard_arrow_up
+                                          : Icons
+                                              .keyboard_arrow_down,
+                                  size: 14,
+                                  color:
+                                      Colors.white,
                                 ),
-                                trailing: ElevatedButton.icon(
-                                  onPressed: () {
-                                    if (product['is_vaiant'] == true) {
-                                      // Ensure colors are non-null before passing to extractStringList
-                                      List<String> colors = extractStringList(
-                                          product['colors'] ?? [],
-                                          'color_name');
-                                      List<Map<String, dynamic>> sizes =
-                                          extractSizeList(
-                                              product['sizes'] ?? []);
-
-                                      // showSizeDialog(
-                                      //   context,
-                                      //   colors,
-                                      //   sizes,
-                                      //   product['mainid'],
-                                      //   product['id'],
-                                      // );
-                                    } else if (product['type'] == 'variant') {
-                                      showSizeDialog2(
-                                          context, product['variantIDs']);
-                                    } else if (product['type'] == 'single') {
-                                      showSizeDialog3(
-                                        context,
-                                        product['id'],
-                                        product['stock'],
-                                        product['locked_stock'],
-                                      );
-                                    }
-                                  },
-                                  icon: Icon(
-                                    product['type'] == 'single'
-                                        ? Icons.add
-                                        : Icons.view_agenda,
-                                    size: 14,
-                                    color: Colors.white,
+                                label: Text(
+                                  product['type'] ==
+                                          'single'
+                                      ? "Add"
+                                      : "View",
+                                  style:
+                                      const TextStyle(
+                                    color:
+                                        Colors.white,
+                                    fontSize: 10,
                                   ),
-                                  label: Text(
-                                    product['type'] == 'single'
-                                        ? "Add"
-                                        : "View",
-                                    style: TextStyle(
-                                        color: Colors.white, fontSize: 10),
+                                ),
+                                style:
+                                    ElevatedButton
+                                        .styleFrom(
+                                  backgroundColor:
+                                      product['type'] ==
+                                              'single'
+                                          ? Colors.green
+                                          : Colors.blue,
+                                  padding:
+                                      const EdgeInsets
+                                          .symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
                                   ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor:
-                                        product['type'] == 'single' ||
-                                                product['is_vaiant'] == false
-                                            ? Colors.green
-                                            : Colors.blue,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 4),
-                                    minimumSize: const Size(60, 24),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8.0),
+                                  minimumSize:
+                                      const Size(
+                                    60,
+                                    24,
+                                  ),
+                                  shape:
+                                      RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius
+                                            .circular(
+                                      8.0,
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                            // Display variant list if expanded
-                            if (isExpanded &&
-                                product['variant_products'] != null)
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                    top: 8.0, left: 10, right: 10),
-                                child: Column(
-                                  children: product['variant_products']
-                                      .map<Widget>((variantProduct) {
-                                    return Container(
-                                      height: 70,
-                                      margin: const EdgeInsets.only(bottom: 6),
-                                      padding: const EdgeInsets.all(8.0),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius:
-                                            BorderRadius.circular(10.0),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.grey.withOpacity(0.3),
-                                            spreadRadius: 2,
-                                            blurRadius: 5,
-                                            offset: Offset(0, 3),
-                                          ),
-                                        ],
+                          ),
+
+                          if (isExpanded &&
+                              product[
+                                      'variantIDs'] !=
+                                  null &&
+                              product[
+                                      'variantIDs']
+                                  .isNotEmpty)
+                            Padding(
+                              padding:
+                                  const EdgeInsets
+                                      .only(
+                                top: 8.0,
+                                left: 10,
+                                right: 10,
+                              ),
+                              child: Column(
+                                children: [
+                                  Container(
+                                    constraints:
+                                        const BoxConstraints(
+                                      minHeight: 80,
+                                    ),
+                                    margin:
+                                        const EdgeInsets
+                                            .only(
+                                      bottom: 6,
+                                    ),
+                                    padding:
+                                        const EdgeInsets
+                                            .symmetric(
+                                      horizontal: 8,
+                                      vertical: 10,
+                                    ),
+                                    decoration:
+                                        BoxDecoration(
+                                      color:
+                                          Colors.white,
+                                      borderRadius:
+                                          BorderRadius
+                                              .circular(
+                                        10.0,
                                       ),
-                                      child: Row(
-                                        children: [
-                                          if (variantProduct['image'] != null &&
-                                              variantProduct['image']
-                                                  .isNotEmpty)
-                                            Image.network(
-                                              variantProduct['image'],
-                                              width: 65,
-                                              height: 65,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (context, error,
-                                                      stackTrace) =>
-                                                  Icon(Icons.error),
-                                            )
-                                          else
-                                            Icon(Icons.image_not_supported),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: Text(
-                                              "${variantProduct['name']} - ${variantProduct['color']} - Stock: ${variantProduct['stock']}",
-                                              style: TextStyle(fontSize: 12),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors
+                                              .grey
+                                              .withOpacity(
+                                            0.3,
+                                          ),
+                                          spreadRadius:
+                                              2,
+                                          blurRadius: 5,
+                                          offset:
+                                              const Offset(
+                                            0,
+                                            3,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        if (product[
+                                                    'image'] !=
+                                                null &&
+                                            product[
+                                                    'image']
+                                                .isNotEmpty)
+                                          ClipRRect(
+                                            borderRadius:
+                                                BorderRadius
+                                                    .circular(
+                                              8,
+                                            ),
+                                            child:
+                                                Image.network(
+                                              '$api${product['image']}',
+                                              width: 60,
+                                              height: 60,
+                                              fit: BoxFit
+                                                  .cover,
+                                              errorBuilder:
+                                                  (
+                                                context,
+                                                error,
+                                                stackTrace,
+                                              ) {
+                                                return Container(
+                                                  width:
+                                                      60,
+                                                  height:
+                                                      60,
+                                                  color: Colors
+                                                      .grey
+                                                      .shade200,
+                                                  child:
+                                                      const Icon(
+                                                    Icons
+                                                        .image_not_supported,
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          )
+                                        else
+                                          Container(
+                                            width: 60,
+                                            height: 60,
+                                            color: Colors
+                                                .grey
+                                                .shade200,
+                                            child:
+                                                const Icon(
+                                              Icons
+                                                  .image_not_supported,
                                             ),
                                           ),
-                                        ],
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
+
+                                        const SizedBox(
+                                          width: 10,
+                                        ),
+
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment
+                                                    .start,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment
+                                                    .center,
+                                            children: [
+                                              Text(
+                                                product[
+                                                        'name'] ??
+                                                    '',
+                                                style:
+                                                    const TextStyle(
+                                                  fontSize:
+                                                      13,
+                                                ),
+                                                maxLines:
+                                                    2,
+                                                overflow:
+                                                    TextOverflow
+                                                        .ellipsis,
+                                              ),
+
+                                              if (canViewStock)
+                                                Text(
+                                                  "Stock: ${product['stock'] ?? 0}",
+                                                  style:
+                                                      const TextStyle(
+                                                    fontSize:
+                                                        12,
+                                                    color:
+                                                        Colors.grey,
+                                                  ),
+                                                ),
+
+                                              Text(
+                                                "Available Stock: ${product['available_stock'] ?? 0}",
+                                                style:
+                                                    const TextStyle(
+                                                  fontSize:
+                                                      12,
+                                                  color:
+                                                      Colors.green,
+                                                  fontWeight:
+                                                      FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+
+                                        ElevatedButton(
+                                          onPressed: () {
+                                            showSizeDialog3(
+                                              context,
+                                              product[
+                                                  'id'],
+                                              product[
+                                                      'available_stock'] ??
+                                                  0,
+                                              product[
+                                                      'stock'] ??
+                                                  0,
+                                            );
+                                          },
+                                          style:
+                                              ElevatedButton
+                                                  .styleFrom(
+                                            backgroundColor:
+                                                Colors
+                                                    .deepPurple,
+                                            padding:
+                                                const EdgeInsets
+                                                    .symmetric(
+                                              horizontal:
+                                                  10,
+                                              vertical:
+                                                  4,
+                                            ),
+                                            minimumSize:
+                                                const Size(
+                                              60,
+                                              32,
+                                            ),
+                                            shape:
+                                                RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius
+                                                      .circular(
+                                                8.0,
+                                              ),
+                                            ),
+                                          ),
+                                          child:
+                                              const Text(
+                                            "Add",
+                                            style:
+                                                TextStyle(
+                                              color:
+                                                  Colors
+                                                      .white,
+                                              fontSize:
+                                                  12,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  ...product['variantIDs']
+                                      .map<Widget>(
+                                    (variant) {
+                                      return Container(
+                                        constraints:
+                                            const BoxConstraints(
+                                          minHeight:
+                                              80,
+                                        ),
+                                        margin:
+                                            const EdgeInsets
+                                                .only(
+                                          bottom: 6,
+                                        ),
+                                        padding:
+                                            const EdgeInsets
+                                                .symmetric(
+                                          horizontal:
+                                              8,
+                                          vertical:
+                                              10,
+                                        ),
+                                        decoration:
+                                            BoxDecoration(
+                                          color: Colors
+                                              .white,
+                                          borderRadius:
+                                              BorderRadius
+                                                  .circular(
+                                            10.0,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors
+                                                  .grey
+                                                  .withOpacity(
+                                                0.3,
+                                              ),
+                                              spreadRadius:
+                                                  2,
+                                              blurRadius:
+                                                  5,
+                                              offset:
+                                                  const Offset(
+                                                0,
+                                                3,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            if (variant[
+                                                        'image'] !=
+                                                    null &&
+                                                variant[
+                                                        'image']
+                                                    .isNotEmpty)
+                                              ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius
+                                                        .circular(
+                                                  8,
+                                                ),
+                                                child:
+                                                    Image.network(
+                                                  '$api${variant['image']}',
+                                                  width:
+                                                      60,
+                                                  height:
+                                                      60,
+                                                  fit: BoxFit
+                                                      .cover,
+                                                  errorBuilder:
+                                                      (
+                                                    context,
+                                                    error,
+                                                    stackTrace,
+                                                  ) {
+                                                    return Container(
+                                                      width:
+                                                          60,
+                                                      height:
+                                                          60,
+                                                      color: Colors
+                                                          .grey
+                                                          .shade200,
+                                                      child:
+                                                          const Icon(
+                                                        Icons
+                                                            .image_not_supported,
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              )
+                                            else
+                                              Container(
+                                                width: 60,
+                                                height:
+                                                    60,
+                                                color: Colors
+                                                    .grey
+                                                    .shade200,
+                                                child:
+                                                    const Icon(
+                                                  Icons
+                                                      .image_not_supported,
+                                                ),
+                                              ),
+
+                                            const SizedBox(
+                                              width:
+                                                  10,
+                                            ),
+
+                                            Expanded(
+                                              child:
+                                                  Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment
+                                                        .start,
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment
+                                                        .center,
+                                                children: [
+                                                  Text(
+                                                    variant[
+                                                            'name'] ??
+                                                        '',
+                                                    style:
+                                                        const TextStyle(
+                                                      fontSize:
+                                                          13,
+                                                    ),
+                                                    maxLines:
+                                                        2,
+                                                    overflow:
+                                                        TextOverflow
+                                                            .ellipsis,
+                                                  ),
+
+                                                  if (canViewStock)
+                                                    Text(
+                                                      "Stock: ${variant['stock'] ?? 0}",
+                                                      style:
+                                                          const TextStyle(
+                                                        fontSize:
+                                                            12,
+                                                        color:
+                                                            Colors.grey,
+                                                      ),
+                                                    ),
+
+                                                  Text(
+                                                    "Available Stock: ${variant['available_stock'] ?? 0}",
+                                                    style:
+                                                        const TextStyle(
+                                                      fontSize:
+                                                          12,
+                                                      color:
+                                                          Colors.green,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+
+                                            ElevatedButton(
+                                              onPressed:
+                                                  () {
+                                                showSizeDialog3(
+                                                  context,
+                                                  variant[
+                                                      'id'],
+                                                  variant[
+                                                          'available_stock'] ??
+                                                      0,
+                                                  variant[
+                                                          'stock'] ??
+                                                      0,
+                                                );
+                                              },
+                                              style:
+                                                  ElevatedButton
+                                                      .styleFrom(
+                                                backgroundColor:
+                                                    Colors
+                                                        .orange,
+                                                padding:
+                                                    const EdgeInsets
+                                                        .symmetric(
+                                                  horizontal:
+                                                      10,
+                                                  vertical:
+                                                      4,
+                                                ),
+                                                minimumSize:
+                                                    const Size(
+                                                  60,
+                                                  32,
+                                                ),
+                                                shape:
+                                                    RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius
+                                                          .circular(
+                                                    8.0,
+                                                  ),
+                                                ),
+                                              ),
+                                              child:
+                                                  const Text(
+                                                "Add",
+                                                style:
+                                                    TextStyle(
+                                                  color:
+                                                      Colors
+                                                          .white,
+                                                  fontSize:
+                                                      12,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ).toList(),
+                                ],
                               ),
-                          ],
-                        ),
-                      );
-                    },
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// PERFORMA QUANTITY DIALOG
+// ============================================================================
+
+class _PerformaQuantityDialog extends StatefulWidget {
+  final num availableStock;
+  final num stock;
+
+  final bool canViewStock;
+  final bool canAddToCart;
+
+  // Locked invoice permission + data
+  final bool canViewLockedInvoices;
+
+  final List<Map<String, dynamic>> lockedInvoices;
+
+  const _PerformaQuantityDialog({
+    required this.availableStock,
+    required this.stock,
+    required this.canViewStock,
+    required this.canAddToCart,
+    required this.canViewLockedInvoices,
+    required this.lockedInvoices,
+  });
+
+  @override
+  State<_PerformaQuantityDialog> createState() =>
+      _PerformaQuantityDialogState();
+}
+
+class _PerformaQuantityDialogState
+    extends State<_PerformaQuantityDialog> {
+  late final TextEditingController _quantityController;
+
+  String? _validationMessage;
+
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _quantityController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _quantityController.dispose();
+
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_isSubmitting || !widget.canAddToCart) {
+      return;
+    }
+
+    final int? quantity = int.tryParse(
+      _quantityController.text.trim(),
+    );
+
+    String? validationMessage;
+
+    if (quantity == null || quantity <= 0) {
+      validationMessage =
+          "Please enter a valid quantity!";
+    } else if (widget.availableStock <= 0) {
+      validationMessage = "No stock available";
+    } else if (quantity > widget.availableStock) {
+      validationMessage =
+          "Quantity exceeds available stock!";
+    }
+
+    if (validationMessage != null) {
+      setState(() {
+        _validationMessage =
+            validationMessage;
+      });
+
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+
+      _validationMessage = null;
+    });
+
+    FocusScope.of(context).unfocus();
+
+    Navigator.of(context).pop(
+      quantity,
+    );
+  }
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(
+        horizontal: 20,
+        vertical: 40,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(
+          20,
+        ),
+      ),
+
+      // =========================================================
+      // FIX:
+      // Do NOT add MediaQuery.viewInsets.bottom here.
+      //
+      // Dialog already handles the keyboard inset.
+      // Adding viewInsets.bottom again was creating the huge
+      // blank space and pushing the dialog content upward.
+      // =========================================================
+
+      child: Padding(
+        padding: const EdgeInsets.all(
+          20,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Add Product",
+                style: TextStyle( 
+                  fontSize: 18,
+                  fontWeight:
+                      FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(
+                height: 16,
+              ),
+
+              if (widget.canViewStock) ...[
+                Text(
+                  "Stock: ${widget.stock}",
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight:
+                        FontWeight.w600,
+                    color: Colors.black87,
                   ),
+                ),
+                const SizedBox(
+                  height: 6,
+                ),
+              ],
+
+              Text(
+                "Available Stock: ${widget.availableStock}",
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight:
+                      FontWeight.bold,
+                  color: Colors.green,
+                ),
+              ),
+
+              // ==================================================
+              // LOCKED INVOICES
+              // Visible ONLY for CEO, COO, Accounts / Accounting
+              // ==================================================
+
+              if (widget.canViewLockedInvoices &&
+                  widget.lockedInvoices.isNotEmpty) ...[
+                const SizedBox(
+                  height: 16,
+                ),
+
+                const Text(
+                  "Order Invoices:",
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight:
+                        FontWeight.bold,
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 8,
+                ),
+
+                ...widget.lockedInvoices.map(
+                  (
+                    Map<String, dynamic> invoice,
+                  ) {
+                    return Padding(
+                      padding:
+                          const EdgeInsets.only(
+                        bottom: 5,
+                      ),
+                      child: Text(
+                        "🧾 ${invoice['invoice'] ?? ''} -  ${invoice['quantity_locked'] ?? 0}",
+                        style:
+                            const TextStyle(
+                          fontSize: 13,
+                          color:
+                              Colors.black87,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+
+              const SizedBox(
+                height: 16,
+              ),
+
+              TextField(
+                controller:
+                    _quantityController,
+                enabled:
+                    !_isSubmitting,
+
+                // Keeps keyboard opening immediately.
+                // Dialog will now stay compact correctly.
+                autofocus: true,
+
+                keyboardType:
+                    TextInputType.number,
+                textInputAction:
+                    TextInputAction.done,
+                onSubmitted:
+                    (_) => _submit(),
+                decoration:
+                    InputDecoration(
+                  labelText:
+                      "Enter Quantity",
+                  errorText:
+                      _validationMessage,
+                  border:
+                      OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(
+                      10,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(
+                height: 16,
+              ),
+
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed:
+                      widget.canAddToCart &&
+                              !_isSubmitting
+                          ? _submit
+                          : null,
+                  style:
+                      ElevatedButton.styleFrom(
+                    backgroundColor:
+                        widget.canAddToCart
+                            ? Colors.blue
+                            : Colors.grey,
+                    foregroundColor:
+                        Colors.white,
+                    shape:
+                        RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(
+                        10,
+                      ),
+                    ),
+                  ),
+                  child:
+                      _isSubmitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child:
+                                  CircularProgressIndicator(
+                                strokeWidth:
+                                    2,
+                                color:
+                                    Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              "ADD TO CART",
+                              style:
+                                  TextStyle(
+                                fontWeight:
+                                    FontWeight
+                                        .w600,
+                              ),
+                            ),
                 ),
               ),
             ],
@@ -1375,12 +2301,5 @@ class _CreatePerformaProduct_ListState
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    // Cancel any ongoing operations
-    timer?.cancel();
-    super.dispose();
   }
 }

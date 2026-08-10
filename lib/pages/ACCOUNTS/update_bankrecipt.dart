@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import 'package:beposoft/loginpage.dart';
@@ -39,144 +38,152 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 
-
 class update_bank_recipt extends StatefulWidget {
   final id;
-  const update_bank_recipt({super.key,required this.id});
+  const update_bank_recipt({super.key, required this.id});
 
   @override
   State<update_bank_recipt> createState() => _update_bank_reciptState();
 }
 
 class _update_bank_reciptState extends State<update_bank_recipt> {
- @override
+  @override
   void initState() {
     super.initState();
-initdata();
-fetchOrderData();
+    initdata();
+    fetchOrderData();
     getbank();
     getcustomer();
   }
-void initdata() async {
+
+  void initdata() async {
+    final dep = await getdepFromPrefs();
+
+    if (!mounted) return;
+
+    setState(() {
+      currentDepartment = dep?.trim().toUpperCase() ?? '';
+    });
+
     await getreciptlist();
   }
-var url = "$api/api/add/department/";
 
- TextEditingController transactionid = TextEditingController();
+  var url = "$api/api/add/department/";
+
+  TextEditingController transactionid = TextEditingController();
   TextEditingController purposes = TextEditingController();
   TextEditingController amount = TextEditingController();
   TextEditingController createdby = TextEditingController();
   TextEditingController remark = TextEditingController();
   List<Map<String, dynamic>> customer = [];
-
-int? selectedCompanyId;
+  String currentDepartment = '';
+  int? selectedCompanyId;
   TextEditingController name = TextEditingController();
-Future<String?> gettokenFromPrefs() async {
+  Future<String?> gettokenFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('token');
   }
-var departments;
+
+  var departments;
   List<Map<String, dynamic>> fam = [];
-    List<Map<String, dynamic>> bank = [];
-String? selectedpurpose; // Holds the selected value
-  final List<String> items = ['water', 'electricity','salary','emi','rent','travel','Others'];
+  List<Map<String, dynamic>> bank = [];
+  String? selectedpurpose; // Holds the selected value
+  final List<String> items = [
+    'water',
+    'electricity',
+    'salary',
+    'emi',
+    'rent',
+    'travel',
+    'Others'
+  ];
   String? selectedInvoiceId; // Variable to store the selected invoice ID
-String? selectedCustomerId;
-final TextEditingController searchController = TextEditingController();
-final TextEditingController customerSearchController = TextEditingController();
+  String? selectedCustomerId;
+  final TextEditingController searchController = TextEditingController();
+  final TextEditingController customerSearchController =
+      TextEditingController();
 
- String selectedstaff='';
-    int? selectedstaffId;
-        int? selectedbankId;
-        
-          Future<void> getcustomer() async {
-  try {
-    final dep = await getdepFromPrefs();
-    final token = await gettokenFromPrefs();
+  String selectedstaff = '';
+  int? selectedstaffId;
+  int? selectedbankId;
 
-    final jwt = JWT.decode(token!);
-    var name = jwt.payload['name'];
-    
+  Future<void> getcustomer() async {
+    try {
+      final dep = await getdepFromPrefs();
+      final token = await gettokenFromPrefs();
 
-    var response = await http.get(
-      Uri.parse('$api/api/customers/'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
+      final jwt = JWT.decode(token!);
+      var name = jwt.payload['name'];
 
-    ;
+      var response = await http.get(
+        Uri.parse('$api/api/customers/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-    if (response.statusCode == 200) {
-      final parsed = jsonDecode(response.body);
-      var productsData = parsed['data']; // Directly accessing 'data' since no pagination
+      ;
 
-      List<Map<String, dynamic>> newCustomers = [];
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+        var productsData =
+            parsed['data']; // Directly accessing 'data' since no pagination
 
-      for (var productData in productsData) {
-        newCustomers.add({
-          'id': productData['id'],
-          'name': productData['name'],
-          'created_at': productData['created_at'],
+        List<Map<String, dynamic>> newCustomers = [];
+
+        for (var productData in productsData) {
+          newCustomers.add({
+            'id': productData['id'],
+            'name': productData['name'],
+            'created_at': productData['created_at'],
+          });
+        }
+
+        // Update UI
+        setState(() {
+          customer = newCustomers;
         });
+      } else {
+        throw Exception("Failed to load customer data");
       }
-
-      // Update UI
-      setState(() {
-        customer = newCustomers;
-      });
-    } else {
-      throw Exception("Failed to load customer data");
+    } catch (error) {
+      ;
     }
-  } catch (error) {
-    ;
   }
-}
-  Future<void> getbank() async{
-  final token=await gettokenFromPrefs();
-  try{
-    final response= await http.get(Uri.parse('$api/api/banks/'),
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    }
-    );
-    List<Map<String, dynamic>> banklist = [];
-        
+
+  Future<void> getbank() async {
+    final token = await gettokenFromPrefs();
+    try {
+      final response = await http.get(Uri.parse('$api/api/banks/'), headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      });
+      List<Map<String, dynamic>> banklist = [];
 
       if (response.statusCode == 200) {
         final parsed = jsonDecode(response.body);
         var productsData = parsed['data'];
 
-        
         for (var productData in productsData) {
           String imageUrl = "${productData['image']}";
           banklist.add({
             'id': productData['id'],
             'name': productData['name'],
-            'branch':productData['branch']
-            
+            'branch': productData['branch']
           });
-        
         }
         setState(() {
           bank = banklist;
-                  
-
-          
         });
       }
+    } catch (e) {}
+  }
 
-  }
-  catch(e){
-    
-  }
-}
   TextEditingController uname = TextEditingController();
 
- List<Map<String, dynamic>> orders = [];
-Future<void> fetchOrderData() async {
+  List<Map<String, dynamic>> orders = [];
+  Future<void> fetchOrderData() async {
     try {
       final token = await gettokenFromPrefs();
       final dep = await getdepFromPrefs();
@@ -213,7 +220,7 @@ Future<void> fetchOrderData() async {
 
         setState(() {
           orders = newOrders;
-          uname.text=name;
+          uname.text = name;
           // filteredOrders = newOrders;
           ;
         });
@@ -226,20 +233,20 @@ Future<void> fetchOrderData() async {
   }
 
   void getCurrentTime() {
-  // Get current date and time
-  DateTime now = DateTime.now();
+    // Get current date and time
+    DateTime now = DateTime.now();
 
-  // Format the time (e.g., HH:mm:ss)
-  String formattedTime = DateFormat('HH:mm:ss').format(now);
+    // Format the time (e.g., HH:mm:ss)
+    String formattedTime = DateFormat('HH:mm:ss').format(now);
+  }
 
-  
-}
   void removeProduct(int index) {
     setState(() {
       fam.removeAt(index);
     });
   }
- String? selectedValue;
+
+  String? selectedValue;
   final TextEditingController textEditingController = TextEditingController();
 
   @override
@@ -248,98 +255,77 @@ Future<void> fetchOrderData() async {
     searchController.dispose();
     super.dispose();
   }
-        
 
- Future<String?> getdepFromPrefs() async {
+  Future<String?> getdepFromPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('department');
-  } 
+  }
 
-DateTime selectedDate = DateTime.now();
+  DateTime selectedDate = DateTime.now();
 
   Future<void> _selectDate(BuildContext context) async {
-  final DateTime? picked = await showDatePicker(
-    context: context,
-    initialDate: selectedDate,
-    firstDate: DateTime(2000),
-    lastDate: DateTime(2101),
-  );
-  if (picked != null && picked != selectedDate) {
-    setState(() {
-      selectedDate = picked;
-       // This prints the formatted date
-    });
-  }
-}
-String formatDate(DateTime date) {
-  return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
-}
-
-
-
-Future<void> deletereciptlist() async {
-  
-  try {
-    final token = await gettokenFromPrefs();
-    var response = await http.delete(
-      Uri.parse('$api/api/bankreceipt/view/${widget.id}/'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: selectedDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
     );
-
-    if (response.statusCode == 200) {
-
-
-
-
-    } else {
-      
+    if (picked != null && picked != selectedDate) {
+      setState(() {
+        selectedDate = picked;
+        // This prints the formatted date
+      });
     }
-  } catch (error) {
-    
   }
-}
 
+  String formatDate(DateTime date) {
+    return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+  }
 
+  Future<void> deletereciptlist() async {
+    try {
+      final token = await gettokenFromPrefs();
+      var response = await http.delete(
+        Uri.parse('$api/api/bankreceipt/view/${widget.id}/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-Future<void> getreciptlist() async {
-  
-  try {
-    final token = await gettokenFromPrefs();
-    var response = await http.get(
-      Uri.parse('$api/api/bankreceipt/view/${widget.id}/'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
+      if (response.statusCode == 200) {
+      } else {}
+    } catch (error) {}
+  }
 
-    if (response.statusCode == 200) {
-      final parsed = jsonDecode(response.body);
-;
-setState(() {
+  Future<void> getreciptlist() async {
+    try {
+      final token = await gettokenFromPrefs();
+      var response = await http.get(
+        Uri.parse('$api/api/bankreceipt/view/${widget.id}/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-    remark.text=parsed['remark']?? '';
-     amount.text=parsed['amount']?? '';
-      transactionid.text=parsed['transactionID']?? '';
-      selectedDate=DateTime.parse(parsed['received_at']);
-      selectedbankId=parsed['bank']?? '';
-      createdby.text=parsed['created_by_name']?? '';
-  
-});
-   
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body);
+        ;
+        setState(() {
+          remark.text = parsed['remark'] ?? '';
+          amount.text = parsed['amount'] ?? '';
+          transactionid.text = parsed['transactionID'] ?? '';
+          selectedDate = DateTime.parse(parsed['received_at']);
+          selectedbankId = parsed['bank'] ?? '';
+          createdby.text = parsed['created_by_name'] ?? '';
+        });
+
         deletereciptlist();
-
-
-    } else {
-      
-    }
-  } catch (error) {
-    
+      } else {}
+    } catch (error) {}
   }
-}
+
   Future<void> AddReceipt2(
     BuildContext scaffoldContext,
   ) async {
@@ -347,13 +333,11 @@ setState(() {
       final token = await gettokenFromPrefs();
       final jwt = JWT.decode(token!);
       var name = jwt.payload['name'];
-    
 
       // Format the selectedDate as a string
       String formattedDate = DateFormat('yyyy-MM-dd').format(selectedDate);
 
-      final response = await http.post(
-          Uri.parse('$api/api/advancereceipt/'),
+      final response = await http.post(Uri.parse('$api/api/advancereceipt/'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -378,10 +362,7 @@ setState(() {
           ),
         );
         deletereciptlist();
-
-      } 
-      else 
-      {
+      } else {
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
           SnackBar(
             backgroundColor: Colors.red,
@@ -389,56 +370,53 @@ setState(() {
           ),
         );
       }
-    } catch (e) {
-      
-    }
+    } catch (e) {}
   }
-var respo;
-Future<void> AddStatusTime(BuildContext scaffoldContext) async {
-  final token = await gettokenFromPrefs();
-  try {
-    final response = await http.post(
-      Uri.parse('$api/api/datalog/create/'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-         'before_data': {"Action": "Recipt added "},
-        'after_data':  {"Data": "$respo"},
-        'order': "",
-      }),
-    );
 
-    // print("====================${response.body}");
-
-    if (response.statusCode == 201) {
-
-      ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.green,
-          content: Text('time added Successfully.'),
-        ),
+  var respo;
+  Future<void> AddStatusTime(BuildContext scaffoldContext) async {
+    final token = await gettokenFromPrefs();
+    try {
+      final response = await http.post(
+        Uri.parse('$api/api/datalog/create/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'before_data': {"Action": "Recipt added "},
+          'after_data': {"Data": "$respo"},
+          'order': "",
+        }),
       );
-    } else {
-      ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.red,
-          content: Text('Adding time failed.'),
-        ),
-      );
-    }
-  } catch (e) {
+
+      // print("====================${response.body}");
+
+      if (response.statusCode == 201) {
+        ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.green,
+            content: Text('time added Successfully.'),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('Adding time failed.'),
+          ),
+        );
+      }
+    } catch (e) {}
   }
-}
-Future<void> AddReceipt(
+
+  Future<void> AddReceipt(
     BuildContext scaffoldContext,
   ) async {
     try {
       final token = await gettokenFromPrefs();
       final jwt = JWT.decode(token!);
       var name = jwt.payload['name'];
-    
 
       // Format the selectedDate as a string
       String formattedDate = DateFormat('yyyy-MM-dd').format(selectedDate);
@@ -462,17 +440,13 @@ Future<void> AddReceipt(
         respo = Data['data'];
         AddStatusTime(context);
 
-
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
             content: Text('Receipt added Successfully.'),
           ),
         );
-
-      } 
-      else 
-      {
+      } else {
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
           SnackBar(
             backgroundColor: Colors.red,
@@ -480,585 +454,623 @@ Future<void> AddReceipt(
           ),
         );
       }
-    } catch (e) {
-      
-    }
+    } catch (e) {}
   }
 
-void updateexpense() async {
-  
-  final token = await gettokenFromPrefs();
+  void updateexpense() async {
+    final token = await gettokenFromPrefs();
 
-  try {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? username = prefs.getString('username'); 
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? username = prefs.getString('username');
 
-    
-    
+      if (username == null) {
+        return;
+      }
 
-    if (username == null) {
-      
-      return;
-    }
-
-    var response = await http.put(
-      Uri.parse('$api/api/bankreceipt/view/${widget.id}/'),
-      headers: {
-        'Authorization': 'Bearer $token',
-      },
-      body: {
-        
-        "bank": selectedbankId.toString(),
-        "amount": amount.text,
-        "received_at": formatDate(selectedDate), 
-        "transactionID": transactionid.text,
-        "remark": remark.text, 
-      },
-    );
-
-    
-    
-
-    if (response.statusCode == 200) {
-      var responseData = jsonDecode(response.body);
-      respo = responseData['data'];
-      AddStatusTime(context);
-
-     
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => bank_recipt_Report()),
+      var response = await http.put(
+        Uri.parse('$api/api/bankreceipt/view/${widget.id}/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+        body: {
+          "bank": selectedbankId.toString(),
+          "amount": amount.text,
+          "received_at": formatDate(selectedDate),
+          "transactionID": transactionid.text,
+          "remark": remark.text,
+        },
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Color.fromARGB(255, 49, 212, 4),
-          content: Text('Expense Updated successfully'),
-        ),
-      );
-    } else {
+
+      if (response.statusCode == 200) {
+        var responseData = jsonDecode(response.body);
+        respo = responseData['data'];
+        AddStatusTime(context);
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => bank_recipt_Report()),
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Color.fromARGB(255, 49, 212, 4),
+            content: Text('Expense Updated successfully'),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('Failed to add expense. Please try again.'),
+          ),
+        );
+      }
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red,
-          content: Text('Failed to add expense. Please try again.'),
+          content: Text('An error occurred. Please try again.'),
         ),
       );
     }
-  } catch (e) {
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: Colors.red,
-        content: Text('An error occurred. Please try again.'),
-      ),
-    );
   }
-}
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-
-
-      backgroundColor: Color.fromARGB(242, 255, 255, 255),
-      appBar: AppBar(
-           title: Text(
-          "Update Recipt",
-          style: TextStyle(fontSize: 14, color: Colors.grey),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back), // Custom back arrow
-          onPressed: () async{
-                   Navigator.pop(context);
-           
-          },
-        ),
-
-        actions: [
-            IconButton(
-              icon: Image.asset('lib/assets/profile.png'),
-               
-              onPressed: () {
-                
-              },
-            ),
-          ],
-          
+        backgroundColor: Color.fromARGB(242, 255, 255, 255),
+        appBar: AppBar(
+          title: Text(
+            "Update Recipt",
+            style: TextStyle(fontSize: 14, color: Colors.grey),
           ),
- 
-        body: LayoutBuilder(
-  builder: (context, constraints) {
-    return SingleChildScrollView(
-      child: Container(
-        width: double.infinity,
-        child: Column(
-          children: [
-            SizedBox(height: 15),
-           
-            Padding(
-  padding: EdgeInsets.symmetric(horizontal: 1),
-  child: Container(
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(10.0),
-      border: Border.all(color: Color.fromARGB(255, 202, 202, 202)),
-    ),
-    width: constraints.maxWidth * 0.9,
-    child: Padding(
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: constraints.maxWidth * 0.9,
-            decoration: BoxDecoration(
-              color:const Color.fromARGB(255, 2, 65, 96),
-              border: Border.all(color: Color.fromARGB(255, 202, 202, 202)),
-            ),
-            child: Column(
-              children: [
-                SizedBox(height: 10),
-                Text(
-                  "Update Recipt",
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                SizedBox(height: 13),
-              ],
-            ),
-          ),
-            SizedBox(height: 5),
-
-          // 🔄 Invoice Dropdown
-          Text("Change Invoice", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-          SizedBox(height: 5),
-     DropdownButton2<String>(
-  isExpanded: true,
-  value: selectedInvoiceId,
-  hint: const Text('Select Invoice', style: TextStyle(fontSize: 12.0)),
-  items: orders.map((order) {
-    return DropdownMenuItem<String>(
-      value: order['id'].toString(),
-      child: Text(
-        '${order['invoice']} - ${order['customer']}',
-        style: const TextStyle(fontSize: 12.0),
-      ),
-    );
-  }).toList(),
-  onChanged: (value) {
-    setState(() {
-      selectedInvoiceId = value;
-    });
-  },
-  dropdownSearchData: DropdownSearchData(
-    searchController: searchController,
-    searchInnerWidgetHeight: 50,
-    searchInnerWidget: Padding(
-      padding: const EdgeInsets.all(8),
-      child: TextFormField(
-        controller: searchController,
-        decoration: InputDecoration(
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          hintText: 'Search invoice...',
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      ),
-    ),
-    searchMatchFn: (item, searchValue) {
-      final order = orders.firstWhere(
-        (o) => o['id'].toString() == item.value,
-        orElse: () => {}, // empty map fallback
-      );
-      if (order.isEmpty) return false;
-      return order['invoice']
-          .toString()
-          .toLowerCase()
-          .contains(searchValue.toLowerCase());
-    },
-  ),
-  buttonStyleData: const ButtonStyleData(
-    height: 40,
-    padding: EdgeInsets.symmetric(horizontal: 10),
-  ),
-  dropdownStyleData: DropdownStyleData(
-    maxHeight: 300,
-    decoration: BoxDecoration(
-      color: Colors.white,
-      border: Border.all(color: Colors.grey), // ✅ Border added here
-      borderRadius: BorderRadius.circular(10),
-    ),
-  ),
-),
-
-
-          SizedBox(height: 10),
-                             Text("Select Customer", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-          SizedBox(height: 5),
-         Padding(
-  padding: const EdgeInsets.only(right: 10),
-  child: Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10),
-    decoration: BoxDecoration(
-      border: Border.all(color: Colors.grey),
-      borderRadius: BorderRadius.circular(10.0),
-    ),
-    child: IgnorePointer(
-      ignoring: selectedInvoiceId != null, // Disable if invoice is selected
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton2<String>(
-          isExpanded: true,
-          value: selectedCustomerId,
-          hint: const Text('Select Customer', style: TextStyle(fontSize: 12.0)),
-          items: [
-            const DropdownMenuItem<String>(
-              value: null,
-              child: Text('No Customer'),
-            ),
-            ...customer.map((cust) {
-              return DropdownMenuItem<String>(
-                value: cust['id'].toString(),
-                child: Text(cust['name'], style: const TextStyle(fontSize: 12.0)),
-              );
-            }).toList(),
-          ],
-          onChanged: (value) {
-            setState(() {
-              selectedCustomerId = value;
-            });
-          },
-          dropdownSearchData: DropdownSearchData(
-            searchController: customerSearchController,
-            searchInnerWidgetHeight: 50,
-            searchInnerWidget: Padding(
-              padding: const EdgeInsets.all(8),
-              child: TextFormField(
-                controller: customerSearchController,
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  hintText: 'Search customer name...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-            searchMatchFn: (item, searchValue) {
-              final matchedCustomer = customer.firstWhere(
-                (c) => c['id'].toString() == item.value,
-                orElse: () => {},
-              );
-              if (matchedCustomer.isEmpty) return false;
-              return matchedCustomer['name']
-                  .toString()
-                  .toLowerCase()
-                  .contains(searchValue.toLowerCase());
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back), // Custom back arrow
+            onPressed: () async {
+              Navigator.pop(context);
             },
           ),
-          buttonStyleData: const ButtonStyleData(
-            height: 40,
-            padding: EdgeInsets.symmetric(horizontal: 10),
-          ),
-          dropdownStyleData: DropdownStyleData(
-            maxHeight: 300,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.grey),
-              borderRadius: BorderRadius.circular(10),
+          actions: [
+            IconButton(
+              icon: Image.asset('lib/assets/profile.png'),
+              onPressed: () {},
             ),
-          ),
+          ],
         ),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              child: Container(
+                width: double.infinity,
+                child: Column(
+                  children: [
+                    SizedBox(height: 15),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 1),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10.0),
+                          border: Border.all(
+                              color: Color.fromARGB(255, 202, 202, 202)),
+                        ),
+                        width: constraints.maxWidth * 0.9,
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: constraints.maxWidth * 0.9,
+                                decoration: BoxDecoration(
+                                  color: const Color.fromARGB(255, 2, 65, 96),
+                                  border: Border.all(
+                                      color:
+                                          Color.fromARGB(255, 202, 202, 202)),
+                                ),
+                                child: Column(
+                                  children: [
+                                    SizedBox(height: 10),
+                                    Text(
+                                      "Update Recipt",
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    SizedBox(height: 13),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(height: 5),
+
+                              // 🔄 Invoice Dropdown
+                              Text("Change Invoice",
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold)),
+                              SizedBox(height: 5),
+                              DropdownButton2<String>(
+                                isExpanded: true,
+                                value: selectedInvoiceId,
+                                hint: const Text('Select Invoice',
+                                    style: TextStyle(fontSize: 12.0)),
+                                items: orders.map((order) {
+                                  return DropdownMenuItem<String>(
+                                    value: order['id'].toString(),
+                                    child: Text(
+                                      '${order['invoice']} - ${order['customer']}',
+                                      style: const TextStyle(fontSize: 12.0),
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (value) {
+                                  setState(() {
+                                    selectedInvoiceId = value;
+                                  });
+                                },
+                                dropdownSearchData: DropdownSearchData(
+                                  searchController: searchController,
+                                  searchInnerWidgetHeight: 50,
+                                  searchInnerWidget: Padding(
+                                    padding: const EdgeInsets.all(8),
+                                    child: TextFormField(
+                                      controller: searchController,
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 10, vertical: 8),
+                                        hintText: 'Search invoice...',
+                                        border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8)),
+                                      ),
+                                    ),
+                                  ),
+                                  searchMatchFn: (item, searchValue) {
+                                    final order = orders.firstWhere(
+                                      (o) => o['id'].toString() == item.value,
+                                      orElse: () => {}, // empty map fallback
+                                    );
+                                    if (order.isEmpty) return false;
+                                    return order['invoice']
+                                        .toString()
+                                        .toLowerCase()
+                                        .contains(searchValue.toLowerCase());
+                                  },
+                                ),
+                                buttonStyleData: const ButtonStyleData(
+                                  height: 40,
+                                  padding: EdgeInsets.symmetric(horizontal: 10),
+                                ),
+                                dropdownStyleData: DropdownStyleData(
+                                  maxHeight: 300,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    border: Border.all(
+                                        color:
+                                            Colors.grey), // ✅ Border added here
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+
+                              SizedBox(height: 10),
+                              Text("Select Customer",
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold)),
+                              SizedBox(height: 5),
+                              Padding(
+                                padding: const EdgeInsets.only(right: 10),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.grey),
+                                    borderRadius: BorderRadius.circular(10.0),
+                                  ),
+                                  child: IgnorePointer(
+                                    ignoring: selectedInvoiceId !=
+                                        null, // Disable if invoice is selected
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton2<String>(
+                                        isExpanded: true,
+                                        value: selectedCustomerId,
+                                        hint: const Text('Select Customer',
+                                            style: TextStyle(fontSize: 12.0)),
+                                        items: [
+                                          const DropdownMenuItem<String>(
+                                            value: null,
+                                            child: Text('No Customer'),
+                                          ),
+                                          ...customer.map((cust) {
+                                            return DropdownMenuItem<String>(
+                                              value: cust['id'].toString(),
+                                              child: Text(cust['name'],
+                                                  style: const TextStyle(
+                                                      fontSize: 12.0)),
+                                            );
+                                          }).toList(),
+                                        ],
+                                        onChanged: (value) {
+                                          setState(() {
+                                            selectedCustomerId = value;
+                                          });
+                                        },
+                                        dropdownSearchData: DropdownSearchData(
+                                          searchController:
+                                              customerSearchController,
+                                          searchInnerWidgetHeight: 50,
+                                          searchInnerWidget: Padding(
+                                            padding: const EdgeInsets.all(8),
+                                            child: TextFormField(
+                                              controller:
+                                                  customerSearchController,
+                                              decoration: InputDecoration(
+                                                isDense: true,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 10,
+                                                        vertical: 8),
+                                                hintText:
+                                                    'Search customer name...',
+                                                border: OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8)),
+                                              ),
+                                            ),
+                                          ),
+                                          searchMatchFn: (item, searchValue) {
+                                            final matchedCustomer =
+                                                customer.firstWhere(
+                                              (c) =>
+                                                  c['id'].toString() ==
+                                                  item.value,
+                                              orElse: () => {},
+                                            );
+                                            if (matchedCustomer.isEmpty)
+                                              return false;
+                                            return matchedCustomer['name']
+                                                .toString()
+                                                .toLowerCase()
+                                                .contains(
+                                                    searchValue.toLowerCase());
+                                          },
+                                        ),
+                                        buttonStyleData: const ButtonStyleData(
+                                          height: 40,
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 10),
+                                        ),
+                                        dropdownStyleData: DropdownStyleData(
+                                          maxHeight: 300,
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            border:
+                                                Border.all(color: Colors.grey),
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                              Text(
+                                "Amount",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                ),
+                              ),
+                              SizedBox(height: 5),
+                              Container(
+                                child: TextField(
+                                  controller: amount,
+                                  decoration: InputDecoration(
+                                    labelText: 'Amount',
+                                    hintText: amount.text.isNotEmpty
+                                        ? amount.text
+                                        : 'Enter your amount',
+                                    labelStyle: TextStyle(
+                                      fontSize:
+                                          13.0, // Adjust the font size as needed
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                      borderSide:
+                                          BorderSide(color: Colors.grey),
+                                    ),
+                                    contentPadding:
+                                        EdgeInsets.symmetric(vertical: 8.0),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: 5),
+
+                              SizedBox(
+                                height: 5,
+                              ),
+
+                              Text(
+                                "Payment Date",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                ),
+                              ),
+                              SizedBox(
+                                height: 5,
+                              ),
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: <Widget>[
+                                  Container(
+                                    width: 350, // Set the desired width here
+                                    height: 46, // Set the desired height here
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: Colors
+                                            .grey, // You can set the border color here
+                                        width:
+                                            1.0, // You can adjust the border width here
+                                      ),
+                                      borderRadius: BorderRadius.circular(
+                                          8.0), // You can adjust the border radius here
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 30,
+                                        ),
+                                        Text(
+                                          '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                                          style: TextStyle(
+                                              fontSize: 15,
+                                              color: Color.fromARGB(
+                                                  255, 116, 116, 116)),
+                                        ),
+                                        SizedBox(
+                                          width: 162,
+                                        ),
+                                        GestureDetector(
+                                          onTap: () {
+                                            _selectDate(context);
+                                          },
+                                          child: Icon(Icons.date_range),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              SizedBox(
+                                height: 5,
+                              ),
+                              Text(
+                                "Created By",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                ),
+                              ),
+                              SizedBox(
+                                height: 5,
+                              ),
+                              Container(
+                                child: TextField(
+                                  controller: createdby,
+                                  readOnly:
+                                      true, // Makes the TextField non-editable
+                                  decoration: InputDecoration(
+                                    labelStyle: TextStyle(
+                                      fontSize:
+                                          13.0, // Adjust the font size as needed
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                      borderSide:
+                                          BorderSide(color: Colors.grey),
+                                    ),
+                                    contentPadding:
+                                        EdgeInsets.symmetric(vertical: 8.0),
+                                  ),
+                                ),
+                              ),
+
+                              SizedBox(
+                                height: 5,
+                              ),
+                              Text(
+                                "Bank",
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              SizedBox(
+                                height: 5,
+                              ),
+
+                              Padding(
+                                padding: const EdgeInsets.only(right: 10),
+                                child: Container(
+                                  height: 49,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                        color: const Color.fromARGB(
+                                            255, 206, 206, 206)),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(width: 20),
+                                      Container(
+                                        width: 270,
+                                        child: InputDecorator(
+                                          decoration: InputDecoration(
+                                            border: InputBorder.none,
+                                            hintText: 'Select Bank',
+                                            contentPadding:
+                                                EdgeInsets.symmetric(
+                                                    horizontal: 1),
+                                          ),
+                                          child: DropdownButtonHideUnderline(
+                                            child: DropdownButton<int>(
+                                              hint: Text(
+                                                'Select Bank',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey[600],
+                                                ),
+                                              ),
+                                              value:
+                                                  selectedbankId, // Selected bank ID
+                                              isExpanded: true,
+                                              dropdownColor:
+                                                  const Color.fromARGB(
+                                                      255, 255, 255, 255),
+                                              icon: Icon(
+                                                Icons.arrow_drop_down,
+                                                color: const Color.fromARGB(
+                                                    255, 107, 107, 107),
+                                              ),
+                                              onChanged: (int? newValue) {
+                                                setState(() {
+                                                  selectedbankId =
+                                                      newValue; // Update the selected bank ID
+                                                });
+                                              },
+                                              items: bank
+                                                  .map<DropdownMenuItem<int>>(
+                                                      (bankItem) {
+                                                return DropdownMenuItem<int>(
+                                                  value: bankItem[
+                                                      'id'], // Use the bank's `id`
+                                                  child: Text(
+                                                    bankItem[
+                                                        'name'], // Display the bank's `name`
+                                                    style: TextStyle(
+                                                      color: Colors.black87,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                );
+                                              }).toList(),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                              Text(
+                                "Transaction ID",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                ),
+                              ),
+                              SizedBox(height: 5),
+                              Container(
+                                child: TextField(
+                                  controller: transactionid,
+                                  decoration: InputDecoration(
+                                    labelText: 'No.',
+                                    labelStyle: TextStyle(
+                                      fontSize:
+                                          13.0, // Adjust the font size as needed
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                      borderSide:
+                                          BorderSide(color: Colors.grey),
+                                    ),
+                                    contentPadding:
+                                        EdgeInsets.symmetric(vertical: 8.0),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: 5),
+
+                              Text(
+                                "Remark",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                ),
+                              ),
+                              SizedBox(height: 5),
+                              Container(
+                                child: TextField(
+                                  controller: remark,
+                                  decoration: InputDecoration(
+                                    labelText: 'remark',
+                                    labelStyle: TextStyle(
+                                      fontSize:
+                                          13.0, // Adjust the font size as needed
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                      borderSide:
+                                          BorderSide(color: Colors.grey),
+                                    ),
+                                    contentPadding:
+                                        EdgeInsets.symmetric(vertical: 8.0),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: 15),
+                       ElevatedButton(
+  onPressed: ['ADMIN', 'COO', 'CEO'].contains(currentDepartment)
+      ? () {
+          if (selectedInvoiceId != null) {
+            AddReceipt(context);
+          } else if (selectedCustomerId != null) {
+            AddReceipt2(context);
+          } else {
+            updateexpense();
+          }
+        }
+      : null,
+  style: ButtonStyle(
+    backgroundColor: MaterialStateProperty.resolveWith<Color>(
+      (states) {
+        if (states.contains(MaterialState.disabled)) {
+          return Colors.grey;
+        }
+        return Colors.blue;
+      },
+    ),
+    shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+      RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
       ),
     ),
+    fixedSize: MaterialStateProperty.all<Size>(
+      Size(constraints.maxWidth * 0.4, 50),
+    ),
+  ),
+  child: const Text(
+    "Update",
+    style: TextStyle(color: Colors.white),
   ),
 ),
 
-
-          Text(
-            "Amount",
-            style: TextStyle(
-              fontSize: 15,
-            ),
-          ),
-          SizedBox(height: 5),
-          Container(
-            child: TextField(
-              controller: amount,
-              
-              decoration: InputDecoration(
-                labelText: 'Amount',
-                                hintText: amount.text.isNotEmpty ? amount.text : 'Enter your amount',
-
-                labelStyle: TextStyle(
-        fontSize: 13.0, // Adjust the font size as needed
-      ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10.0),
-                  borderSide: BorderSide(color: Colors.grey),
-                ),
-                contentPadding: EdgeInsets.symmetric(vertical: 8.0),
-              ),
-            ),
-          ),
-                    SizedBox(height: 5),
-
-
-
-
-          SizedBox(height: 5,),
-          
-            Text(
-                      "Payment Date",
-                      style: TextStyle(
-                          fontSize: 13, ),
-                    ),
-                    SizedBox(
-                      height: 5,
-                    ),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        Container(
-                          width: 350, // Set the desired width here
-                          height: 46, // Set the desired height here
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: Colors
-                                  .grey, // You can set the border color here
-                              width:
-                                  1.0, // You can adjust the border width here
-                            ),
-                            borderRadius: BorderRadius.circular(
-                                8.0), // You can adjust the border radius here
-                          ),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 30,
-                              ),
-                              Text(
-                                '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                                style: TextStyle(
-                                    fontSize: 15,
-                                    color:
-                                        Color.fromARGB(255, 116, 116, 116)),
-                              ),
-                              SizedBox(
-                                width: 162,
-                              ),
-                              GestureDetector(
-                                onTap: () {
-                                  _selectDate(context);
-                                  
-                                },
-                                child: Icon(Icons.date_range),
-                              ),
+                              // Displaying the list of departments as a table
+                              SizedBox(height: 10),
                             ],
                           ),
                         ),
-                      ],
-                    ),
-
-                      SizedBox(
-                      height: 5,
-                    ),
-           Text(
-                      "Created By",
-                      style: TextStyle(
-                          fontSize: 13, ),
-                    ),
-                    SizedBox(
-                      height: 5,
-                    ),
-                    Container(
-  child: TextField(
-    controller: createdby,
-    readOnly: true, // Makes the TextField non-editable
-    decoration: InputDecoration(
-      labelStyle: TextStyle(
-        fontSize: 13.0, // Adjust the font size as needed
-      ),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10.0),
-        borderSide: BorderSide(color: Colors.grey),
-      ),
-      contentPadding: EdgeInsets.symmetric(vertical: 8.0),
-    ),
-  ),
-),
-
-
-                       SizedBox(height: 5,),
-                     Text("Bank",style: TextStyle(fontSize: 12),),
-                      SizedBox(height: 5,),
-              
-Padding(
-  padding: const EdgeInsets.only(right: 10),
-  child: Container(
-    height: 49,
-    decoration: BoxDecoration(
-      border: Border.all(color: const Color.fromARGB(255, 206, 206, 206)),
-      borderRadius: BorderRadius.circular(10),
-    ),
-    child: Row(
-      children: [
-        SizedBox(width: 20),
-        Container(
-          width: 270,
-          child: InputDecorator(
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              hintText: 'Select Bank',
-              contentPadding: EdgeInsets.symmetric(horizontal: 1),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<int>(
-                hint: Text(
-                  'Select Bank',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                value: selectedbankId, // Selected bank ID
-                isExpanded: true,
-                dropdownColor: const Color.fromARGB(255, 255, 255, 255),
-                icon: Icon(
-                  Icons.arrow_drop_down,
-                  color: const Color.fromARGB(255, 107, 107, 107),
-                ),
-                onChanged: (int? newValue) {
-                  setState(() {
-                    selectedbankId = newValue; // Update the selected bank ID
-                    
-                  });
-                },
-                items: bank.map<DropdownMenuItem<int>>((bankItem) {
-                  return DropdownMenuItem<int>(
-                    value: bankItem['id'], // Use the bank's `id`
-                    child: Text(
-                      bankItem['name'], // Display the bank's `name`
-                      style: TextStyle(
-                        color: Colors.black87,
-                        fontSize: 12,
                       ),
                     ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-        ),
-      ],
-    ),
-  ),
-),
-
-   Text(
-            "Transaction ID",
-            style: TextStyle(
-              fontSize: 13,
-            ),
-          ),
-          SizedBox(height: 5),
-          Container(
-            child: TextField(
-              controller: transactionid,
-              decoration: InputDecoration(
-                labelText: 'No.',
-                labelStyle: TextStyle(
-        fontSize: 13.0, // Adjust the font size as needed
-      ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10.0),
-                  borderSide: BorderSide(color: Colors.grey),
-                ),
-                contentPadding: EdgeInsets.symmetric(vertical: 8.0),
-              ),
-            ),
-          ),
-                    SizedBox(height: 5),
-
-          Text(
-            "Remark",
-            style: TextStyle(
-              fontSize: 13,
-            ),
-          ),
-          SizedBox(height: 5),
-          Container(
-            child: TextField(
-              controller: remark,
-              decoration: InputDecoration(
-                labelText: 'remark',
-                labelStyle: TextStyle(
-        fontSize: 13.0, // Adjust the font size as needed
-      ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10.0),
-                  borderSide: BorderSide(color: Colors.grey),
-                ),
-                contentPadding: EdgeInsets.symmetric(vertical: 8.0),
-              ),
-            ),
-          ),
-          SizedBox(height: 15),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                if(selectedInvoiceId!=null){
-AddReceipt(context);
-                }
-                else if(selectedCustomerId!=null){
-
-                  AddReceipt2(context);
-
-
-
-                }
-                else{
-
-                                  updateexpense();
-
-
-                }
-
-
-              });
-            },
-            style: ButtonStyle(
-              backgroundColor: MaterialStateProperty.all<Color>(
-                Colors.blue,
-              ),
-              shape: MaterialStateProperty.all<RoundedRectangleBorder>(
-                RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                    SizedBox(height: 15),
+                  ],
                 ),
               ),
-              fixedSize: MaterialStateProperty.all<Size>(
-                Size(constraints.maxWidth * 0.4, 50),
-              ),
-            ),
-            child: Text("Submit", style: TextStyle(color: Colors.white)),
-          ),
-         
-          // Displaying the list of departments as a table
-          SizedBox(height: 10),
-
-        ],
-      ),
-    ),
-  ),
-),
- SizedBox(height: 15),
-          ],
-        ),
-      ),
-    );
-  },
-)
-    );
+            );
+          },
+        ));
   }
-
 }

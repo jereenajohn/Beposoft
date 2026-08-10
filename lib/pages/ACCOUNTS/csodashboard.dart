@@ -2535,7 +2535,10 @@ class _cso_dashboardState extends State<cso_dashboard>
           _buildDropdownTile(
             context,
             'Orders',
-            ['New Orders', 'View Orders List'],
+            [
+              // 'New Orders', 
+            'View Orders List'
+            ],
           ),
           _buildDropdownTile(context, 'GRV', [
             'Create New GRV',
