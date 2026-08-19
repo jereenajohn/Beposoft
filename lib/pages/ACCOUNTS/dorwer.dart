@@ -432,12 +432,23 @@ class drower {
         );
         break;
 
-      case 'Delivery Note List(Shipped)':
+            
+
+      case 'Delivery Order(Shipped)':
         Navigator.push(
           context,
           MaterialPageRoute(
               builder: (context) => WarehouseOrderView(
                     status: 'Shipped',
+                  )),
+        );
+        break;
+              case 'Return From Delivery (RFD)':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => WarehouseOrderView(
+                    status: 'Return From Delivery',
                   )),
         );
         break;
@@ -450,7 +461,7 @@ class drower {
                   )),
         );
         break;
-      case 'Delivery Note List(Packing under Progress)':
+      case 'Delivery Order(Packing under Progress)':
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -459,7 +470,7 @@ class drower {
                   )),
         );
         break;
-      case 'Delivery Note List(Packed)':
+      case 'Packed For Delivery(PFD)':
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -468,7 +479,7 @@ class drower {
                   )),
         );
         break;
-      case 'Delivery Note List(To Print)':
+      case 'Delivery Order (DO)':
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -477,7 +488,7 @@ class drower {
                   )),
         );
         break;
-      case 'Delivery Note List(Ready to ship)':
+      case 'Out For Delivery(OFD)':
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -486,6 +497,16 @@ class drower {
                   )),
         );
         break;
+              case 'Return From Delivery (RFD)':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => WarehouseOrderView(
+                    status: 'Return From Delivery',
+                  )),
+        );
+        break;
+      
 
       case 'Daily Goods Movement':
         Navigator.push(
@@ -535,7 +556,8 @@ class drower {
                   )),
         );
         break;
-      case 'To Print':
+        
+      case 'DO(Delivery Order)':
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -549,11 +571,11 @@ class drower {
           context,
           MaterialPageRoute(
               builder: (context) => OrderList2(
-                    status: 'Packing Under Progress',
+                    status: 'Packing under progress',
                   )),
         );
         break;
-      case 'Packed':
+      case 'PFD (Packed For Delivery)':
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -562,7 +584,7 @@ class drower {
                   )),
         );
         break;
-      case 'Ready to ship':
+      case 'OFD (Out For Delivery)':
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -572,6 +594,16 @@ class drower {
         );
         break;
 
+        
+  case 'Return From Delivery':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => OrderList2(
+                    status: 'Return From Delivery',
+                  )),
+        );
+        break;
       case 'Shipped':
         Navigator.push(
           context,

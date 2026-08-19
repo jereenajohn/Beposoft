@@ -71,6 +71,8 @@ class _OrderReviewState extends State<OrderReview> {
   bool showParcelServiceDropdown = false;
   final TextEditingController parcelServiceNoteController =
       TextEditingController();
+  final TextEditingController deliveryReturnReasonController =
+      TextEditingController();
 
   String? currentOrderStatus; // REAL status from API
   bool statusSubmitted = false; // Track submit action
@@ -131,6 +133,7 @@ class _OrderReviewState extends State<OrderReview> {
     'Packing under progress',
     'Packed',
     'Ready to ship',
+    'Return From Delivery',
     'Shipped',
     'Invoice Rejected',
   ];
@@ -204,6 +207,7 @@ class _OrderReviewState extends State<OrderReview> {
     'Packing under progress',
     'Packed', // 👈 use either "Packed" or "Packing" everywhere; be consistent
     'Ready to ship',
+    'Return From Delivery',
     'Shipped',
     'Invoice Rejected',
   ];
@@ -247,8 +251,12 @@ class _OrderReviewState extends State<OrderReview> {
     ],
     'Ready to ship': [
       'Ready to ship',
+      'Return From Delivery',
       'Shipped',
-      'Invoice Rejected',
+    ],
+    'Return From Delivery': [
+      'Return From Delivery',
+      'Ready to ship',
     ],
     'Shipped': [
       'Shipped',
@@ -259,6 +267,27 @@ class _OrderReviewState extends State<OrderReview> {
   };
 
   List<String> getFilteredStatuses() {
+    final String baseStatus =
+        (currentOrderStatus ?? selectedStatus ?? '').toString().trim();
+
+    // Special delivery flow:
+    // OFD can move to Return From Delivery or Shipped.
+    // Return From Delivery must first move back to OFD before Shipped is allowed.
+    if (baseStatus == 'Ready to ship') {
+      return [
+        'Ready to ship',
+        'Return From Delivery',
+        'Shipped',
+      ];
+    }
+
+    if (baseStatus == 'Return From Delivery') {
+      return [
+        'Return From Delivery',
+        'Ready to ship',
+      ];
+    }
+
     if (isTopManagement()) {
       return statuses2;
     }
@@ -267,36 +296,36 @@ class _OrderReviewState extends State<OrderReview> {
 
     // ✅ BDM old flow: Invoice Approved -> Waiting For Confirmation
     if (dept == "BDM" || dept == "SD" || dept == "CSO") {
-      final baseStatus = (selectedStatus ?? currentOrderStatus)?.trim();
+      final branchStatus = (selectedStatus ?? currentOrderStatus)?.trim();
 
-      if (baseStatus == null || baseStatus.isEmpty) return [];
+      if (branchStatus == null || branchStatus.isEmpty) return [];
 
-      return statusFlow[baseStatus]
+      return statusFlow[branchStatus]
               ?.where((status) => status != 'Pre Booked')
               .toSet()
               .toList() ??
-          [baseStatus];
+          [branchStatus];
     }
 
     // ✅ ADMIN / Accounts new flow with Pre Booked
     if (isAdminOrAccounts()) {
-      final baseStatus = (selectedStatus ?? currentOrderStatus)?.trim();
+      final branchStatus = (selectedStatus ?? currentOrderStatus)?.trim();
 
-      if (baseStatus == null || baseStatus.isEmpty) return [];
+      if (branchStatus == null || branchStatus.isEmpty) return [];
 
       final List<String> result = [];
 
       if (!statusSubmitted) {
-        result.add(baseStatus);
+        result.add(branchStatus);
       }
 
-      if (baseStatus == 'Invoice Approved') {
+      if (branchStatus == 'Invoice Approved') {
         result.add('Pre Booked');
         result.add('Waiting For Confirmation');
-      } else if (baseStatus == 'Pre Booked') {
+      } else if (branchStatus == 'Pre Booked') {
         result.add('Waiting For Confirmation');
       } else {
-        final currentIndex = statuses2.indexOf(baseStatus);
+        final currentIndex = statuses2.indexOf(branchStatus);
 
         if (currentIndex != -1 && currentIndex + 1 < statuses2.length) {
           final nextStatus = statuses2[currentIndex + 1];
@@ -307,7 +336,7 @@ class _OrderReviewState extends State<OrderReview> {
         }
       }
 
-      if (baseStatus != 'Shipped' && !result.contains('Invoice Rejected')) {
+      if (branchStatus != 'Shipped' && !result.contains('Invoice Rejected')) {
         result.add('Invoice Rejected');
       }
 
@@ -1455,7 +1484,7 @@ class _OrderReviewState extends State<OrderReview> {
                 items: statuses.map((status) {
                   return DropdownMenuItem<String>(
                     value: status,
-                    child: Text(status),
+                    child: Text(getDisplayStatus(status)),
                   );
                 }).toList(),
                 onChanged: (value) {
@@ -1881,8 +1910,83 @@ class _OrderReviewState extends State<OrderReview> {
     return false;
   }
 
+  Future<String?> _showDeliveryReturnReasonDialog() async {
+    deliveryReturnReasonController.clear();
+
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text(
+            'Delivery Return Reason',
+          ),
+          content: TextField(
+            controller: deliveryReturnReasonController,
+            autofocus: true,
+            minLines: 3,
+            maxLines: 5,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Return Reason',
+              hintText: 'Enter delivery return reason',
+              border: OutlineInputBorder(),
+              alignLabelWithHint: true,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                final String reason =
+                    deliveryReturnReasonController.text.trim();
+
+                if (reason.isEmpty) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Delivery return reason is required',
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                Navigator.of(dialogContext).pop(reason);
+              },
+              child: const Text('Update'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> updatestatus() async {
     try {
+      String? deliveryReturnReason;
+
+      if ((selectedStatus ?? '').trim() == 'Return From Delivery') {
+        deliveryReturnReason =
+            await _showDeliveryReturnReasonDialog();
+
+        if (!mounted ||
+            deliveryReturnReason == null ||
+            deliveryReturnReason.trim().isEmpty) {
+          return;
+        }
+      }
+
       // 🚫 BLOCK "To Print" IF RACK NOT SELECTED
       if ((selectedStatus ?? '').trim() == 'To Print' && !isRackSelected()) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1910,6 +2014,8 @@ class _OrderReviewState extends State<OrderReview> {
 
       Map<String, dynamic> body = {
         'status': selectedStatus,
+        if (selectedStatus == 'Return From Delivery')
+          'delivery_return_reason': deliveryReturnReason,
         if (isToPrint && id != null) 'confirmed_by': id,
         'time': formattedTime,
         'updated_at': DateTime.now().toIso8601String().split('T')[0],
@@ -1951,6 +2057,8 @@ class _OrderReviewState extends State<OrderReview> {
                     0.0
                 : 0.0,
             'accounts_note': accountsnoteController.text.trim(),
+            if (selectedStatus == 'Return From Delivery')
+              'delivery_return_reason': deliveryReturnReason,
           },
         );
 
@@ -3855,6 +3963,7 @@ class _OrderReviewState extends State<OrderReview> {
             'exclude_price': item['exclude_price'] ?? 0.0,
             'images': item['image'] ?? '',
             'products': item['products'] ?? '',
+            'product_id': item['product_id'] ?? item['product'],
             'rack_details': item['rack_details'] ?? [],
           });
 
@@ -3955,6 +4064,262 @@ class _OrderReviewState extends State<OrderReview> {
     return department == "ADMIN" || department == "Accounts / Accounting";
   }
 
+num _normalizedAvailableStock({
+  required dynamic stockValue,
+  required dynamic availableStockValue,
+}) {
+  final num stock = stockValue is num
+      ? stockValue
+      : num.tryParse(
+            stockValue?.toString() ?? '0',
+          ) ??
+          0;
+
+  final num rawAvailableStock = availableStockValue is num
+      ? availableStockValue
+      : num.tryParse(
+            availableStockValue?.toString() ?? '0',
+          ) ??
+          0;
+
+  if (stock <= 0 || rawAvailableStock <= 0) {
+    return 0;
+  }
+
+  return rawAvailableStock;
+}
+
+Map<String, dynamic>? _findWarehouseProductById(
+  List<dynamic> products,
+  int productId,
+) {
+  for (final dynamic rawProduct in products) {
+    if (rawProduct is! Map) continue;
+
+    final Map<String, dynamic> product =
+        Map<String, dynamic>.from(rawProduct);
+
+    final int mainProductId =
+        int.tryParse(product['id']?.toString() ?? '') ?? 0;
+
+    if (mainProductId == productId) {
+      return product;
+    }
+
+    final List<dynamic> variants =
+        product['variantIDs'] as List<dynamic>? ?? [];
+
+    for (final dynamic rawVariant in variants) {
+      if (rawVariant is! Map) continue;
+
+      final Map<String, dynamic> variant =
+          Map<String, dynamic>.from(rawVariant);
+
+      final int variantId =
+          int.tryParse(variant['id']?.toString() ?? '') ?? 0;
+
+      if (variantId == productId) {
+        return variant;
+      }
+    }
+  }
+
+  return null;
+}
+
+Future<num?> fetchAvailableStockForProduct({
+  required int productId,
+  required String productName,
+}) async {
+  try {
+    final String? token = await getTokenFromPrefs();
+    final String? warehouseId = await getwarehouseFromPrefs();
+
+    if (token == null ||
+        token.trim().isEmpty ||
+        warehouseId == null ||
+        warehouseId.trim().isEmpty) {
+      return null;
+    }
+
+    Future<Map<String, dynamic>?> fetchPage(
+      int page, {
+      String search = '',
+    }) async {
+      final Uri uri = Uri.parse(
+        '$api/api/warehouse/products/$warehouseId/get/',
+      ).replace(
+        queryParameters: {
+          'page': page.toString(),
+          if (search.trim().isNotEmpty)
+            'search': search.trim(),
+        },
+      );
+
+      final http.Response response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode != 200) {
+        return null;
+      }
+
+      final dynamic parsed = jsonDecode(response.body);
+
+      if (parsed is! Map) {
+        return null;
+      }
+
+      final dynamic results = parsed['results'];
+
+      final List<dynamic> data =
+          results is Map && results['data'] is List
+              ? List<dynamic>.from(results['data'])
+              : const [];
+
+      final Map<String, dynamic>? found =
+          _findWarehouseProductById(
+        data,
+        productId,
+      );
+
+      if (found != null) {
+        return found;
+      }
+
+      return {
+        '_next': parsed['next'],
+      };
+    }
+
+    // First search using product name.
+    if (productName.trim().isNotEmpty) {
+      final Map<String, dynamic>? searched =
+          await fetchPage(
+        1,
+        search: productName.trim(),
+      );
+
+      if (searched != null &&
+          !searched.containsKey('_next')) {
+        return _normalizedAvailableStock(
+          stockValue: searched['stock'],
+          availableStockValue: searched['available_stock'],
+        );
+      }
+    }
+
+    // Fallback through pagination.
+    int page = 1;
+
+    while (page <= 100) {
+      final Map<String, dynamic>? result =
+          await fetchPage(page);
+
+      if (result == null) {
+        return null;
+      }
+
+      if (!result.containsKey('_next')) {
+        return _normalizedAvailableStock(
+          stockValue: result['stock'],
+          availableStockValue: result['available_stock'],
+        );
+      }
+
+      final dynamic next = result['_next'];
+
+      if (next == null) {
+        break;
+      }
+
+      page++;
+    }
+
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<void> _showInsufficientStockDialog({
+  required String productName,
+  required int requestedQuantity,
+  required num availableStock,
+}) async {
+  if (!mounted) return;
+
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (BuildContext dialogContext) {
+      return AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+        title: const Row(
+          children: [
+            Icon(
+              Icons.inventory_2_outlined,
+              color: Colors.red,
+            ),
+            SizedBox(width: 10),
+            Text(
+              'Insufficient Stock',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              productName,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Requested Quantity: $requestedQuantity',
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Available Stock: $availableStock',
+              style: const TextStyle(
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'There is not enough available stock for this product.',
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      );
+    },
+  );
+}
   Future<void> updatingamount() async {
     try {
       final token = await getTokenFromPrefs();
@@ -4471,82 +4836,242 @@ class _OrderReviewState extends State<OrderReview> {
         dept == 'accounts / accounting';
   }
 
-  void showPopupDialog(BuildContext context, Map<String, dynamic> item) {
-    if (!canEditProductPopup()) {
-      return;
-    }
-    TextEditingController quantityController =
-        TextEditingController(text: item['quantity']?.toString() ?? '');
-    TextEditingController discountController =
-        TextEditingController(text: item['discount']?.toString() ?? '');
-    TextEditingController priceController =
-        TextEditingController(text: item['rate']?.toString() ?? '');
+void showPopupDialog(
+  BuildContext context,
+  Map<String, dynamic> item,
+) {
+  if (!canEditProductPopup()) {
+    return;
+  }
 
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(
-            'Edit Item Details',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: quantityController,
-                decoration: InputDecoration(labelText: 'Quantity'),
-                keyboardType: TextInputType.number,
+  TextEditingController quantityController =
+      TextEditingController(
+    text: item['quantity']?.toString() ?? '',
+  );
+
+  TextEditingController discountController =
+      TextEditingController(
+    text: item['discount']?.toString() ?? '',
+  );
+
+  TextEditingController priceController =
+      TextEditingController(
+    text: item['rate']?.toString() ?? '',
+  );
+
+  bool isCheckingStock = false;
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (BuildContext dialogContext) {
+      return StatefulBuilder(
+        builder: (
+          BuildContext context,
+          StateSetter setDialogState,
+        ) {
+          return AlertDialog(
+            title: const Text(
+              'Edit Item Details',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
               ),
-              TextField(
-                controller: discountController,
-                decoration: InputDecoration(
-                    labelText: 'Discount (in Rs for each product)'),
-                keyboardType: TextInputType.number,
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: quantityController,
+                  enabled: !isCheckingStock,
+                  decoration: const InputDecoration(
+                    labelText: 'Quantity',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                TextField(
+                  controller: discountController,
+                  enabled: !isCheckingStock,
+                  decoration: const InputDecoration(
+                    labelText:
+                        'Discount (in Rs for each product)',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                TextField(
+                  controller: priceController,
+                  enabled: !isCheckingStock,
+                  decoration: const InputDecoration(
+                    labelText: 'Price',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isCheckingStock
+                    ? null
+                    : () {
+                        Navigator.of(dialogContext).pop();
+                      },
+                child: const Text('Cancel'),
               ),
-              TextField(
-                controller: priceController,
-                decoration: InputDecoration(labelText: 'Price'),
-                keyboardType: TextInputType.number,
+              TextButton(
+                style: TextButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: isCheckingStock
+                    ? null
+                    : () async {
+                        final int? enteredQuantity =
+                            int.tryParse(
+                          quantityController.text.trim(),
+                        );
+
+                        if (enteredQuantity == null ||
+                            enteredQuantity <= 0) {
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(
+                            const SnackBar(
+                              backgroundColor: Colors.red,
+                              content: Text(
+                                'Enter a valid quantity.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        final double discount =
+                            double.tryParse(
+                                  discountController.text,
+                                ) ??
+                                double.tryParse(
+                                      item['discount']
+                                          ?.toString() ??
+                                          '0',
+                                    ) ??
+                                0.0;
+
+                        final double upprice =
+                            double.tryParse(
+                                  priceController.text,
+                                ) ??
+                                double.tryParse(
+                                      item['rate']
+                                          ?.toString() ??
+                                          '0',
+                                    ) ??
+                                0.0;
+
+                        final int productId =
+                            int.tryParse(
+                                  item['product_id']
+                                          ?.toString() ??
+                                      '',
+                                ) ??
+                                0;
+
+                        if (productId <= 0) {
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(
+                            const SnackBar(
+                              backgroundColor: Colors.red,
+                              content: Text(
+                                'Unable to verify product stock.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        setDialogState(() {
+                          isCheckingStock = true;
+                        });
+
+                        final num? availableStock =
+                            await fetchAvailableStockForProduct(
+                          productId: productId,
+                          productName:
+                              item['name']?.toString() ?? '',
+                        );
+
+                        if (!dialogContext.mounted) {
+                          return;
+                        }
+
+                        setDialogState(() {
+                          isCheckingStock = false;
+                        });
+
+                        if (availableStock == null) {
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(
+                            const SnackBar(
+                              backgroundColor: Colors.red,
+                              content: Text(
+                                'Unable to verify available stock.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        if (enteredQuantity > availableStock) {
+                          await _showInsufficientStockDialog(
+                            productName:
+                                item['name']?.toString() ??
+                                    'Product',
+                            requestedQuantity:
+                                enteredQuantity,
+                            availableStock: availableStock,
+                          );
+
+                          return;
+                        }
+
+                        // ✅ STOCK AVAILABLE
+                        // Existing update logic continues unchanged.
+                        await updatedetails(
+                          item['id'],
+                          enteredQuantity,
+                          discount,
+                          upprice,
+                          item,
+                        );
+
+                        if (!dialogContext.mounted) {
+                          return;
+                        }
+
+                        Navigator.of(dialogContext).pop();
+
+                        await fetchOrderItems();
+                        await fetchCustomerLedgerDetails();
+                      },
+                child: isCheckingStock
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Save'),
               ),
             ],
-          ),
-          actions: [
-            TextButton(
-              child: Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              onPressed: () {
-                final quantity =
-                    int.tryParse(quantityController.text) ?? item['quantity'];
-                final discount = double.tryParse(discountController.text) ??
-                    item['discount'];
-
-                final upprice =
-                    double.tryParse(priceController.text) ?? item['rate'];
-
-                updatedetails(item['id'], quantity, discount, upprice, item);
-                Navigator.of(context).pop();
-                fetchOrderItems();
-                fetchCustomerLedgerDetails();
-              },
-              child: Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-  }
+          );
+        },
+      );
+    },
+  );
+}
 
   Future<void> updatedetails(int id, int quantity, double discount, var price,
       Map<String, dynamic> previousItem) async {
@@ -5330,18 +5855,38 @@ class _OrderReviewState extends State<OrderReview> {
 
   String getDisplayStatus(dynamic rawStatus) {
     final String value = (rawStatus ?? '').toString().trim();
-    return value == 'Invoice Created' ? 'Waiting For Approval' : value;
+
+    switch (value) {
+      case 'Invoice Created':
+        return 'Waiting For Approval';
+
+      case 'To Print':
+        return 'Delivery Order (DO)';
+
+      case 'Packed':
+        return 'Packed For Delivery (PFD)';
+
+      case 'Ready to ship':
+        return 'Out For Delivery (OFD)';
+
+      case 'Return From Delivery':
+        return 'Return From Delivery';
+
+      default:
+        return value;
+    }
   }
 
-  bool canManageApprovalControls() {
-    final String currentDepartment =
-        (department ?? dep ?? '').toString().trim().toLowerCase();
+bool canManageApprovalControls() {
+  final String currentDepartment =
+      (department ?? dep ?? '').toString().trim().toLowerCase();
 
-    return currentDepartment == 'admin' ||
-        currentDepartment == 'accounts / accounting' ||
-        currentDepartment == 'ceo' ||
-        currentDepartment == 'coo';
-  }
+  return currentDepartment == 'admin' ||
+      currentDepartment == 'accounts / accounting' ||
+      currentDepartment == 'ceo' ||
+      currentDepartment == 'coo' ||
+      currentDepartment == 'marketing';
+}
 
   bool canEditCompanyAndShippingCharge() {
     return isPrivilegedDepartment();
@@ -5360,15 +5905,16 @@ class _OrderReviewState extends State<OrderReview> {
     return isPrivilegedDepartment();
   }
 
-  bool isPrivilegedDepartment() {
-    final String dept =
-        (department ?? dep ?? '').toString().trim().toLowerCase();
+bool isPrivilegedDepartment() {
+  final String dept =
+      (department ?? dep ?? '').toString().trim().toLowerCase();
 
-    return dept == 'admin' ||
-        dept == 'ceo' ||
-        dept == 'coo' ||
-        dept == 'accounts / accounting';
-  }
+  return dept == 'admin' ||
+      dept == 'ceo' ||
+      dept == 'coo' ||
+      dept == 'accounts / accounting' ||
+      dept == 'marketing';
+}
 
   bool isWaitingForApprovalStatus() {
     final String currentStatus =
@@ -8291,6 +8837,51 @@ class _OrderReviewState extends State<OrderReview> {
                                 ),
                               ),
                             ),
+
+                            if (ord != null &&
+                                ord['delivery_return_reason'] != null &&
+                                ord['delivery_return_reason']
+                                    .toString()
+                                    .trim()
+                                    .isNotEmpty) ...[
+                              const SizedBox(height: 14),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF7ED),
+                                  borderRadius: BorderRadius.circular(13),
+                                  border: Border.all(
+                                    color: const Color(0xFFF97316)
+                                        .withOpacity(0.25),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Delivery Return Reason',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF9A3412),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      ord['delivery_return_reason']
+                                          .toString(),
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        height: 1.4,
+                                        color: Color(0xFF7C2D12),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
