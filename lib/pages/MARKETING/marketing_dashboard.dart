@@ -73,6 +73,13 @@ class _marketing_dashboardState extends State<marketing_dashboard>
 
   String? username = '';
   bool isManager = false;
+
+  int myTotalBills = 0;
+  double myTotalAmount = 0.0;
+  int myInvoiceCreatedBills = 0;
+  int myTodaysBills = 0;
+  double myTodaysTotalAmount = 0.0;
+  bool isMyOrderSummaryLoading = false;
   @override
   void initState() {
     super.initState();
@@ -87,6 +94,7 @@ class _marketing_dashboardState extends State<marketing_dashboard>
     fetchOrderData();
     fetchshippedorders();
     fetchInboxMailCount();
+    fetchMyOrderSummary();
 
     mailCountTimer = Timer.periodic(
       const Duration(seconds: 15),
@@ -121,6 +129,7 @@ class _marketing_dashboardState extends State<marketing_dashboard>
 
     if (state == AppLifecycleState.resumed) {
       fetchInboxMailCount();
+      fetchMyOrderSummary();
     }
   }
 
@@ -232,6 +241,277 @@ class _marketing_dashboardState extends State<marketing_dashboard>
     } finally {
       isFetchingInboxMailCount = false;
     }
+  }
+
+  Future<void> fetchMyOrderSummary() async {
+    if (!mounted) return;
+
+    setState(() {
+      isMyOrderSummaryLoading = true;
+    });
+
+    try {
+      final String? token = await getTokenFromPrefs();
+
+      if (token == null || token.trim().isEmpty) {
+        if (!mounted) return;
+
+        setState(() {
+          myTotalBills = 0;
+          myTotalAmount = 0.0;
+          myInvoiceCreatedBills = 0;
+          myTodaysBills = 0;
+          myTodaysTotalAmount = 0.0;
+        });
+
+        return;
+      }
+
+      final http.Response response = await http.get(
+        Uri.parse(
+          '$api/api/my/order/summary/',
+        ),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      debugPrint(
+        'MY ORDER SUMMARY RESPONSE: ${response.statusCode}',
+      );
+
+      debugPrint(
+        'MY ORDER SUMMARY BODY: ${response.body}',
+      );
+
+      if (response.statusCode == 200) {
+        final dynamic parsed = jsonDecode(
+          response.body,
+        );
+
+        if (parsed is Map<String, dynamic> &&
+            parsed['status'] == 'success') {
+          final Map<String, dynamic> allOrders =
+              parsed['all_orders'] is Map
+                  ? Map<String, dynamic>.from(
+                      parsed['all_orders'],
+                    )
+                  : <String, dynamic>{};
+
+          final Map<String, dynamic> todayOrders =
+              parsed['today_orders'] is Map
+                  ? Map<String, dynamic>.from(
+                      parsed['today_orders'],
+                    )
+                  : <String, dynamic>{};
+
+          final Map<String, dynamic> invoiceCreated =
+              parsed['invoice_created'] is Map
+                  ? Map<String, dynamic>.from(
+                      parsed['invoice_created'],
+                    )
+                  : <String, dynamic>{};
+
+          if (!mounted) return;
+
+          setState(() {
+            myTotalBills = int.tryParse(
+                  allOrders['count']?.toString() ?? '0',
+                ) ??
+                0;
+
+            myTotalAmount = double.tryParse(
+                  allOrders['total_amount']?.toString() ?? '0',
+                ) ??
+                0.0;
+
+            myInvoiceCreatedBills = int.tryParse(
+                  invoiceCreated['count']?.toString() ?? '0',
+                ) ??
+                0;
+
+            myTodaysBills = int.tryParse(
+                  todayOrders['count']?.toString() ?? '0',
+                ) ??
+                0;
+
+            myTodaysTotalAmount = double.tryParse(
+                  todayOrders['total_amount']?.toString() ?? '0',
+                ) ??
+                0.0;
+          });
+        } else {
+          if (!mounted) return;
+
+          setState(() {
+            myTotalBills = 0;
+            myTotalAmount = 0.0;
+            myInvoiceCreatedBills = 0;
+            myTodaysBills = 0;
+            myTodaysTotalAmount = 0.0;
+          });
+        }
+      } else {
+        debugPrint(
+          'Failed to fetch my order summary: ${response.statusCode}',
+        );
+      }
+    } catch (error, stackTrace) {
+      debugPrint(
+        'MY ORDER SUMMARY ERROR: $error',
+      );
+
+      debugPrintStack(
+        stackTrace: stackTrace,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isMyOrderSummaryLoading = false;
+        });
+      }
+    }
+  }
+
+  String formatCompactAmount(dynamic value) {
+    double amount = 0.0;
+
+    if (value is int) {
+      amount = value.toDouble();
+    } else if (value is double) {
+      amount = value;
+    } else {
+      amount = double.tryParse(value.toString()) ?? 0.0;
+    }
+
+    if (amount >= 10000000) {
+      return '${(amount / 10000000).toStringAsFixed(2)} Cr';
+    } else if (amount >= 100000) {
+      return '${(amount / 100000).toStringAsFixed(2)} L';
+    } else if (amount >= 1000) {
+      return '${(amount / 1000).toStringAsFixed(2)} K';
+    } else {
+      return amount.toStringAsFixed(2);
+    }
+  }
+
+  Widget buildMyOrderSummaryCard() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.blue,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 12,
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildSummaryInfoCard(
+                  isMyOrderSummaryLoading
+                      ? '...'
+                      : myTotalBills.toString(),
+                  'Total Bills',
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildSummaryInfoCard(
+                  isMyOrderSummaryLoading
+                      ? '...'
+                      : formatCompactAmount(myTotalAmount),
+                  'Total Volume',
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildSummaryInfoCard(
+                  isMyOrderSummaryLoading
+                      ? '...'
+                      : myInvoiceCreatedBills.toString(),
+                  'Waiting For Approval',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildSummaryInfoCard(
+                  isMyOrderSummaryLoading
+                      ? '...'
+                      : myTodaysBills.toString(),
+                  'Today Bills',
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildSummaryInfoCard(
+                  isMyOrderSummaryLoading
+                      ? '...'
+                      : formatCompactAmount(myTodaysTotalAmount),
+                  'Today Volume',
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: SizedBox(),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryInfoCard(
+    String value,
+    String label,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 4,
+        vertical: 6,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15,
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Colors.white70,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> getProfile() async {
@@ -1140,79 +1420,83 @@ class _marketing_dashboardState extends State<marketing_dashboard>
                 ),
                 SizedBox(height: 10),
 
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.blueAccent, Colors.lightBlueAccent],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 10,
-                        offset: Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  padding: EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Date and Icon Row
-                      Row(
-                        children: [
-                          Icon(Icons.calendar_today,
-                              color: Colors.white, size: 20),
-                          SizedBox(width: 8),
-                          Text(
-                            DateFormat('EEEE, dd MMMM yyyy')
-                                .format(DateTime.now()),
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white.withOpacity(0.95),
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 12),
+                buildMyOrderSummaryCard(),
 
-                      // Divider
-                      Container(
-                        height: 1,
-                        color: Colors.white.withOpacity(0.3),
-                      ),
-                      SizedBox(height: 16),
+                SizedBox(height: 10),
 
-                      // Info Cards Row
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              // Navigator.push(
-                              //   context,
-                              //   MaterialPageRoute(builder: (context) => today_OrderList(status: null)),
-                              // );
-                            },
-                            child: _buildCardWithIcon(
-                              label: 'Today\'s Bills',
-                              value: billcount.toString(),
-                              color: Colors.white,
-                            ),
-                          ),
-                          _buildCardWithIcon(
-                            label: 'Total Volume',
-                            value: amountsum.toString(),
-                            color: Colors.white,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                // Container(
+                //   decoration: BoxDecoration(
+                //     gradient: LinearGradient(
+                //       colors: [Colors.blueAccent, Colors.lightBlueAccent],
+                //       begin: Alignment.topLeft,
+                //       end: Alignment.bottomRight,
+                //     ),
+                //     borderRadius: BorderRadius.circular(20),
+                //     boxShadow: [
+                //       BoxShadow(
+                //         color: Colors.black12,
+                //         blurRadius: 10,
+                //         offset: Offset(0, 6),
+                //       ),
+                //     ],
+                //   ),
+                //   padding: EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+                //   child: Column(
+                //     crossAxisAlignment: CrossAxisAlignment.start,
+                //     children: [
+                //       // Date and Icon Row
+                //       Row(
+                //         children: [
+                //           Icon(Icons.calendar_today,
+                //               color: Colors.white, size: 20),
+                //           SizedBox(width: 8),
+                //           Text(
+                //             DateFormat('EEEE, dd MMMM yyyy')
+                //                 .format(DateTime.now()),
+                //             style: TextStyle(
+                //               fontSize: 15,
+                //               fontWeight: FontWeight.w600,
+                //               color: Colors.white.withOpacity(0.95),
+                //             ),
+                //           ),
+                //         ],
+                //       ),
+                //       SizedBox(height: 12),
+
+                //       // Divider
+                //       Container(
+                //         height: 1,
+                //         color: Colors.white.withOpacity(0.3),
+                //       ),
+                //       SizedBox(height: 16),
+
+                //       // Info Cards Row
+                //       Row(
+                //         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                //         children: [
+                //           GestureDetector(
+                //             onTap: () {
+                //               // Navigator.push(
+                //               //   context,
+                //               //   MaterialPageRoute(builder: (context) => today_OrderList(status: null)),
+                //               // );
+                //             },
+                //             child: _buildCardWithIcon(
+                //               label: 'Today\'s Bills',
+                //               value: billcount.toString(),
+                //               color: Colors.white,
+                //             ),
+                //           ),
+                //           _buildCardWithIcon(
+                //             label: 'Total Volume',
+                //             value: amountsum.toString(),
+                //             color: Colors.white,
+                //           ),
+                //         ],
+                //       ),
+                //     ],
+                //   ),
+                // ),
               ],
             ),
           ),

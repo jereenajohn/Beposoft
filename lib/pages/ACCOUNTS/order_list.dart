@@ -64,8 +64,10 @@ class _OrderListState extends State<OrderList> {
     'Invoice Approved',
     'Waiting For Confirmation',
     'Packing under progress',
-    'Packing',
+    // 'Packing',
+    'Packed',
     'Ready to ship',
+    'Return From Delivery',
     'To Print',
     'Shipped',
     'Invoice Rejected',
@@ -124,9 +126,20 @@ class _OrderListState extends State<OrderList> {
   String getDisplayStatus(dynamic rawStatus) {
     final String status = (rawStatus ?? '').toString().trim();
 
-    return status == 'Invoice Created'
-        ? 'Waiting For Approval'
-        : status;
+    switch (status) {
+      case 'Invoice Created':
+        return 'Waiting For Approval';
+      case 'To Print':
+        return 'Delivery Order (DO)';
+      case 'Packed':
+        return 'Packed For Delivery (PFD)';
+      case 'Ready to ship':
+        return 'Out For Delivery (OFD)';
+      case 'Return From Delivery':
+        return 'Return From Delivery';
+      default:
+        return status;
+    }
   }
 
   Future<void> fetchOrderData() async {

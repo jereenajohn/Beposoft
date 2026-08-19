@@ -92,6 +92,13 @@ class _admin_dashboardState extends State<admin_dashboard>
 
   String? username = '';
   bool isManager = false;
+
+  int myTotalBills = 0;
+  double myTotalAmount = 0.0;
+  int myInvoiceCreatedBills = 0;
+  int myTodaysBills = 0;
+  double myTodaysTotalAmount = 0.0;
+  bool isMyOrderSummaryLoading = false;
   @override
   void initState() {
     super.initState();
@@ -105,6 +112,7 @@ class _admin_dashboardState extends State<admin_dashboard>
     fetchshippedorders();
 
     fetchInboxMailCount();
+    fetchMyOrderSummary();
 
   mailCountTimer = Timer.periodic(
   const Duration(seconds: 5),
@@ -139,6 +147,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
 
   if (state == AppLifecycleState.resumed) {
     fetchInboxMailCount();
+    fetchMyOrderSummary();
   }
 }
 
@@ -255,6 +264,242 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     isFetchingInboxMailCount = false;
   }
 }
+  Future<void> fetchMyOrderSummary() async {
+    if (!mounted) return;
+
+    setState(() {
+      isMyOrderSummaryLoading = true;
+    });
+
+    try {
+      final String? token = await getTokenFromPrefs();
+
+      if (token == null || token.trim().isEmpty) {
+        if (!mounted) return;
+
+        setState(() {
+          myTotalBills = 0;
+          myTotalAmount = 0.0;
+          myInvoiceCreatedBills = 0;
+          myTodaysBills = 0;
+          myTodaysTotalAmount = 0.0;
+        });
+
+        return;
+      }
+
+      final http.Response response = await http.get(
+        Uri.parse(
+          '$api/api/my/order/summary/',
+        ),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      debugPrint(
+        'MY ORDER SUMMARY RESPONSE: ${response.statusCode}',
+      );
+
+      debugPrint(
+        'MY ORDER SUMMARY BODY: ${response.body}',
+      );
+
+      if (response.statusCode == 200) {
+        final dynamic parsed = jsonDecode(
+          response.body,
+        );
+
+        if (parsed is Map<String, dynamic> &&
+            parsed['status'] == 'success') {
+          final Map<String, dynamic> allOrders =
+              parsed['all_orders'] is Map
+                  ? Map<String, dynamic>.from(
+                      parsed['all_orders'],
+                    )
+                  : <String, dynamic>{};
+
+          final Map<String, dynamic> todayOrders =
+              parsed['today_orders'] is Map
+                  ? Map<String, dynamic>.from(
+                      parsed['today_orders'],
+                    )
+                  : <String, dynamic>{};
+
+          final Map<String, dynamic> invoiceCreated =
+              parsed['invoice_created'] is Map
+                  ? Map<String, dynamic>.from(
+                      parsed['invoice_created'],
+                    )
+                  : <String, dynamic>{};
+
+          if (!mounted) return;
+
+          setState(() {
+            myTotalBills = int.tryParse(
+                  allOrders['count']?.toString() ?? '0',
+                ) ??
+                0;
+
+            myTotalAmount = double.tryParse(
+                  allOrders['total_amount']?.toString() ?? '0',
+                ) ??
+                0.0;
+
+            myInvoiceCreatedBills = int.tryParse(
+                  invoiceCreated['count']?.toString() ?? '0',
+                ) ??
+                0;
+
+            myTodaysBills = int.tryParse(
+                  todayOrders['count']?.toString() ?? '0',
+                ) ??
+                0;
+
+            myTodaysTotalAmount = double.tryParse(
+                  todayOrders['total_amount']?.toString() ?? '0',
+                ) ??
+                0.0;
+          });
+        } else {
+          if (!mounted) return;
+
+          setState(() {
+            myTotalBills = 0;
+            myTotalAmount = 0.0;
+            myInvoiceCreatedBills = 0;
+            myTodaysBills = 0;
+            myTodaysTotalAmount = 0.0;
+          });
+        }
+      } else {
+        debugPrint(
+          'Failed to fetch my order summary: ${response.statusCode}',
+        );
+      }
+    } catch (error, stackTrace) {
+      debugPrint(
+        'MY ORDER SUMMARY ERROR: $error',
+      );
+
+      debugPrintStack(
+        stackTrace: stackTrace,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isMyOrderSummaryLoading = false;
+        });
+      }
+    }
+  }
+
+  String formatCompactAmount(dynamic value) {
+    double amount = 0.0;
+
+    if (value is int) {
+      amount = value.toDouble();
+    } else if (value is double) {
+      amount = value;
+    } else {
+      amount = double.tryParse(value.toString()) ?? 0.0;
+    }
+
+    if (amount >= 10000000) {
+      return '${(amount / 10000000).toStringAsFixed(2)} Cr';
+    } else if (amount >= 100000) {
+      return '${(amount / 100000).toStringAsFixed(2)} L';
+    } else if (amount >= 1000) {
+      return '${(amount / 1000).toStringAsFixed(2)} K';
+    } else {
+      return amount.toStringAsFixed(2);
+    }
+  }
+
+  Widget buildMyOrderSummaryCard() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.blue,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 12,
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildInfoCard(
+                  isMyOrderSummaryLoading
+                      ? '...'
+                      : myTotalBills.toString(),
+                  'Total Bills',
+                  0,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildInfoCard(
+                  isMyOrderSummaryLoading
+                      ? '...'
+                      : formatCompactAmount(
+                          myTotalAmount,
+                        ),
+                  'Total Volume',
+                  0,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildInfoCard(
+                  isMyOrderSummaryLoading
+                      ? '...'
+                      : myInvoiceCreatedBills.toString(),
+                  'Waiting For Approval',
+                  0,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildInfoCard(
+                  isMyOrderSummaryLoading
+                      ? '...'
+                      : myTodaysBills.toString(),
+                  'Today Bills',
+                  0,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildInfoCard(
+                  isMyOrderSummaryLoading
+                      ? '...'
+                      : formatCompactAmount(
+                          myTodaysTotalAmount,
+                        ),
+                  'Today Volume',
+                  0,
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: SizedBox(),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   int approval = 0;
   int confirm = 0;
   int approvalcount = 0;
@@ -934,6 +1179,21 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                     // Navigate to the Settings page or perform any other action
                   },
                 ),
+
+                  // if (isManager)
+                  // ListTile(
+                  //   leading: const Icon(Icons.person),
+                  //   title: const Text('Face Recognition'),
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //       context,
+                  //       MaterialPageRoute(
+                  //         builder: (context) =>
+                  //             const StaffMarkAttendanceScreenface(),
+                  //       ),
+                  //     );
+                  //   },
+                  // ),
                 ListTile(
                   leading: Icon(Icons.person),
                   title: Text('Add Attendance'),
@@ -1066,28 +1326,34 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                   'New Proforma Invoice',
                   'Proforma Invoice List',
                 ]),
-                _buildDropdownTile(context, 'Delivery Note', [
-                  'Delivery Note List(To Print)',
-                  'Delivery Note List(Packing under Progress)',
-                  'Delivery Note List(Packed)',
-                  'Delivery Note List(Ready to ship)',
-                  'Delivery Note List(Shipped)',
-                  'Daily Goods Movement'
-                ]),
-                _buildDropdownTile(context, 'Orders', [
-                  // 'New Orders',
-                  'Orders List',
-                  'Waiting For Approval',
-                  'Invoice Approved',
-                  'Pre Booked',
-                  'Waiting For Confirmation',
-                  'To Print',
-                  'Packing Under Progress',
-                  'Packed',
-                  'Ready to ship',
-                  'Shipped',
-                  'Invoice Rejected'
-                ]),
+                       _buildDropdownTile(
+                context,
+                'Delivery Note',
+                [
+                  'Delivery Order (DO)',
+                  'Delivery Order(Packing under Progress)',
+                  'Packed For Delivery(PFD)',
+                  'Out For Delivery(OFD)',
+                  'Return From Delivery (RFD)',
+                  'Delivery Order(Shipped)',
+                  'Daily Goods Movement',
+                ],
+              ),
+                  _buildDropdownTile(context, 'Orders', [
+                    // 'New Orders',
+                    'Orders List',
+                    'Waiting For Approval',
+                    'Invoice Approved',
+                    'Pre Booked',
+                    'Waiting For Confirmation',
+                    'DO(Delivery Order)',
+                    'Packing Under Progress',
+                    'PFD (Packed For Delivery)',
+                     'OFD (Out For Delivery)',
+                     'Return From Delivery',
+                    'Shipped',
+                    'Invoice Rejected'
+                  ]),
                 Divider(),
                 Text("Others"),
                 Divider(),
@@ -1635,56 +1901,60 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                 ),
                 SizedBox(height: 10),
 
-                // Discount/Bonus Section
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding: EdgeInsets.all(12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) => today_OrderList(
-                                        status: null,
-                                      )),
-                            );
-                          },
-                          child: _buildInfoCard(totalbills, 'Todays Bills', 0)),
-                      GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) => OrderList2(
-                                        status: "Invoice Created",
-                                      )),
-                            );
-                          },
-                          child: _buildInfoCard(
-                              approvalcount.toString(), 'Approve Bills', 0)),
-                      GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) => OrderList2(
-                                        status: "Waiting For Confirmation",
-                                      )),
-                            );
-                          },
-                          child: _buildInfoCard(
-                              confirmcount.toString(), 'Confirm Bills', 0)),
-                    ],
-                  ),
-                ),
+                buildMyOrderSummaryCard(),
 
                 SizedBox(height: 10),
+
+                // Discount/Bonus Section
+                // Container(
+                //   decoration: BoxDecoration(
+                //     color: Colors.blue,
+                //     borderRadius: BorderRadius.circular(20),
+                //   ),
+                //   padding: EdgeInsets.all(12),
+                //   child: Row(
+                //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                //     children: [
+                //       GestureDetector(
+                //           onTap: () {
+                //             Navigator.push(
+                //               context,
+                //               MaterialPageRoute(
+                //                   builder: (context) => today_OrderList(
+                //                         status: null,
+                //                       )),
+                //             );
+                //           },
+                //           child: _buildInfoCard(totalbills, 'Todays Bills', 0)),
+                //       GestureDetector(
+                //           onTap: () {
+                //             Navigator.push(
+                //               context,
+                //               MaterialPageRoute(
+                //                   builder: (context) => OrderList2(
+                //                         status: "Invoice Created",
+                //                       )),
+                //             );
+                //           },
+                //           child: _buildInfoCard(
+                //               approvalcount.toString(), 'Approve Bills', 0)),
+                //       GestureDetector(
+                //           onTap: () {
+                //             Navigator.push(
+                //               context,
+                //               MaterialPageRoute(
+                //                   builder: (context) => OrderList2(
+                //                         status: "Waiting For Confirmation",
+                //                       )),
+                //             );
+                //           },
+                //           child: _buildInfoCard(
+                //               confirmcount.toString(), 'Confirm Bills', 0)),
+                //     ],
+                //   ),
+                // ),
+
+                // SizedBox(height: 10),
 
                 Expanded(
                   child: GridView.count(

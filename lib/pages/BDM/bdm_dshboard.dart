@@ -91,6 +91,7 @@ bool isFetchingInboxMailCount = false;
     fetchInboxMailCount();
     getprofiledata();
     getProfile();
+    fetchFamilyWiseOrderSummary();
 
   mailCountTimer = Timer.periodic(
   const Duration(seconds: 15),
@@ -175,85 +176,127 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
   }
 
   Future<void> fetchFamilyWiseOrderSummary() async {
+    if (!mounted) return;
+
+    setState(() {
+      isFamilySummaryLoading = true;
+    });
+
     try {
-      if (family.toString().trim().isEmpty) {
+      final String? token = await getTokenFromPrefs();
+
+      if (token == null || token.trim().isEmpty) {
+        if (!mounted) return;
+
+        setState(() {
+          familyTotalBills = 0;
+          familyTotalAmount = 0.0;
+          familyInvoiceCreatedBills = 0;
+          familyTodaysBills = 0;
+          familyTodaysTotalAmount = 0.0;
+        });
+
         return;
       }
 
-      setState(() {
-        isFamilySummaryLoading = true;
-      });
-
-      final token = await getTokenFromPrefs();
-
-      final response = await http.get(
-        Uri.parse('$api/api/orders/family/wise/summary/'),
+      final http.Response response = await http.get(
+        Uri.parse(
+          '$api/api/my/order/summary/',
+        ),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
 
+      debugPrint(
+        'MY ORDER SUMMARY RESPONSE: ${response.statusCode}',
+      );
+
+      debugPrint(
+        'MY ORDER SUMMARY BODY: ${response.body}',
+      );
+
       if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
+        final dynamic parsed = jsonDecode(
+          response.body,
+        );
 
-        if (parsed['status'] == 'success' && parsed['data'] != null) {
-          final List data = parsed['data'];
+        if (parsed is Map<String, dynamic> &&
+            parsed['status'] == 'success') {
+          final Map<String, dynamic> allOrders =
+              parsed['all_orders'] is Map
+                  ? Map<String, dynamic>.from(
+                      parsed['all_orders'],
+                    )
+                  : <String, dynamic>{};
 
-          Map<String, dynamic>? matchingFamily;
+          final Map<String, dynamic> todayOrders =
+              parsed['today_orders'] is Map
+                  ? Map<String, dynamic>.from(
+                      parsed['today_orders'],
+                    )
+                  : <String, dynamic>{};
 
-          for (final item in data) {
-            if (item is Map<String, dynamic> &&
-                item['family_id'].toString() == family.toString()) {
-              matchingFamily = item;
-              break;
-            }
-          }
+          final Map<String, dynamic> invoiceCreated =
+              parsed['invoice_created'] is Map
+                  ? Map<String, dynamic>.from(
+                      parsed['invoice_created'],
+                    )
+                  : <String, dynamic>{};
 
-          if (matchingFamily != null) {
-            setState(() {
-              familyTotalBills = int.tryParse(
-                    matchingFamily?['total_bills'].toString() ?? "0",
-                  ) ??
-                  0;
+          if (!mounted) return;
 
-              familyTotalAmount = double.tryParse(
-                    matchingFamily?['total_amount'].toString() ?? "0",
-                  ) ??
-                  0.0;
+          setState(() {
+            familyTotalBills = int.tryParse(
+                  allOrders['count']?.toString() ?? '0',
+                ) ??
+                0;
 
-              familyInvoiceCreatedBills = int.tryParse(
-                    matchingFamily?['invoice_created_bills'].toString() ?? "0",
-                  ) ??
-                  0;
+            familyTotalAmount = double.tryParse(
+                  allOrders['total_amount']?.toString() ?? '0',
+                ) ??
+                0.0;
 
-              familyTodaysBills = int.tryParse(
-                    matchingFamily?['todays_bills'].toString() ?? "0",
-                  ) ??
-                  0;
+            familyInvoiceCreatedBills = int.tryParse(
+                  invoiceCreated['count']?.toString() ?? '0',
+                ) ??
+                0;
 
-              familyTodaysTotalAmount = double.tryParse(
-                    matchingFamily?['todays_total_amount'].toString() ?? "0",
-                  ) ??
-                  0.0;
-            });
-          } else {
-            setState(() {
-              familyTotalBills = 0;
-              familyTotalAmount = 0.0;
-              familyInvoiceCreatedBills = 0;
-              familyTodaysBills = 0;
-              familyTodaysTotalAmount = 0.0;
-            });
-          }
+            familyTodaysBills = int.tryParse(
+                  todayOrders['count']?.toString() ?? '0',
+                ) ??
+                0;
+
+            familyTodaysTotalAmount = double.tryParse(
+                  todayOrders['total_amount']?.toString() ?? '0',
+                ) ??
+                0.0;
+          });
+        } else {
+          if (!mounted) return;
+
+          setState(() {
+            familyTotalBills = 0;
+            familyTotalAmount = 0.0;
+            familyInvoiceCreatedBills = 0;
+            familyTodaysBills = 0;
+            familyTodaysTotalAmount = 0.0;
+          });
         }
       } else {
         debugPrint(
-          "Failed to fetch family wise order summary: ${response.statusCode}",
+          'Failed to fetch my order summary: ${response.statusCode}',
         );
       }
-    } catch (e) {
-      debugPrint("Error in fetchFamilyWiseOrderSummary: $e");
+    } catch (error, stackTrace) {
+      debugPrint(
+        'MY ORDER SUMMARY ERROR: $error',
+      );
+
+      debugPrintStack(
+        stackTrace: stackTrace,
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -1473,7 +1516,6 @@ void dispose() {
 
           familyName = matchingFamily['name'];
         });
-        fetchFamilyWiseOrderSummary();
         fetchbdmOrderData();
         getcustomer();
       }

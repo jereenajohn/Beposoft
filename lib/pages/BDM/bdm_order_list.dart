@@ -80,7 +80,9 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
     'Invoice Created',
     'Invoice Approved',
     'Packing under progress',
+    'Packed',
     'Ready to ship',
+    'Return From Delivery',
     'Shipped',
     'Invoice Rejected',
     'Order Confirmed',
@@ -142,9 +144,25 @@ class _bdm_OrderListState extends State<bdm_OrderList> {
   String getDisplayStatus(dynamic rawStatus) {
     final String status = (rawStatus ?? '').toString().trim();
 
-    return status == 'Invoice Created'
-        ? 'Waiting For Approval'
-        : status;
+    switch (status) {
+      case 'Invoice Created':
+        return 'Waiting For Approval';
+
+      case 'To Print':
+        return 'Delivery Order (DO)';
+
+      case 'Packed':
+        return 'Packed For Delivery (PFD)';
+
+      case 'Ready to ship':
+        return 'Out For Delivery (OFD)';
+
+      case 'Return From Delivery':
+        return 'Return From Delivery';
+
+      default:
+        return status;
+    }
   }
 
   var family = '';

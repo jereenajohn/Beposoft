@@ -27,6 +27,7 @@ import 'package:beposoft/pages/ADMIN/admin_add_attendance.dart';
 import 'package:beposoft/pages/ADMIN/admin_add_team_staff.dart';
 import 'package:beposoft/pages/ADMIN/all_local_purchases_screen.dart';
 import 'package:beposoft/pages/ADMIN/ceo_dashboard_all_sections_single_page.dart';
+import 'package:beposoft/pages/ADMIN/family_date_summary_page.dart';
 import 'package:beposoft/pages/ADMIN/grv_sales_return_summary.dart';
 import 'package:beposoft/pages/ADMIN/localpurchaseorderscreen.dart';
 
@@ -3976,7 +3977,7 @@ Widget _buildDashboardLineItem({
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => SalesReportExcel()),
+                MaterialPageRoute(builder: (context) => FamilyDateSummaryPage()),
               );
             },
           ),
@@ -8229,14 +8230,18 @@ Widget _buildDashboardLineItem({
                     'New Proforma Invoice',
                     'Proforma Invoice List',
                   ]),
-                  _buildDropdownTile(context, 'Delivery Note', [
-                    'Delivery Note List(To Print)',
-                    'Delivery Note List(Packing under Progress)',
-                    'Delivery Note List(Packed)',
-                    'Delivery Note List(Ready to ship)',
-                    'Delivery Note List(Shipped)',
-                    'Daily Goods Movement'
-                  ]),
+                    _buildDropdownTile(
+                context,
+                'Delivery Note',
+                [
+                  'Delivery Order (DO)',
+                  'Delivery Order(Packing under Progress)',
+                  'Packed For Delivery(PFD)',
+                  'Out For Delivery(OFD)',
+                  'Delivery Order(Shipped)',
+                  'Daily Goods Movement',
+                ],
+              ),
                   _buildDropdownTile(context, 'Orders', [
                     // 'New Orders',
                     'Orders List',
@@ -8244,10 +8249,11 @@ Widget _buildDashboardLineItem({
                     'Invoice Approved',
                     'Pre Booked',
                     'Waiting For Confirmation',
-                    'To Print',
+                    'DO(Delivery Order)',
                     'Packing Under Progress',
-                    'Packed',
-                    'Ready to ship',
+                    'PFD (Packed For Delivery)',
+                     'OFD (Out For Delivery)',
+                     'Return From Delivery',
                     'Shipped',
                     'Invoice Rejected'
                   ]),

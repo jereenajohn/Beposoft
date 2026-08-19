@@ -30,6 +30,23 @@ class WarehouseOrderReview extends StatefulWidget {
 }
 
 class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
+  String getStatusDisplayName(dynamic status) {
+    final String value = status?.toString().trim() ?? '';
+
+    switch (value) {
+      case 'To Print':
+        return 'Delivery Order (DO)';
+      case 'Packed':
+        return 'Packed For Delivery (PFD)';
+      case 'Ready to ship':
+        return 'Out For Delivery (OFD)';
+      case 'Return From Delivery':
+        return 'Return From Delivery';
+      default:
+        return value;
+    }
+  }
+
   Drawer d = Drawer();
   var ord;
   List<Map<String, dynamic>> courierdata = [];
@@ -50,6 +67,8 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
   String? selectedStatus;
   final TextEditingController noteController = TextEditingController();
   final TextEditingController parcelNoteController = TextEditingController();
+  final TextEditingController deliveryReturnReasonController =
+      TextEditingController();
   @override
   void initState() {
     super.initState();
@@ -204,6 +223,18 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
       if (response.statusCode == 201) {
+        await createlog(
+          scaffoldContext: context,
+          action: 'Payment images uploaded',
+          beforeData: {
+            'Action': 'Payment images upload',
+          },
+          afterData: {
+            'Action': 'Payment images uploaded',
+            'Image Count': selectedImageslist.length,
+          },
+        );
+
         getimage();
         setState(() {
           selectedImageslist.clear(); // Clear the list after successful upload
@@ -241,6 +272,19 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
       );
 
       if (response.statusCode == 200) {
+        await createlog(
+          scaffoldContext: context,
+          action: 'Payment image deleted',
+          beforeData: {
+            'Action': 'Payment image existed',
+            'Image ID': Id,
+          },
+          afterData: {
+            'Action': 'Payment image deleted',
+            'Image ID': Id,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Image deleted successfully'),
@@ -441,15 +485,141 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
     return prefs.getString('token');
   }
 
+  Future<void> createlog({
+    required BuildContext scaffoldContext,
+    required String action,
+    dynamic beforeData,
+    dynamic afterData,
+  }) async {
+    final String? token = await getTokenFromPrefs();
+
+    if (token == null || token.trim().isEmpty) {
+      debugPrint(
+        'Unable to create log for "$action": authentication token not found.',
+      );
+      return;
+    }
+
+    try {
+      final http.Response response = await http.post(
+        Uri.parse(
+          '$api/api/datalog/create/',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'before_data': beforeData ??
+              {
+                'Action': action,
+              },
+          'after_data': afterData ??
+              {
+                'Action': action,
+              },
+          'order': widget.id,
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        debugPrint(
+          'Log added successfully: $action',
+        );
+      } else {
+        debugPrint(
+          'Log creation failed for "$action": '
+          '${response.statusCode} - ${response.body}',
+        );
+      }
+    } catch (error) {
+      debugPrint(
+        'Error creating log for "$action": $error',
+      );
+    }
+  }
+
+
   Future<String?> getdepartment() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString('department');
   }
 
   final List<String> statuses = [
+    'To Print',
     'Packing under progress',
+    'Packed',
     'Ready to ship',
+    'Return From Delivery',
+    'Shipped',
   ];
+
+  List<String> getAvailableOrderStatuses() {
+    final String currentStatus =
+        ord?['status']?.toString().trim() ?? '';
+
+    switch (currentStatus) {
+      case 'To Print':
+        return [
+          'To Print',
+          'Packing under progress',
+          'Packed',
+          'Ready to ship',
+        ];
+
+      case 'Packing under progress':
+        return [
+          'Packing under progress',
+          'Packed',
+          'Ready to ship',
+        ];
+
+      case 'Packed':
+        return [
+          'Packed',
+          'Ready to ship',
+        ];
+
+      case 'Ready to ship':
+        final String department =
+            dep?.toString().trim().toLowerCase() ?? '';
+
+        final bool canMarkAsShipped =
+            department == 'ceo' ||
+            department == 'admin' ||
+            department == 'coo' ||
+            department == 'accounts' ||
+            department == 'accounting' ||
+            department == 'accounts / accounting' ||
+            department == 'warehouse admin';
+
+        return [
+          'Ready to ship',
+          'Return From Delivery',
+          if (canMarkAsShipped) 'Shipped',
+        ];
+
+      case 'Return From Delivery':
+        return [
+          'Return From Delivery',
+          'Ready to ship',
+        ];
+
+      case 'Shipped':
+        return [
+          'Shipped',
+        ];
+
+      default:
+        if (currentStatus.isNotEmpty) {
+          return [
+            currentStatus,
+          ];
+        }
+
+        return const [];
+    }
+  }
   double netAmountBeforeTax = 0.0; // Define at the class level
   double totalTaxAmount = 0.0; // Define at the class level
   double payableAmount = 0.0; // Define at the class level
@@ -472,37 +642,74 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
     }
   }
 
-  Future unlockorder(var id) async {
-    final token = await getTokenFromPrefs();
+ Future<void> unlockorder(var id) async {
+  final token = await getTokenFromPrefs();
 
-    try {
-      var response = await http.post(
-        Uri.parse('$api/api/orders/unlock/${id}/'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token'
+  try {
+    final response = await http.post(
+      Uri.parse('$api/api/orders/unlock/$id/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({}),
+    );
+
+    if (!mounted) return;
+
+    if (response.statusCode == 200) {
+      await createlog(
+        scaffoldContext: context,
+        action: 'Delivery note unlocked',
+        beforeData: {
+          'Action': 'Delivery note locked',
+          'Order ID': id,
         },
-        body: jsonEncode({}),
+        afterData: {
+          'Action': 'Delivery note unlocked',
+          'Order ID': id,
+        },
       );
 
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Order unlocked successfully"),
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Order unlocked successfully',
+          ),
           backgroundColor: Colors.green,
-        ));
-        Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (context) => WarehouseOrderView(status: null)));
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Failed to unlock order"),
-          backgroundColor: Colors.red,
-        ));
-      }
-    } catch (e) {}
-  }
+          duration: Duration(seconds: 2),
+        ),
+      );
 
+      // Return to the EXISTING WarehouseOrderView.
+      // Do NOT create WarehouseOrderView(status: null).
+      Navigator.pop(context, true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Failed to unlock order',
+          ),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  } catch (e) {
+    debugPrint('UNLOCK ORDER ERROR: $e');
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Unable to unlock order. Please try again.',
+        ),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+}
   Future<void> getprofiledata() async {
     try {
       final token = await getTokenFromPrefs();
@@ -528,47 +735,182 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
     } catch (error) {}
   }
 
-  Future<void> updatestatus() async {
+  Future<void> updatestatus({
+    String? deliveryReturnReason,
+  }) async {
     try {
       final token = await getTokenFromPrefs();
 
-      String formattedTime = DateFormat("HH:mm").format(DateTime.now());
+      final Map<String, dynamic> payload = {
+        'status': selectedStatus,
+      };
 
-      var response = await http.put(
+      if (selectedStatus == 'Return From Delivery') {
+        final String reason = deliveryReturnReason?.trim() ?? '';
+
+        if (reason.isEmpty) {
+          if (!mounted) return;
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please enter delivery return reason'),
+              duration: Duration(seconds: 2),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
+        payload['delivery_return_reason'] = reason;
+      }
+
+      final response = await http.put(
         Uri.parse('$api/api/shipping/${widget.id}/order/'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
-        body: jsonEncode({
-          'status': selectedStatus,
-        }),
+        body: jsonEncode(payload),
       );
 
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
+        await createlog(
+          scaffoldContext: context,
+          action: 'Order status updated',
+          beforeData: {
+            'Status': ord?['status'],
+          },
+          afterData: {
+            'Status': selectedStatus,
+            if (selectedStatus == 'Return From Delivery')
+              'Delivery Return Reason': deliveryReturnReason?.trim() ?? '',
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('status updated successfully'),
             duration: Duration(seconds: 2),
             backgroundColor: Colors.green,
           ),
         );
+
+        deliveryReturnReasonController.clear();
+        await fetchOrderItems();
       } else {
+        debugPrint(
+          'STATUS UPDATE FAILED: ${response.statusCode} ${response.body}',
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Failed to update status'),
             duration: Duration(seconds: 2),
+            backgroundColor: Colors.red,
           ),
         );
       }
     } catch (error) {
+      debugPrint('STATUS UPDATE ERROR: $error');
+
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error updating profile'),
+        const SnackBar(
+          content: Text('Error updating status'),
           duration: Duration(seconds: 2),
+          backgroundColor: Colors.red,
         ),
       );
     }
+  }
+
+  Future<void> _handleStatusUpdate() async {
+    if (selectedStatus == null || selectedStatus!.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a status'),
+          duration: Duration(seconds: 2),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (selectedStatus != 'Return From Delivery') {
+      await updatestatus();
+      return;
+    }
+
+    deliveryReturnReasonController.clear();
+
+    final String? reason = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text(
+            'Delivery Return Reason',
+          ),
+          content: TextField(
+            controller: deliveryReturnReasonController,
+            autofocus: true,
+            maxLines: 4,
+            minLines: 3,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Return Reason',
+              hintText: 'Enter delivery return reason',
+              border: OutlineInputBorder(),
+              alignLabelWithHint: true,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final String enteredReason =
+                    deliveryReturnReasonController.text.trim();
+
+                if (enteredReason.isEmpty) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Delivery return reason is required',
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                Navigator.of(dialogContext).pop(enteredReason);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Update'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || reason == null || reason.trim().isEmpty) {
+      return;
+    }
+
+    await updatestatus(
+      deliveryReturnReason: reason,
+    );
   }
 
   Future<void> updatecount() async {
@@ -588,6 +930,17 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
         }),
       );
       if (response.statusCode == 200) {
+        await createlog(
+          scaffoldContext: context,
+          action: 'Box count updated',
+          beforeData: {
+            'Box Count': boxCount,
+          },
+          afterData: {
+            'Box Count': count.text,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('status updated successfully'),
@@ -712,6 +1065,19 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
       ;
       ;
       if (response.statusCode == 200) {
+        await createlog(
+          scaffoldContext: context,
+          action: 'Box verification updated',
+          beforeData: {
+            'Action': 'Verification update requested',
+            'Warehouse Box ID': orderId,
+          },
+          afterData: {
+            'Verified By': selectedManagerId,
+            'Warehouse Box ID': orderId,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Shipping charge updated successfully'),
@@ -757,6 +1123,19 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
       );
 
       if (response.statusCode == 200) {
+        await createlog(
+          scaffoldContext: context,
+          action: 'Box status updated',
+          beforeData: {
+            'Action': 'Previous box status',
+            'Warehouse Box ID': orderId,
+          },
+          afterData: {
+            'Status': selectedStatus,
+            'Warehouse Box ID': orderId,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Shipping charge updated successfully'),
@@ -797,6 +1176,19 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
       );
 
       if (response.statusCode == 200) {
+        await createlog(
+          scaffoldContext: context,
+          action: 'Warehouse box deleted',
+          beforeData: {
+            'Action': 'Warehouse box existed',
+            'Warehouse Box ID': orderId,
+          },
+          afterData: {
+            'Action': 'Warehouse box deleted',
+            'Warehouse Box ID': orderId,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Deleted successfully'),
@@ -938,7 +1330,7 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
                   _detailRow('Shipping Charge', boxDetails['shipping_charge']),
                   _detailRow('Parcel Service', boxDetails['parcel_service']),
                   _detailRow('Tracking ID', boxDetails['tracking_id']),
-                  _detailRow('Status', boxDetails['status']),
+                  _detailRow('Status', getStatusDisplayName(boxDetails['status'])),
                   _detailRow('Shipped Date', boxDetails['shipped_date']),
 
                   const SizedBox(height: 10),
@@ -1224,7 +1616,7 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
                     items: statuses.map((status) {
                       return DropdownMenuItem<String>(
                         value: status,
-                        child: Text(status),
+                        child: Text(getStatusDisplayName(status)),
                       );
                     }).toList(),
                     onChanged: (value) {
@@ -1484,6 +1876,22 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
 
       // Handle response based on status code
       if (response.statusCode == 201) {
+        await createlog(
+          scaffoldContext: scaffoldContext,
+          action: 'Warehouse box added',
+          beforeData: {
+            'Action': 'New warehouse box',
+          },
+          afterData: {
+            'Box': box.text,
+            'Tracking ID': transactionid.text,
+            'Parcel Service': selectedserviceId,
+            'Packed By': selectedManagerId ?? loginid,
+            'Shipped Date':
+                selectedDate.toIso8601String().substring(0, 10),
+          },
+        );
+
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
@@ -1531,6 +1939,19 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
     );
 
     if (response.statusCode == 200) {
+      await createlog(
+        scaffoldContext: context,
+        action: 'Parcel service updated',
+        beforeData: {
+          'Parcel Service': ord?['parcel_service'],
+          'Parcel Service Note': ord?['parcel_service_note'],
+        },
+        afterData: {
+          'Parcel Service': selectedserviceId,
+          'Parcel Service Note': parcelNoteController.text.trim(),
+        },
+      );
+
       await fetchOrderItems();
 
       if (!mounted) return true;
@@ -1656,6 +2077,32 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
       var response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
+        await createlog(
+          scaffoldContext: scaffoldContext,
+          action: 'Warehouse box details updated',
+          beforeData: {
+            'Warehouse Box ID': order['id'],
+            'Box': order['box'],
+            'Length': order['length'],
+            'Breadth': order['breadth'],
+            'Height': order['height'],
+            'Weight': order['weight'],
+            'Status': order['status'],
+          },
+          afterData: {
+            'Warehouse Box ID': order['id'],
+            'Box': updatebox.text,
+            'Length': length.text,
+            'Breadth': breadth.text,
+            'Height': height.text,
+            'Weight': weight.text,
+            'Status': selectedStatus,
+            'Parcel Service': selectedserviceId,
+            'Parcel Service Note': parcelNoteController.text.trim(),
+            'Packed By': selectedManagerId ?? loginid,
+          },
+        );
+
         fetchOrderItems();
 
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
@@ -1702,7 +2149,7 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
                 items: statuses.map((status) {
                   return DropdownMenuItem<String>(
                     value: status,
-                    child: Text(status),
+                    child: Text(getStatusDisplayName(status)),
                   );
                 }).toList(),
                 onChanged: (value) {
@@ -1873,6 +2320,20 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
       );
 
       if (response.statusCode == 200) {
+        await createlog(
+          scaffoldContext: context,
+          action: 'Order address updated',
+          beforeData: {
+            'Billing Address': ord?['billing_address'],
+            'Note': ord?['note'],
+          },
+          afterData: {
+            'Billing Address ID': selectedAddressId,
+            'Note': noteController.text,
+            'Status': selectedStatus,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
@@ -2033,6 +2494,22 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
               }));
 
       if (response.statusCode == 200) {
+        await createlog(
+          scaffoldContext: scaffoldContext,
+          action: 'Receipt added',
+          beforeData: {
+            'Action': 'Receipt creation',
+          },
+          afterData: {
+            'Amount': amountController.text,
+            'Bank': selectedBank,
+            'Tracking ID': transactionIdController.text,
+            'Received At': formattedReceivedDate,
+            'Created By': createdBy,
+            'Remark': remarkController.text,
+          },
+        );
+
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
@@ -2164,6 +2641,13 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
           totalDiscount = calculatedTotalDiscount;
           Balance = remainingAmount;
           boxCount = fetchedBoxCount;
+
+          // Always show the current order status in the Select Status field.
+          final String currentStatus =
+              ord?['status']?.toString().trim() ?? '';
+
+          selectedStatus =
+              currentStatus.isNotEmpty ? currentStatus : null;
         });
       } else {}
     } catch (error) {}
@@ -2282,6 +2766,19 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
       );
 
       if (response.statusCode == 200) {
+        await createlog(
+          scaffoldContext: context,
+          action: 'Order item updated',
+          beforeData: {
+            'Order Item ID': id,
+          },
+          afterData: {
+            'Order Item ID': id,
+            'Quantity': quantity,
+            'Discount': discount,
+          },
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Cart item updated successfully!'),
@@ -2525,7 +3022,7 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
                                 Spacer(),
                                 Text(
                                   ord != null
-                                      ? '${ord["status"]}'
+                                      ? getStatusDisplayName(ord["status"])
                                       : 'Loading...',
                                   style: TextStyle(fontSize: 12),
                                 ),
@@ -2607,20 +3104,21 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
                 padding: const EdgeInsets.only(left: 12, right: 12, top: 10),
                 child: DropdownButtonFormField<String>(
                   value: selectedStatus,
-                  hint: Text('Select Status'),
-                  items: statuses.map((status) {
+                  hint: const Text('Select Status'),
+                  items: getAvailableOrderStatuses().map((status) {
                     return DropdownMenuItem<String>(
                       value: status,
-                      child: Text(status),
+                      child: Text(
+                        getStatusDisplayName(status),
+                      ),
                     );
                   }).toList(),
                   onChanged: (value) {
                     setState(() {
-                      selectedStatus =
-                          value; // This will store the selected status
+                      selectedStatus = value;
                     });
                   },
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -2632,7 +3130,7 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
                 padding: const EdgeInsets.only(left: 12),
                 child: ElevatedButton.icon(
                   onPressed: () async {
-                    updatestatus();
+                    await _handleStatusUpdate();
                   },
                   label: Text("Save"),
                   style: ElevatedButton.styleFrom(
@@ -2641,6 +3139,51 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
                   ),
                 ),
               ),
+
+              if (ord != null &&
+                  ord['delivery_return_reason'] != null &&
+                  ord['delivery_return_reason'].toString().trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(
+                    left: 12,
+                    right: 12,
+                    top: 8,
+                  ),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF7ED),
+                      border: Border.all(
+                        color: const Color(0xFFF97316).withOpacity(0.30),
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Delivery Return Reason',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF9A3412),
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          ord['delivery_return_reason'].toString(),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF7C2D12),
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
               SizedBox(height: 10),
               Padding(
                 padding: const EdgeInsets.only(left: 20),
@@ -3676,7 +4219,7 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
                                                 ),
                                               ),
                                               Text(
-                                                order['status'] ?? 'N/A',
+                                                getStatusDisplayName(order['status']),
                                                 style: TextStyle(fontSize: 14),
                                               ),
                                             ],
@@ -3717,6 +4260,6 @@ class _WarehouseOrderReviewState extends State<WarehouseOrderReview> {
           ),
         ),
       ),
-    );
+  );
   }
 }

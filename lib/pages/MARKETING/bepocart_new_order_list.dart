@@ -52,7 +52,8 @@ class _MyFamilyOrderListState extends State<MyFamilyOrderList> {
     'Waiting For Confirmation',
     'Pre Booked',
     'Packing under progress',
-    'Packing',
+    // 'Packing',
+    'Packed',
     'Ready to ship',
     'To Print',
     'Shipped',
@@ -462,9 +463,22 @@ class _MyFamilyOrderListState extends State<MyFamilyOrderList> {
   String _getDisplayStatus(dynamic rawStatus) {
     final String status = _text(rawStatus);
 
-    return status == 'Invoice Created'
-        ? 'Waiting For Approval'
-        : status;
+    switch (status) {
+      case 'Invoice Created':
+        return 'Waiting For Approval';
+
+      case 'To Print':
+        return 'Delivery Order (DO)';
+
+      case 'Packed':
+        return 'Packed For Delivery (PFD)';
+
+      case 'Ready to ship':
+        return 'Out For Delivery (OFD)';
+
+      default:
+        return status;
+    }
   }
 
   void _onSearchChanged(String value) {
@@ -1106,6 +1120,9 @@ Future<void> exportToExcel() async {
       case 'packing under progress':
       case 'packing':
         return Colors.blue.shade700;
+
+      case 'packed':
+        return Colors.teal.shade600;
 
       case 'ready to ship':
         return Colors.teal.shade700;

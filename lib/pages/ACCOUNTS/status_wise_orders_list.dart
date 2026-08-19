@@ -49,38 +49,38 @@ class _OrderList2State extends State<OrderList2> {
   List<Map<String, dynamic>> orders = [];
   List<Map<String, dynamic>> filteredOrders = [];
   String searchQuery = '';
-int waitingForConfirmationCount = 0;
+  int waitingForConfirmationCount = 0;
   DateTime? selectedDate; // For single date filter
   DateTime? startDate; // For date range filter
   DateTime? endDate; // For date range filter
-List<String> orderStatuses = [
-  'All',
-  'Invoice Created',
-  'Invoice Approved',
-  'Waiting For Confirmation',
-  'Packing under progress',
-  'Packing',
-  'Ready to ship',
-  'To Print',
-  'Shipped',
-  'Invoice Rejected',
-  // Add other statuses as needed
-];
+  List<String> orderStatuses = [
+    'All',
+    'Invoice Created',
+    'Invoice Approved',
+    'Waiting For Confirmation',
+    'Packing under progress',
+    // 'Packing',
+    'Ready to ship',
+    'To Print',
+    'Shipped',
+    'Invoice Rejected',
+    // Add other statuses as needed
+  ];
 
-String selectedStatus = 'All'; // Default value
-void _filterOrdersByStatus(String status) {
-  if (status == 'All') {
-    setState(() {
-      filteredOrders = orders;
-    });
-  } else {
-    setState(() {
-      filteredOrders = orders.where((order) {
-        return order['status'] == status;
-      }).toList();
-    });
+  String selectedStatus = 'All'; // Default value
+  void _filterOrdersByStatus(String status) {
+    if (status == 'All') {
+      setState(() {
+        filteredOrders = orders;
+      });
+    } else {
+      setState(() {
+        filteredOrders = orders.where((order) {
+          return order['status'] == status;
+        }).toList();
+      });
+    }
   }
-}
 
   drower d = drower();
   Widget _buildDropdownTile(
@@ -104,8 +104,6 @@ void _filterOrdersByStatus(String status) {
   void initState() {
     super.initState();
     fetchOrderData();
-
-
   }
 
   Future<String?> getTokenFromPrefs() async {
@@ -121,85 +119,96 @@ void _filterOrdersByStatus(String status) {
   String getDisplayStatus(dynamic rawStatus) {
     final String status = (rawStatus ?? '').toString().trim();
 
-    return status == 'Invoice Created'
-        ? 'Waiting For Approval'
-        : status;
+    switch (status) {
+      case 'Invoice Created':
+        return 'Waiting For Approval';
+
+      case 'To Print':
+        return 'Delivery Order (DO)';
+
+      case 'Packed':
+        return 'Packed For Delivery (PFD)';
+
+      case 'Ready to ship':
+        return 'Out For Delivery (OFD)';
+
+      default:
+        return status;
+    }
   }
- 
- 
-Future<void> fetchOrderData() async {
-  try {
-    final token = await getTokenFromPrefs();
-    final dep = await getdepFromPrefs();
-    final jwt = JWT.decode(token!);
-    var name = jwt.payload['name'];
-;
-    String url = '$api/api/orders/${widget.status}/';
 
-    List<Map<String, dynamic>> orderList = [];
+  Future<void> fetchOrderData() async {
+    try {
+      final token = await getTokenFromPrefs();
+      final dep = await getdepFromPrefs();
+      final jwt = JWT.decode(token!);
+      var name = jwt.payload['name'];
+      ;
+      String url = '$api/api/orders/${widget.status}/';
 
-    var response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
+      List<Map<String, dynamic>> orderList = [];
 
-   
-    if (response.statusCode == 200) {
-      final Map<String, dynamic> responseData = jsonDecode(response.body);
-      final List ordersData = responseData['results'];
+      var response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-      List<Map<String, dynamic>> newOrders = [];
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = jsonDecode(response.body);
+        final List ordersData = responseData['results'];
 
-      for (var orderData in ordersData) {
-        String rawOrderDate = orderData['order_date'] ?? "";
-        String formattedOrderDate = rawOrderDate;
-        try {
-          DateTime parsedOrderDate = DateFormat('yyyy-MM-dd').parse(rawOrderDate);
-          formattedOrderDate = DateFormat('yyyy-MM-dd').format(parsedOrderDate);
-        } catch (e) {}
+        List<Map<String, dynamic>> newOrders = [];
 
-        if (widget.status == null || widget.status == orderData['status']) {
-          if (orderData['status'] != "Order Request by Warehouse") {
-            newOrders.add({
-              'id': orderData['id'],
-              'invoice': orderData['invoice'],
-               'manage_staff': orderData['manage_staff'],
-              'customer': {
-                'id': orderData['customer']['id'],
-                'name': orderData['customer']['name'],
-                'phone': orderData['customer']['phone'],
-                'email': orderData['customer']['email'],
-                'address': orderData['customer']['address'],
-              },
-                           'warehouse': orderData['warehouse_data'],
+        for (var orderData in ordersData) {
+          String rawOrderDate = orderData['order_date'] ?? "";
+          String formattedOrderDate = rawOrderDate;
+          try {
+            DateTime parsedOrderDate =
+                DateFormat('yyyy-MM-dd').parse(rawOrderDate);
+            formattedOrderDate =
+                DateFormat('yyyy-MM-dd').format(parsedOrderDate);
+          } catch (e) {}
 
-              'status': orderData['status'],
-              'total_amount': orderData['total_amount'],
-              'order_date': formattedOrderDate,
-            });
+          if (widget.status == null || widget.status == orderData['status']) {
+            if (orderData['status'] != "Order Request by Warehouse") {
+              newOrders.add({
+                'id': orderData['id'],
+                'invoice': orderData['invoice'],
+                'manage_staff': orderData['manage_staff'],
+                'customer': {
+                  'id': orderData['customer']['id'],
+                  'name': orderData['customer']['name'],
+                  'phone': orderData['customer']['phone'],
+                  'email': orderData['customer']['email'],
+                  'address': orderData['customer']['address'],
+                },
+                'warehouse': orderData['warehouse_data'],
+                'status': orderData['status'],
+                'total_amount': orderData['total_amount'],
+                'order_date': formattedOrderDate,
+              });
+            }
           }
         }
+
+        setState(() {
+          orders = newOrders;
+
+          ;
+          filteredOrders = newOrders;
+        });
+      } else {
+        throw Exception("Failed to load order data");
       }
-
-      setState(() {
-        orders = newOrders;
-
-        ;
-        filteredOrders = newOrders;
-      });
-    } else {
-      throw Exception("Failed to load order data");
+    } catch (error) {
+      ;
     }
-  } catch (error) {
-    ;
   }
-}
 
   void _filterOrders(String query) {
- 
     setState(() {
       searchQuery = query;
       if (query.isEmpty) {
@@ -527,72 +536,76 @@ Future<void> fetchOrderData() async {
     await Printing.sharePdf(
         bytes: await pdf.save(), filename: 'order_list.pdf');
   }
- Future<void> _navigateBack() async {
-    final dep = await getdepFromPrefs();
-    if(dep=="BDO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => bdo_dashbord()), // Replace AnotherPage with your target page
-            );
 
-}else if (dep == "COO") {
+  Future<void> _navigateBack() async {
+    final dep = await getdepFromPrefs();
+    if (dep == "BDO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                bdo_dashbord()), // Replace AnotherPage with your target page
+      );
+    } else if (dep == "COO") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => ceo_dashboard()),
       );
-    }
-    else if (dep == "CSO") {
+    } else if (dep == "CSO") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => cso_dashboard()),
       );
-    }
-else if(dep=="BDM" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => bdm_dashbord()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="warehouse" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => WarehouseDashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="CEO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => ceo_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="COO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => ceo_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-
-else if(dep=="CSO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => cso_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-
-else if(dep=="Marketing" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => marketing_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="Warehouse Admin" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => WarehouseAdmin()), // Replace AnotherPage with your target page
-            );
-}
-
- else {
+    } else if (dep == "BDM") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                bdm_dashbord()), // Replace AnotherPage with your target page
+      );
+    } else if (dep == "warehouse") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                WarehouseDashboard()), // Replace AnotherPage with your target page
+      );
+    } else if (dep == "CEO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                ceo_dashboard()), // Replace AnotherPage with your target page
+      );
+    } else if (dep == "COO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                ceo_dashboard()), // Replace AnotherPage with your target page
+      );
+    } else if (dep == "CSO") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                cso_dashboard()), // Replace AnotherPage with your target page
+      );
+    } else if (dep == "Marketing") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                marketing_dashboard()), // Replace AnotherPage with your target page
+      );
+    } else if (dep == "Warehouse Admin") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                WarehouseAdmin()), // Replace AnotherPage with your target page
+      );
+    } else {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => dashboard()),
@@ -603,7 +616,7 @@ else if(dep=="Warehouse Admin" ){
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-       onWillPop: () async {
+      onWillPop: () async {
         // Trigger the navigation logic when the back swipe occurs
         _navigateBack();
         return false; // Prevent the default back navigation behavior
@@ -618,68 +631,73 @@ else if(dep=="Warehouse Admin" ){
             icon: const Icon(Icons.arrow_back), // Custom back arrow
             onPressed: () async {
               final dep = await getdepFromPrefs();
-             if(dep=="BDO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => bdo_dashbord()), // Replace AnotherPage with your target page
-            );
-
-}
-else if(dep=="BDM" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => bdm_dashbord()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="warehouse" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => WarehouseDashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="CEO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => ceo_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="COO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => ceo_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-
-else if(dep=="CSO" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => cso_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if(dep=="Marketing" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => marketing_dashboard()), // Replace AnotherPage with your target page
-            );
-}
-else if (dep == "COO") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => ceo_dashboard()),
-      );
-    }
-    else if (dep == "CSO") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => cso_dashboard()),
-      );
-    }
-else if(dep=="Warehouse Admin" ){
-   Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => WarehouseAdmin()), // Replace AnotherPage with your target page
-            );
-}else {
+              if (dep == "BDO") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) =>
+                          bdo_dashbord()), // Replace AnotherPage with your target page
+                );
+              } else if (dep == "BDM") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) =>
+                          bdm_dashbord()), // Replace AnotherPage with your target page
+                );
+              } else if (dep == "warehouse") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) =>
+                          WarehouseDashboard()), // Replace AnotherPage with your target page
+                );
+              } else if (dep == "CEO") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) =>
+                          ceo_dashboard()), // Replace AnotherPage with your target page
+                );
+              } else if (dep == "COO") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) =>
+                          ceo_dashboard()), // Replace AnotherPage with your target page
+                );
+              } else if (dep == "CSO") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) =>
+                          cso_dashboard()), // Replace AnotherPage with your target page
+                );
+              } else if (dep == "Marketing") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) =>
+                          marketing_dashboard()), // Replace AnotherPage with your target page
+                );
+              } else if (dep == "COO") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => ceo_dashboard()),
+                );
+              } else if (dep == "CSO") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => cso_dashboard()),
+                );
+              } else if (dep == "Warehouse Admin") {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) =>
+                          WarehouseAdmin()), // Replace AnotherPage with your target page
+                );
+              } else {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
@@ -712,7 +730,7 @@ else if(dep=="Warehouse Admin" ){
                   case 'Option 2':
                     downloadPdf();
                     break;
-      
+
                   default:
                     // Handle default case
                     break;
@@ -735,30 +753,31 @@ else if(dep=="Warehouse Admin" ){
         ),
         body: Column(
           children: [
-
-              Padding(
-  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-  child: DropdownButtonFormField<String>(
-    value: selectedStatus,
-    decoration: InputDecoration(
-      labelText: "Filter by Status",
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    ),
-    onChanged: (value) {
-      setState(() {
-        selectedStatus = value!;
-        _filterOrdersByStatus(selectedStatus);
-      });
-    },
-    items: orderStatuses.map((status) {
-      return DropdownMenuItem<String>(
-        value: status,
-        child: Text(getDisplayStatus(status)),
-      );
-    }).toList(),
-  ),
-),
+            // Padding(
+            //   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            //   child: DropdownButtonFormField<String>(
+            //     value: selectedStatus,
+            //     decoration: InputDecoration(
+            //       labelText: "Filter by Status",
+            //       border: OutlineInputBorder(
+            //           borderRadius: BorderRadius.circular(30)),
+            //       contentPadding:
+            //           EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            //     ),
+            //     onChanged: (value) {
+            //       setState(() {
+            //         selectedStatus = value!;
+            //         _filterOrdersByStatus(selectedStatus);
+            //       });
+            //     },
+            //     items: orderStatuses.map((status) {
+            //       return DropdownMenuItem<String>(
+            //         value: status,
+            //         child: Text(getDisplayStatus(status)),
+            //       );
+            //     }).toList(),
+            //   ),
+            // ),
             // Search Bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -791,8 +810,8 @@ else if(dep=="Warehouse Admin" ){
                       ),
                     )
                   : RefreshIndicator(
-                    onRefresh: fetchOrderData,
-                    child: ListView.builder(
+                      onRefresh: fetchOrderData,
+                      child: ListView.builder(
                         itemCount: filteredOrders.length,
                         padding: const EdgeInsets.only(right: 10, left: 10),
                         itemBuilder: (context, index) {
@@ -804,8 +823,10 @@ else if(dep=="Warehouse Admin" ){
                                 Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                        builder: (context) =>
-                                            OrderReview(id: order['id'],customer:order['customer']['id'])));
+                                        builder: (context) => OrderReview(
+                                            id: order['id'],
+                                            customer: order['customer']
+                                                ['id'])));
                               },
                               child: Card(
                                 shape: RoundedRectangleBorder(
@@ -841,7 +862,8 @@ else if(dep=="Warehouse Admin" ){
                                                 DateTime.parse(
                                                     order['order_date'])),
                                             style: TextStyle(
-                                                color: Colors.white, fontSize: 14),
+                                                color: Colors.white,
+                                                fontSize: 14),
                                           ),
                                         ],
                                       ),
@@ -898,104 +920,128 @@ else if(dep=="Warehouse Admin" ){
                                                 ),
                                               ),
                                               Text(
-  '${(order['total_amount'] as num).toStringAsFixed(2)}',
-  style: TextStyle(
-    fontSize: 13,
-    fontWeight: FontWeight.bold,
-    color: Colors.green,
-  ),
-),
-
+                                                '${(order['total_amount'] as num).toStringAsFixed(2)}',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.green,
+                                                ),
+                                              ),
                                             ],
                                           ),
-                                          if (order['warehouse'] != null && (order['warehouse'] as List).isNotEmpty)
-  ...[
-    SizedBox(height: 5.0),
-    Text(
-      'Warehouse Info:',
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        decoration: TextDecoration.underline,
-        color: Colors.blue.shade900,
-      ),
-    ),
-    SizedBox(height: 4.0),
-    Table(
-      border: TableBorder.symmetric(
-        inside: BorderSide(color: Colors.grey.shade300),
-        outside: BorderSide(color: Colors.grey.shade400, width: 1),
-      ),
-      columnWidths: {
-        0: FlexColumnWidth(1),
-        1: FlexColumnWidth(2),
-        2: FlexColumnWidth(3),
-      },
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-      children: [
-        // Header Row
-        TableRow(
-          decoration: BoxDecoration(color: Colors.blue.shade50),
-          children: [
-           
-            Padding(
-              padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 6.0),
-              child: Text(
-                'Box',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue.shade900,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 6.0),
-              child: Text(
-                'Tracking ID',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue.shade900,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
-        ),
-        // Data Rows
-        ...(order['warehouse'] as List).map<TableRow>((wh) {
-          return TableRow(
-            decoration: BoxDecoration(color: Colors.white),
-            children: [
-             
-              Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Text(
-                  wh['box'] ?? 'N/A',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ),
-             Padding(
-  padding: const EdgeInsets.all(8.0),
-  child: SelectableText(
-    wh['tracking_id'] ?? 'N/A',
-    style: const TextStyle(fontSize: 12),
-  ),
-),
-
-            ],
-          );
-        }).toList(),
-      ],
-    ),
-  ]
-else
-  Text(
-    'No warehouse data available',
-    style: TextStyle(color: Colors.red, fontSize: 12),
-  ),
-
-
+                                          if (order['warehouse'] != null &&
+                                              (order['warehouse'] as List)
+                                                  .isNotEmpty) ...[
+                                            SizedBox(height: 5.0),
+                                            Text(
+                                              'Warehouse Info:',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                decoration:
+                                                    TextDecoration.underline,
+                                                color: Colors.blue.shade900,
+                                              ),
+                                            ),
+                                            SizedBox(height: 4.0),
+                                            Table(
+                                              border: TableBorder.symmetric(
+                                                inside: BorderSide(
+                                                    color:
+                                                        Colors.grey.shade300),
+                                                outside: BorderSide(
+                                                    color: Colors.grey.shade400,
+                                                    width: 1),
+                                              ),
+                                              columnWidths: {
+                                                0: FlexColumnWidth(1),
+                                                1: FlexColumnWidth(2),
+                                                2: FlexColumnWidth(3),
+                                              },
+                                              defaultVerticalAlignment:
+                                                  TableCellVerticalAlignment
+                                                      .middle,
+                                              children: [
+                                                // Header Row
+                                                TableRow(
+                                                  decoration: BoxDecoration(
+                                                      color:
+                                                          Colors.blue.shade50),
+                                                  children: [
+                                                    Padding(
+                                                      padding:
+                                                          EdgeInsets.symmetric(
+                                                              vertical: 8.0,
+                                                              horizontal: 6.0),
+                                                      child: Text(
+                                                        'Box',
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Colors
+                                                              .blue.shade900,
+                                                          fontSize: 13,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Padding(
+                                                      padding:
+                                                          EdgeInsets.symmetric(
+                                                              vertical: 8.0,
+                                                              horizontal: 6.0),
+                                                      child: Text(
+                                                        'Tracking ID',
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Colors
+                                                              .blue.shade900,
+                                                          fontSize: 13,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                // Data Rows
+                                                ...(order['warehouse'] as List)
+                                                    .map<TableRow>((wh) {
+                                                  return TableRow(
+                                                    decoration: BoxDecoration(
+                                                        color: Colors.white),
+                                                    children: [
+                                                      Padding(
+                                                        padding:
+                                                            EdgeInsets.all(8.0),
+                                                        child: Text(
+                                                          wh['box'] ?? 'N/A',
+                                                          style: TextStyle(
+                                                              fontSize: 12),
+                                                        ),
+                                                      ),
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .all(8.0),
+                                                        child: SelectableText(
+                                                          wh['tracking_id'] ??
+                                                              'N/A',
+                                                          style:
+                                                              const TextStyle(
+                                                                  fontSize: 12),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  );
+                                                }).toList(),
+                                              ],
+                                            ),
+                                          ] else
+                                            Text(
+                                              'No warehouse data available',
+                                              style: TextStyle(
+                                                  color: Colors.red,
+                                                  fontSize: 12),
+                                            ),
                                         ],
                                       ),
                                     ),
@@ -1006,7 +1052,7 @@ else
                           );
                         },
                       ),
-                  ),
+                    ),
             ),
           ],
         ),
