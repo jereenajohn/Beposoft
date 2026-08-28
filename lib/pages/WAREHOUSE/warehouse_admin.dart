@@ -73,8 +73,15 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
 
   String? todayStatusError;
 
+  Map<String, int> dgmParcelServiceBoxCounts = {};
+
+  bool isLoadingDgmSummary = true;
+
+  String? dgmSummaryError;
+
   static const List<String> warehouseDashboardStatuses = [
     'To Print',
+    'Packing under progress',
     'Packed',
     'Ready to ship',
     'Return From Delivery',
@@ -96,6 +103,19 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
   int toprint = 0;
 
   int packed = 0;
+
+  // ============================================================
+  // BOTTOM NAVIGATION + DASHBOARD SEARCH
+  // ============================================================
+
+  bool isBottomSearchOpen = false;
+
+  String dashboardSearchQuery = '';
+
+  final TextEditingController dashboardSearchController =
+      TextEditingController();
+
+  final FocusNode dashboardSearchFocusNode = FocusNode();
 
   @override
   void initState() {
@@ -152,6 +172,7 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
         getSalesReport(),
         fetchOrderData(),
         fetchTodayStatusCounts(),
+        fetchTodayDgmSummary(),
         fetchInboxMailCount(),
       ]);
     } catch (error, stackTrace) {
@@ -449,13 +470,16 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
 
         if (decoded is Map<String, dynamic>) {
           final dynamic todayData = decoded['today'];
+          final dynamic allData = decoded['all'];
 
-          if (todayData is List) {
-            final Map<String, int> apiStatusMap = {};
+          if (todayData is List && allData is List) {
+            final Map<String, int> todayStatusMap = {};
+            final Map<String, int> allStatusMap = {};
 
             for (final dynamic item in todayData) {
               if (item is Map) {
-                final String status = item['status']?.toString().trim() ?? '';
+                final String status =
+                    item['status']?.toString().trim() ?? '';
 
                 final dynamic rawCount = item['count'];
 
@@ -467,7 +491,27 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
                         0;
 
                 if (status.isNotEmpty) {
-                  apiStatusMap[status] = count;
+                  todayStatusMap[status] = count;
+                }
+              }
+            }
+
+            for (final dynamic item in allData) {
+              if (item is Map) {
+                final String status =
+                    item['status']?.toString().trim() ?? '';
+
+                final dynamic rawCount = item['count'];
+
+                final int count = rawCount is int
+                    ? rawCount
+                    : int.tryParse(
+                          rawCount?.toString() ?? '0',
+                        ) ??
+                        0;
+
+                if (status.isNotEmpty) {
+                  allStatusMap[status] = count;
                 }
               }
             }
@@ -477,7 +521,8 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
               (String status) {
                 return {
                   'status': status,
-                  'count': apiStatusMap[status] ?? 0,
+                  'today_count': todayStatusMap[status] ?? 0,
+                  'all_count': allStatusMap[status] ?? 0,
                 };
               },
             ).toList();
@@ -539,6 +584,160 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
   }
 
   // ============================================================
+  // FETCH TODAY DGM PARCEL SERVICE SUMMARY
+  // ============================================================
+
+  Future<void> fetchTodayDgmSummary() async {
+    if (!mounted) return;
+
+    setState(() {
+      isLoadingDgmSummary = true;
+      dgmSummaryError = null;
+    });
+
+    try {
+      final String? token = await getTokenFromPrefs();
+
+      if (token == null || token.trim().isEmpty) {
+        if (!mounted) return;
+
+        setState(() {
+          dgmParcelServiceBoxCounts = {};
+          isLoadingDgmSummary = false;
+          dgmSummaryError = 'Authentication token not found';
+        });
+
+        return;
+      }
+
+      final String today = DateFormat(
+        'yyyy-MM-dd',
+      ).format(
+        DateTime.now(),
+      );
+
+      final http.Response response = await http.get(
+        Uri.parse(
+          '$api/api/warehousesdataget/$today/',
+        ),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      debugPrint(
+        'DGM SUMMARY RESPONSE: ${response.statusCode}',
+      );
+
+      debugPrint(
+        'DGM SUMMARY BODY: ${response.body}',
+      );
+
+      if (response.statusCode == 404) {
+        if (!mounted) return;
+
+        setState(() {
+          dgmParcelServiceBoxCounts = {};
+          isLoadingDgmSummary = false;
+          dgmSummaryError = null;
+        });
+
+        return;
+      }
+
+      if (response.statusCode != 200) {
+        if (!mounted) return;
+
+        setState(() {
+          dgmParcelServiceBoxCounts = {};
+          isLoadingDgmSummary = false;
+          dgmSummaryError =
+              'Failed to load DGM summary (${response.statusCode})';
+        });
+
+        return;
+      }
+
+      final dynamic decoded = jsonDecode(
+        response.body,
+      );
+
+      final Map<String, int> serviceCounts = {};
+
+      if (decoded is Map<String, dynamic>) {
+        final dynamic results = decoded['results'];
+
+        if (results is List) {
+          for (final dynamic family in results) {
+            if (family is! Map) continue;
+
+            final dynamic familyOrders = family['orders'];
+
+            if (familyOrders is! List) continue;
+
+            for (final dynamic order in familyOrders) {
+              if (order is! Map) continue;
+
+              final dynamic warehouses = order['warehouses'];
+
+              if (warehouses is! List) continue;
+
+              for (final dynamic warehouse in warehouses) {
+                if (warehouse is! Map) continue;
+
+                final String parcelServiceName =
+                    warehouse['parcel_service_name']?.toString().trim() ?? '';
+
+                if (parcelServiceName.isEmpty) continue;
+
+                serviceCounts[parcelServiceName] =
+                    (serviceCounts[parcelServiceName] ?? 0) + 1;
+              }
+            }
+          }
+        }
+      }
+
+      final List<MapEntry<String, int>> sortedEntries =
+          serviceCounts.entries.toList()
+            ..sort(
+              (MapEntry<String, int> a, MapEntry<String, int> b) {
+                return a.key.toLowerCase().compareTo(
+                      b.key.toLowerCase(),
+                    );
+              },
+            );
+
+      if (!mounted) return;
+
+      setState(() {
+        dgmParcelServiceBoxCounts = Map<String, int>.fromEntries(
+          sortedEntries,
+        );
+        isLoadingDgmSummary = false;
+        dgmSummaryError = null;
+      });
+    } catch (error, stackTrace) {
+      debugPrint(
+        'DGM SUMMARY ERROR: $error',
+      );
+
+      debugPrintStack(
+        stackTrace: stackTrace,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        dgmParcelServiceBoxCounts = {};
+        isLoadingDgmSummary = false;
+        dgmSummaryError = 'Unable to load DGM summary';
+      });
+    }
+  }
+
+  // ============================================================
   // DISPLAY NAME
   // ============================================================
 
@@ -548,6 +747,9 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
     switch (status) {
       case 'To Print':
         return 'Delivery Order (DO)';
+
+      case 'Packing under progress':
+        return 'Delivery Order (Packing under Progress)';
 
       case 'Packed':
         return 'Packed For Delivery (PFD)';
@@ -576,6 +778,9 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
     switch (status.toLowerCase()) {
       case 'to print':
         return Icons.description_rounded;
+
+      case 'packing under progress':
+        return Icons.inventory_outlined;
 
       case 'packed':
         return Icons.inventory_2_rounded;
@@ -734,27 +939,46 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
 
         final List<Widget> dashboardCards = [];
 
-        final Map<String, int> statusCountMap = {};
+        final Map<String, int> todayCountMap = {};
+        final Map<String, int> allCountMap = {};
 
         for (final Map<String, dynamic> item in todayStatusCounts) {
           final String status = item['status']?.toString() ?? '';
 
-          final int count = item['count'] is int
-              ? item['count']
+          final int todayCount = item['today_count'] is int
+              ? item['today_count']
               : int.tryParse(
-                    item['count']?.toString() ?? '0',
+                    item['today_count']?.toString() ?? '0',
+                  ) ??
+                  0;
+
+          final int allCount = item['all_count'] is int
+              ? item['all_count']
+              : int.tryParse(
+                    item['all_count']?.toString() ?? '0',
                   ) ??
                   0;
 
           if (status.isNotEmpty) {
-            statusCountMap[status] = count;
+            todayCountMap[status] = todayCount;
+            allCountMap[status] = allCount;
           }
         }
 
         dashboardCards.add(
           _buildTodayStatusCard(
             status: 'To Print',
-            count: statusCountMap['To Print'] ?? 0,
+            todayCount: todayCountMap['To Print'] ?? 0,
+            allCount: allCountMap['To Print'] ?? 0,
+            isVerySmallPhone: isVerySmallPhone,
+          ),
+        );
+
+        dashboardCards.add(
+          _buildTodayStatusCard(
+            status: 'Packing under progress',
+            todayCount: todayCountMap['Packing under progress'] ?? 0,
+            allCount: allCountMap['Packing under progress'] ?? 0,
             isVerySmallPhone: isVerySmallPhone,
           ),
         );
@@ -762,19 +986,14 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
         dashboardCards.add(
           _buildTodayStatusCard(
             status: 'Packed',
-            count: statusCountMap['Packed'] ?? 0,
+            todayCount: todayCountMap['Packed'] ?? 0,
+            allCount: allCountMap['Packed'] ?? 0,
             isVerySmallPhone: isVerySmallPhone,
           ),
         );
 
         dashboardCards.add(
-          _buildActionCard(
-            title: 'Daily Goods Movement (DGM)',
-            shortCode: 'DGM',
-            icon: Icons.move_down_rounded,
-            color: const Color(
-              0xFF7C3AED,
-            ),
+          _buildDgmCard(
             isVerySmallPhone: isVerySmallPhone,
             onTap: () {
               Navigator.push(
@@ -794,7 +1013,8 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
         dashboardCards.add(
           _buildTodayStatusCard(
             status: 'Ready to ship',
-            count: statusCountMap['Ready to ship'] ?? 0,
+            todayCount: todayCountMap['Ready to ship'] ?? 0,
+            allCount: allCountMap['Ready to ship'] ?? 0,
             isVerySmallPhone: isVerySmallPhone,
           ),
         );
@@ -802,7 +1022,8 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
         dashboardCards.add(
           _buildTodayStatusCard(
             status: 'Return From Delivery',
-            count: statusCountMap['Return From Delivery'] ?? 0,
+            todayCount: todayCountMap['Return From Delivery'] ?? 0,
+            allCount: allCountMap['Return From Delivery'] ?? 0,
             isVerySmallPhone: isVerySmallPhone,
           ),
         );
@@ -810,23 +1031,79 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
         dashboardCards.add(
           _buildTodayStatusCard(
             status: 'Shipped',
-            count: statusCountMap['Shipped'] ?? 0,
+            todayCount: todayCountMap['Shipped'] ?? 0,
+            allCount: allCountMap['Shipped'] ?? 0,
             isVerySmallPhone: isVerySmallPhone,
           ),
         );
 
-        dashboardCards.add(
-          _buildActionCard(
-            title: 'Pending Work (PW)',
-            shortCode: 'PW',
-            icon: Icons.pending_actions_rounded,
-            color: const Color(
-              0xFFF59E0B,
-            ),
-            isVerySmallPhone: isVerySmallPhone,
-            onTap: null,
-          ),
-        );
+        // ============================================================
+        // PURCHASES CARD
+        // COMMENTED AS REQUESTED
+        // ============================================================
+
+        // dashboardCards.add(
+        //   _buildGroupedMenuCard(
+        //     title: 'Purchases',
+        //     icon: Icons.shopping_cart_outlined,
+        //     items: _getGroupItems(
+        //       'purchases',
+        //     ),
+        //     isVerySmallPhone: isVerySmallPhone,
+        //   ),
+        // );
+
+        // ============================================================
+        // FRONT MENU CARDS
+        // ADDED INTO THE SAME GRID SO THERE IS NO EMPTY CELL
+        // ============================================================
+
+        final List<Map<String, dynamic>> frontMenuItems =
+            _getFrontMenuItems();
+
+        for (final Map<String, dynamic> item in frontMenuItems) {
+          final String itemTitle =
+              item['title']?.toString() ?? '';
+
+          final IconData itemIcon =
+              item['icon'] as IconData;
+
+          final String? groupType =
+              item['groupType']?.toString();
+
+          if (groupType != null && groupType.isNotEmpty) {
+            if (groupType == 'reports') {
+              dashboardCards.add(
+                _buildReportsCard(
+                  isVerySmallPhone: isVerySmallPhone,
+                ),
+              );
+            } else {
+              dashboardCards.add(
+                _buildGroupedMenuCard(
+                  title: itemTitle,
+                  icon: itemIcon,
+                  items: _getGroupItems(
+                    groupType,
+                  ),
+                  isVerySmallPhone: isVerySmallPhone,
+                ),
+              );
+            }
+          } else {
+            dashboardCards.add(
+              _buildFrontMenuCard(
+                title: itemTitle,
+                icon: itemIcon,
+                onTap: () {
+                  _navigateFromFrontCard(
+                    itemTitle,
+                  );
+                },
+              ),
+            );
+          }
+        }
 
         return GridView.count(
           shrinkWrap: true,
@@ -847,7 +1124,8 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
 
  Widget _buildTodayStatusCard({
   required String status,
-  required int count,
+  required int todayCount,
+  required int allCount,
   required bool isVerySmallPhone,
 }) {
   final IconData statusIcon = _getStatusIcon(status);
@@ -904,51 +1182,35 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
             isVerySmallPhone ? 10 : 12,
           ),
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Text(
                       displayName,
                       maxLines: 2,
-                      overflow:
-                          TextOverflow.ellipsis,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize:
-                            isVerySmallPhone
-                                ? 11.5
-                                : 13,
+                        fontSize: isVerySmallPhone ? 11.5 : 13,
                         height: 1.25,
-                        fontWeight:
-                            FontWeight.w700,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-
                   const SizedBox(
                     width: 8,
                   ),
-
                   Container(
-                    height:
-                        isVerySmallPhone
-                            ? 32
-                            : 34,
-                    width:
-                        isVerySmallPhone
-                            ? 32
-                            : 34,
+                    height: isVerySmallPhone ? 32 : 34,
+                    width: isVerySmallPhone ? 32 : 34,
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(
                         0.14,
                       ),
-                      borderRadius:
-                          BorderRadius.circular(
+                      borderRadius: BorderRadius.circular(
                         11,
                       ),
                       border: Border.all(
@@ -960,55 +1222,125 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
                     child: Icon(
                       statusIcon,
                       color: Colors.white,
-                      size:
-                          isVerySmallPhone
-                              ? 18
-                              : 19,
+                      size: isVerySmallPhone ? 18 : 19,
                     ),
                   ),
                 ],
               ),
 
+              const SizedBox(
+                height: 10,
+              ),
+
               Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisSize:
-                        MainAxisSize.min,
-                    children: [
-                      Text(
-                        count.toString(),
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize:
-                              isVerySmallPhone
-                                  ? 30
-                                  : 36,
-                          fontWeight:
-                              FontWeight.w900,
-                          height: 1,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isVerySmallPhone ? 10 : 12,
+                        vertical: isVerySmallPhone ? 8 : 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(
+                          0.11,
                         ),
-                      ),
-
-                      const SizedBox(
-                        height: 8,
-                      ),
-
-                      Text(
-                        'Today',
-                        style: TextStyle(
+                        borderRadius: BorderRadius.circular(
+                          12,
+                        ),
+                        border: Border.all(
                           color: Colors.white.withOpacity(
-                            0.88,
+                            0.24,
                           ),
-                          fontSize:
-                              isVerySmallPhone
-                                  ? 11
-                                  : 12,
-                          fontWeight:
-                              FontWeight.w600,
                         ),
                       ),
-                    ],
-                  ),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Today',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: isVerySmallPhone ? 10.5 : 11.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const Spacer(),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                todayCount.toString(),
+                                maxLines: 1,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: isVerySmallPhone ? 17 : 20,
+                                  fontWeight: FontWeight.w900,
+                                  height: 1,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 8,
+                    ),
+
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isVerySmallPhone ? 10 : 12,
+                        vertical: isVerySmallPhone ? 8 : 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(
+                          0.11,
+                        ),
+                        borderRadius: BorderRadius.circular(
+                          12,
+                        ),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(
+                            0.24,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Till Today',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: isVerySmallPhone ? 10.5 : 11.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const Spacer(),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                allCount.toString(),
+                                maxLines: 1,
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: isVerySmallPhone ? 17 : 20,
+                                  fontWeight: FontWeight.w900,
+                                  height: 1,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -1019,6 +1351,331 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
   );
 }
 
+  // ============================================================
+  // DGM CARD WITH PARCEL SERVICE + TOTAL BOXES
+  // ============================================================
+
+Widget _buildDgmCard({
+  required bool isVerySmallPhone,
+  required VoidCallback onTap,
+}) {
+  final int totalBoxes = dgmParcelServiceBoxCounts.values.fold<int>(
+    0,
+    (int sum, int count) => sum + count,
+  );
+
+  return Material(
+    color: Colors.transparent,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Ink(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xFF56AFFF),
+              Color(0xFF2C74FF),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(
+                0xFF2C74FF,
+              ).withOpacity(
+                0.28,
+              ),
+              blurRadius: 12,
+              spreadRadius: 1,
+              offset: const Offset(
+                0,
+                6,
+              ),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(
+            isVerySmallPhone ? 10 : 12,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ==================================================
+              // TITLE + ICON
+              // ==================================================
+
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Daily Goods Movement(DGM)',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: isVerySmallPhone ? 11.5 : 13,
+                        height: 1.25,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(
+                    width: 8,
+                  ),
+                  Container(
+                    height: isVerySmallPhone ? 32 : 34,
+                    width: isVerySmallPhone ? 32 : 34,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(
+                        0.14,
+                      ),
+                      borderRadius: BorderRadius.circular(
+                        11,
+                      ),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(
+                          0.22,
+                        ),
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.move_down_rounded,
+                      color: Colors.white,
+                      size: isVerySmallPhone ? 18 : 19,
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(
+                height: 8,
+              ),
+
+              // ==================================================
+              // CONTENT
+              // ==================================================
+
+              Expanded(
+                child: isLoadingDgmSummary
+                    ? const Center(
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: Colors.white,
+                          ),
+                        ),
+                      )
+                    : dgmSummaryError != null
+                        ? Center(
+                            child: Text(
+                              'Unable to load summary',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(
+                                  0.90,
+                                ),
+                                fontSize: isVerySmallPhone ? 10 : 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          )
+                        : dgmParcelServiceBoxCounts.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'No parcel data today',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(
+                                      0.90,
+                                    ),
+                                    fontSize: isVerySmallPhone ? 10 : 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              )
+                            : Column(
+                                children: [
+                                  // ==========================================
+                                  // SCROLLABLE PARCEL SERVICE LIST
+                                  // NO SCROLLBAR
+                                  // ==========================================
+
+                                  Expanded(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(
+                                        12,
+                                      ),
+                                      child: ListView.separated(
+                                        padding: const EdgeInsets.only(
+                                          right: 2,
+                                        ),
+                                        physics:
+                                            const BouncingScrollPhysics(),
+                                        itemCount:
+                                            dgmParcelServiceBoxCounts.length,
+                                        separatorBuilder: (
+                                          BuildContext context,
+                                          int index,
+                                        ) {
+                                          return const SizedBox(
+                                            height: 7,
+                                          );
+                                        },
+                                        itemBuilder: (
+                                          BuildContext context,
+                                          int index,
+                                        ) {
+                                          final MapEntry<String, int> entry =
+                                              dgmParcelServiceBoxCounts.entries
+                                                  .elementAt(
+                                            index,
+                                          );
+
+                                          return Container(
+                                            width: double.infinity,
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal:
+                                                  isVerySmallPhone ? 9 : 11,
+                                              vertical:
+                                                  isVerySmallPhone ? 7 : 8,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withOpacity(
+                                                0.10,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                12,
+                                              ),
+                                              border: Border.all(
+                                                color: Colors.white.withOpacity(
+                                                  0.28,
+                                                ),
+                                                width: 1,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    entry.key,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize:
+                                                          isVerySmallPhone
+                                                              ? 9.5
+                                                              : 10.5,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(
+                                                  width: 8,
+                                                ),
+                                                Text(
+                                                  entry.value.toString(),
+                                                  textAlign: TextAlign.right,
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize:
+                                                        isVerySmallPhone
+                                                            ? 10.5
+                                                            : 11.5,
+                                                    fontWeight:
+                                                        FontWeight.w800,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+
+                                  const SizedBox(
+                                    height: 7,
+                                  ),
+
+                                  // ==========================================
+                                  // TOTAL TAB
+                                  // ==========================================
+
+                                  Container(
+                                    width: double.infinity,
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal:
+                                          isVerySmallPhone ? 10 : 12,
+                                      vertical:
+                                          isVerySmallPhone ? 7 : 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(
+                                        0xFF16A34A,
+                                      ),
+                                      borderRadius: BorderRadius.circular(
+                                        12,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(
+                                            0xFF16A34A,
+                                          ).withOpacity(
+                                            0.25,
+                                          ),
+                                          blurRadius: 6,
+                                          offset: const Offset(
+                                            0,
+                                            3,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Expanded(
+                                          child: Text(
+                                            'TOTAL',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          totalBoxes.toString(),
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize:
+                                                isVerySmallPhone ? 11 : 12.5,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
   // ============================================================
   // STATIC ACTION CARD
   // ============================================================
@@ -1184,6 +1841,1493 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
     ),
   );
 }
+
+
+  // ============================================================
+  // FRONT MENU NAVIGATION
+  // ============================================================
+
+  Future<void> _navigateFromFrontCard(
+    String item,
+  ) async {
+    switch (item) {
+      case 'Dashboard':
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return WarehouseAdmin();
+            },
+          ),
+        );
+        return;
+
+      case 'Send Mail':
+        await Navigator.push<void>(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return const StaffMailPage();
+            },
+          ),
+        );
+
+        if (!mounted) {
+          return;
+        }
+
+        await fetchInboxMailCount();
+        return;
+
+      case 'Delivery Order (DO)':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return WarehouseOrderView(
+                status: 'To Print',
+              );
+            },
+          ),
+        );
+        return;
+
+      case 'Delivery Order(Packing under Progress)':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return WarehouseOrderView(
+                status: 'Packing under progress',
+              );
+            },
+          ),
+        );
+        return;
+
+      case 'Packed For Delivery(PFD)':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return WarehouseOrderView(
+                status: 'Packed',
+              );
+            },
+          ),
+        );
+        return;
+
+      case 'Out For Delivery(OFD)':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return WarehouseOrderView(
+                status: 'Ready to ship',
+              );
+            },
+          ),
+        );
+        return;
+
+      case 'Return From Delivery (RFD)':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return WarehouseOrderView(
+                status: 'Return From Delivery',
+              );
+            },
+          ),
+        );
+        return;
+
+      case 'Delivery Order(Shipped)':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return WarehouseOrderView(
+                status: 'Shipped',
+              );
+            },
+          ),
+        );
+        return;
+
+      case 'Daily Goods Movement':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return daily_goods_movement();
+            },
+          ),
+        );
+        return;
+
+      case 'Local Purchase Order':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return LocalPurchaseOrderScreen();
+            },
+          ),
+        );
+        return;
+
+      case 'Order Requests':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return Warehouse_Order_Request(
+                status: null,
+              );
+            },
+          ),
+        );
+        return;
+
+      case 'Approve Products':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return Approve_products();
+            },
+          ),
+        );
+        return;
+
+      case 'Add Attendance':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return StaffSelfAttendanceScreen();
+            },
+          ),
+        );
+        return;
+
+      case 'Add Team Staff':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return StaffAttendanceTeamMemberScreen();
+            },
+          ),
+        );
+        return;
+
+      case 'Add & Approve Attendance':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return StaffMarkAttendanceScreen();
+            },
+          ),
+        );
+        return;
+
+      case 'Approve Leave Requests':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return ManagerLeaveRequestsPage();
+            },
+          ),
+        );
+        return;
+
+      case 'Employee Leave Form':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (
+              BuildContext context,
+            ) {
+              return EmployeeLeaveFormPage();
+            },
+          ),
+        );
+        return;
+
+      case 'Logout':
+        logout(
+          context,
+        );
+        return;
+
+      default:
+        d.navigateToSelectedPage(
+          context,
+          item,
+        );
+        return;
+    }
+  }
+
+  // ============================================================
+  // FRONT MENU CARD
+  // SAME BLUE STYLE AS DASHBOARD CARDS
+  // ============================================================
+
+  Widget _buildFrontMenuCard({
+    required String title,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(
+          20,
+        ),
+        onTap: onTap,
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(
+              20,
+            ),
+            gradient: const LinearGradient(
+              colors: [
+                Color(
+                  0xFF56AFFF,
+                ),
+                Color(
+                  0xFF2C74FF,
+                ),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(
+                  0xFF2C74FF,
+                ).withOpacity(
+                  0.28,
+                ),
+                blurRadius: 12,
+                spreadRadius: 1,
+                offset: const Offset(
+                  0,
+                  6,
+                ),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(
+              12,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12.5,
+                          height: 1.25,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(
+                      width: 8,
+                    ),
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(
+                          0.14,
+                        ),
+                        borderRadius: BorderRadius.circular(
+                          11,
+                        ),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(
+                            0.22,
+                          ),
+                        ),
+                      ),
+                      child: Icon(
+                        icon,
+                        color: Colors.white,
+                        size: 19,
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                Row(
+                  children: [
+                    Text(
+                      'Open',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(
+                          0.90,
+                        ),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      color: Colors.white.withOpacity(
+                        0.92,
+                      ),
+                      size: 18,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+// ============================================================
+// COMPACT GROUPED MENU CARD
+// SAME SIZE AS OTHER DASHBOARD CARDS
+// ============================================================
+
+Widget _buildGroupedMenuCard({
+  required String title,
+  required IconData icon,
+  required List<Map<String, dynamic>> items,
+  required bool isVerySmallPhone,
+}) {
+  return Container(
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(
+        20,
+      ),
+      gradient: const LinearGradient(
+        colors: [
+          Color(0xFF56AFFF),
+          Color(0xFF2C74FF),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: const Color(
+            0xFF2C74FF,
+          ).withOpacity(
+            0.28,
+          ),
+          blurRadius: 12,
+          spreadRadius: 1,
+          offset: const Offset(
+            0,
+            6,
+          ),
+        ),
+      ],
+    ),
+    child: Padding(
+      padding: EdgeInsets.all(
+        isVerySmallPhone ? 10 : 12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: isVerySmallPhone ? 11.5 : 13,
+                    height: 1.25,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(
+                width: 8,
+              ),
+              Container(
+                width: isVerySmallPhone ? 32 : 34,
+                height: isVerySmallPhone ? 32 : 34,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(
+                    0.14,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    11,
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(
+                      0.22,
+                    ),
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  color: Colors.white,
+                  size: isVerySmallPhone ? 18 : 19,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(
+            height: 7,
+          ),
+          Expanded(
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              physics: const BouncingScrollPhysics(),
+              itemCount: items.length,
+              separatorBuilder: (
+                BuildContext context,
+                int index,
+              ) {
+                return const SizedBox(
+                  height: 4,
+                );
+              },
+              itemBuilder: (
+                BuildContext context,
+                int index,
+              ) {
+                final Map<String, dynamic> menuItem =
+                    items[index];
+
+                final String itemTitle =
+                    menuItem['title']?.toString() ?? '';
+
+                final IconData itemIcon =
+                    menuItem['icon'] as IconData;
+
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(
+                      9,
+                    ),
+                    onTap: () {
+                      _navigateFromFrontCard(
+                        itemTitle,
+                      );
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.symmetric(
+                        horizontal:
+                            isVerySmallPhone ? 6 : 7,
+                        vertical:
+                            isVerySmallPhone ? 5 : 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(
+                          0.11,
+                        ),
+                        borderRadius: BorderRadius.circular(
+                          9,
+                        ),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(
+                            0.20,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            itemIcon,
+                            color: Colors.white,
+                            size:
+                                isVerySmallPhone ? 13 : 14,
+                          ),
+                          const SizedBox(
+                            width: 6,
+                          ),
+                          Expanded(
+                            child: Text(
+                              itemTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize:
+                                    isVerySmallPhone
+                                        ? 8.5
+                                        : 9.5,
+                                fontWeight:
+                                    FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(
+                            width: 3,
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color:
+                                Colors.white.withOpacity(
+                              0.90,
+                            ),
+                            size: 15,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+// ============================================================
+// REPORTS CARD
+// ============================================================
+
+Widget _buildReportsCard({
+  required bool isVerySmallPhone,
+}) {
+  return _buildGroupedMenuCard(
+    title: 'Reports',
+    icon: Icons.analytics_outlined,
+    isVerySmallPhone: isVerySmallPhone,
+    items: [
+      {
+        'title': 'Product Stock Report',
+        'icon': Icons.inventory_outlined,
+      },
+      {
+        'title': 'Product Sale Report',
+        'icon': Icons.point_of_sale_outlined,
+      },
+      {
+        'title': 'Stock Report',
+        'icon': Icons.assessment_outlined,
+      },
+      {
+        'title': 'Damaged Stock',
+        'icon': Icons.warning_amber_rounded,
+      },
+      {
+        'title': 'Product Usability Report',
+        'icon': Icons.analytics_outlined,
+      },
+    ],
+  );
+}
+
+// FRONT MENU GROUP
+  // ============================================================
+
+  Widget _buildFrontMenuGroup({
+    required String title,
+    required List<Map<String, dynamic>> items,
+  }) {
+    if (items.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: Color(
+              0xFF111827,
+            ),
+          ),
+        ),
+        const SizedBox(
+          height: 12,
+        ),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: items.length,
+          gridDelegate:
+              const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            mainAxisExtent: 125,
+          ),
+          itemBuilder: (
+            BuildContext context,
+            int index,
+          ) {
+            final Map<String, dynamic> item = items[index];
+
+            final String itemTitle =
+                item['title']?.toString() ?? '';
+
+            final IconData itemIcon =
+                item['icon'] as IconData;
+
+            return _buildFrontMenuCard(
+              title: itemTitle,
+              icon: itemIcon,
+              onTap: () {
+                _navigateFromFrontCard(
+                  itemTitle,
+                );
+              },
+            );
+          },
+        ),
+        const SizedBox(
+          height: 24,
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // ALL DRAWER ITEMS ON DASHBOARD
+  // ============================================================
+
+  List<Map<String, dynamic>> _getFrontMenuItems() {
+    return [
+      {
+        'title': 'GRV',
+        'icon': Icons.assignment_return_outlined,
+        'keywords': 'grv create new grv grvs list return',
+        'groupType': 'grv',
+      },
+      {
+        'title': 'Attendance',
+        'icon': Icons.fingerprint_rounded,
+        'keywords':
+            'attendance add attendance add team staff add approve attendance',
+        'groupType': 'attendance',
+      },
+      // {
+      //   'title': 'Employee Leave',
+      //   'icon': Icons.event_note_outlined,
+      //   'keywords':
+      //       'employee leave employee leave form approve leave requests',
+      //   'groupType': 'employeeLeave',
+      // },
+      {
+        'title': 'Reports',
+        'icon': Icons.analytics_outlined,
+        'keywords':
+            'reports product stock report product sale report stock report damaged stock product usability report',
+        'groupType': 'reports',
+      },
+    ];
+  }
+
+  List<Map<String, dynamic>> _getGroupItems(
+    String groupType,
+  ) {
+    switch (groupType) {
+      case 'purchases':
+        return [
+          {
+            'title': 'Product List',
+            'icon': Icons.inventory_2_outlined,
+          },
+          {
+            'title': 'Product Add',
+            'icon': Icons.add_box_outlined,
+          },
+          {
+            'title': 'Approve Products',
+            'icon': Icons.verified_outlined,
+          },
+          {
+            'title': 'Order Requests',
+            'icon': Icons.inventory_2_outlined,
+          },
+          {
+            'title': 'Local Purchase Order',
+            'icon': Icons.receipt_long_outlined,
+          },
+        ];
+
+      case 'grv':
+        return [
+          {
+            'title': 'Create New GRV',
+            'icon': Icons.add_task_outlined,
+          },
+          {
+            'title': 'GRVs List',
+            'icon': Icons.assignment_return_outlined,
+          },
+        ];
+
+      case 'attendance':
+        return [
+          {
+            'title': 'Add Attendance',
+            'icon': Icons.fingerprint_rounded,
+          },
+          if (isManager)
+            {
+              'title': 'Add Team Staff',
+              'icon': Icons.group_add_outlined,
+            },
+          if (isManager)
+            {
+              'title': 'Add & Approve Attendance',
+              'icon': Icons.how_to_reg_outlined,
+            },
+        ];
+
+      case 'employeeLeave':
+        return [
+          {
+            'title': 'Employee Leave Form',
+            'icon': Icons.event_note_outlined,
+          },
+          if (isManager)
+            {
+              'title': 'Approve Leave Requests',
+              'icon': Icons.fact_check_outlined,
+            },
+        ];
+
+      case 'reports':
+        return [
+          {
+            'title': 'Product Stock Report',
+            'icon': Icons.inventory_outlined,
+          },
+          {
+            'title': 'Product Sale Report',
+            'icon': Icons.point_of_sale_outlined,
+          },
+          {
+            'title': 'Stock Report',
+            'icon': Icons.assessment_outlined,
+          },
+          {
+            'title': 'Damaged Stock',
+            'icon': Icons.warning_amber_rounded,
+          },
+          {
+            'title': 'Product Usability Report',
+            'icon': Icons.analytics_outlined,
+          },
+        ];
+
+      default:
+        return [];
+    }
+  }
+
+  Widget _buildFrontMenuSection() {
+    final List<Map<String, dynamic>> items =
+        _getFrontMenuItems();
+
+    return LayoutBuilder(
+      builder: (
+        BuildContext context,
+        BoxConstraints constraints,
+      ) {
+        final bool isVerySmallPhone =
+            constraints.maxWidth < 340;
+
+        final double horizontalSpacing =
+            isVerySmallPhone ? 8 : 12;
+
+        final double verticalSpacing =
+            isVerySmallPhone ? 8 : 12;
+
+        final double cardHeight =
+            isVerySmallPhone ? 185 : 200;
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics:
+              const NeverScrollableScrollPhysics(),
+          itemCount: items.length,
+          gridDelegate:
+              SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: horizontalSpacing,
+            mainAxisSpacing: verticalSpacing,
+            mainAxisExtent: cardHeight,
+          ),
+          itemBuilder: (
+            BuildContext context,
+            int index,
+          ) {
+            final Map<String, dynamic> item =
+                items[index];
+
+            final String itemTitle =
+                item['title']?.toString() ?? '';
+
+            final IconData itemIcon =
+                item['icon'] as IconData;
+
+            final String? groupType =
+                item['groupType']?.toString();
+
+            if (groupType != null &&
+                groupType.isNotEmpty) {
+              if (groupType == 'reports') {
+                return _buildReportsCard(
+                  isVerySmallPhone:
+                      isVerySmallPhone,
+                );
+              }
+
+              return _buildGroupedMenuCard(
+                title: itemTitle,
+                icon: itemIcon,
+                items: _getGroupItems(
+                  groupType,
+                ),
+                isVerySmallPhone:
+                    isVerySmallPhone,
+              );
+            }
+
+            return _buildFrontMenuCard(
+              title: itemTitle,
+              icon: itemIcon,
+              onTap: () {
+                _navigateFromFrontCard(
+                  itemTitle,
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // DASHBOARD SEARCH RESULTS
+  // ============================================================
+
+  Widget _buildDashboardSearchResults() {
+    final String query =
+        dashboardSearchQuery.trim().toLowerCase();
+
+    final List<Map<String, dynamic>> searchableItems = [
+      ..._getFrontMenuItems(),
+    ];
+
+    final List<Map<String, dynamic>> matchedItems =
+        searchableItems.where(
+      (Map<String, dynamic> item) {
+        final String title =
+            item['title']?.toString().toLowerCase() ??
+                '';
+
+        final String keywords =
+            item['keywords']?.toString().toLowerCase() ??
+                '';
+
+        return title.contains(
+              query,
+            ) ||
+            keywords.contains(
+              query,
+            );
+      },
+    ).toList();
+
+    if (matchedItems.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(
+          vertical: 52,
+          horizontal: 24,
+        ),
+        alignment: Alignment.center,
+        child: Column(
+          children: [
+            Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                color: const Color(
+                  0xFFF2F2F7,
+                ),
+                borderRadius: BorderRadius.circular(
+                  20,
+                ),
+              ),
+              child: const Icon(
+                Icons.search_off_rounded,
+                color: Color(
+                  0xFF8E8E93,
+                ),
+                size: 28,
+              ),
+            ),
+            const SizedBox(
+              height: 14,
+            ),
+            const Text(
+              'No cards found',
+              style: TextStyle(
+                color: Color(
+                  0xFF1C1C1E,
+                ),
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(
+              height: 6,
+            ),
+            Text(
+              'Try a different search',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (
+        BuildContext context,
+        BoxConstraints constraints,
+      ) {
+        final bool isVerySmallPhone =
+            constraints.maxWidth < 340;
+
+        final double horizontalSpacing =
+            isVerySmallPhone ? 8 : 12;
+
+        final double verticalSpacing =
+            isVerySmallPhone ? 8 : 12;
+
+        final double cardHeight =
+            isVerySmallPhone ? 185 : 200;
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics:
+              const NeverScrollableScrollPhysics(),
+          itemCount: matchedItems.length,
+          gridDelegate:
+              SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: horizontalSpacing,
+            mainAxisSpacing: verticalSpacing,
+            mainAxisExtent: cardHeight,
+          ),
+          itemBuilder: (
+            BuildContext context,
+            int index,
+          ) {
+            final Map<String, dynamic> item =
+                matchedItems[index];
+
+            final String itemTitle =
+                item['title']?.toString() ?? '';
+
+            final IconData itemIcon =
+                item['icon'] as IconData;
+
+            final String? groupType =
+                item['groupType']?.toString();
+
+            if (groupType != null &&
+                groupType.isNotEmpty) {
+              if (groupType == 'reports') {
+                return _buildReportsCard(
+                  isVerySmallPhone:
+                      isVerySmallPhone,
+                );
+              }
+
+              return _buildGroupedMenuCard(
+                title: itemTitle,
+                icon: itemIcon,
+                items: _getGroupItems(
+                  groupType,
+                ),
+                isVerySmallPhone:
+                    isVerySmallPhone,
+              );
+            }
+
+            return _buildFrontMenuCard(
+              title: itemTitle,
+              icon: itemIcon,
+              onTap: () {
+                _navigateFromFrontCard(
+                  itemTitle,
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // BOTTOM NAVIGATION ACTIONS
+  // ============================================================
+
+  void _toggleBottomSearch() {
+    final bool shouldOpen = !isBottomSearchOpen;
+
+    setState(() {
+      isBottomSearchOpen = shouldOpen;
+
+      if (!shouldOpen) {
+        dashboardSearchQuery = '';
+
+        dashboardSearchController.clear();
+      }
+    });
+
+    if (shouldOpen) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) {
+          if (!mounted) return;
+
+          dashboardSearchFocusNode.requestFocus();
+        },
+      );
+    } else {
+      dashboardSearchFocusNode.unfocus();
+    }
+  }
+
+  void _closeBottomSearch() {
+    if (!isBottomSearchOpen &&
+        dashboardSearchController.text.isEmpty &&
+        dashboardSearchQuery.isEmpty) {
+      return;
+    }
+
+    dashboardSearchFocusNode.unfocus();
+
+    setState(() {
+      isBottomSearchOpen = false;
+
+      dashboardSearchQuery = '';
+
+      dashboardSearchController.clear();
+    });
+  }
+
+  Future<void> _openBottomMail() async {
+    _closeBottomSearch();
+
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (
+          BuildContext context,
+        ) {
+          return const StaffMailPage();
+        },
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    await fetchInboxMailCount();
+  }
+
+  void _openBottomProfile() {
+    _closeBottomSearch();
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (
+          BuildContext context,
+        ) {
+          return EditProfileScreen();
+        },
+      ),
+    );
+  }
+
+  void _openBottomApproval() {
+    _closeBottomSearch();
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (
+          BuildContext context,
+        ) {
+          return Approve_products();
+        },
+      ),
+    );
+  }
+
+  // ============================================================
+  // MODERN BOTTOM NAVIGATION
+  // ============================================================
+
+  Widget _buildModernBottomNavigationBar() {
+    return MediaQuery.removePadding(
+      context: context,
+      removeBottom: true,
+      child: Material(
+        color: Colors.white,
+        elevation: 14,
+        shadowColor: Colors.black.withOpacity(
+          0.10,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: double.infinity,
+              height: 68,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 7,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(
+                    26,
+                  ),
+                  topRight: Radius.circular(
+                    26,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildBottomNavigationItem(
+                      icon: Icons.person_outline_rounded,
+                      label: 'Profile',
+                      isSelected: false,
+                      onTap: _openBottomProfile,
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildBottomNavigationItem(
+                      icon: Icons.mail_outline_rounded,
+                      label: 'Mail',
+                      isSelected: false,
+                      badgeCount: inboxMailCount,
+                      onTap: () {
+                        _openBottomMail();
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildBottomNavigationItem(
+                      icon: Icons.search_rounded,
+                      label: 'Search',
+                      isSelected: isBottomSearchOpen,
+                      onTap: _toggleBottomSearch,
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildBottomNavigationItem(
+                      icon: Icons.verified_outlined,
+                      label: 'Approval',
+                      isSelected: false,
+                      onTap: _openBottomApproval,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            AnimatedSwitcher(
+              duration: const Duration(
+                milliseconds: 220,
+              ),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              child: isBottomSearchOpen
+                  ? Padding(
+                      key: const ValueKey<String>(
+                        'dashboard-search-open',
+                      ),
+                      padding: const EdgeInsets.fromLTRB(
+                        12,
+                        9,
+                        12,
+                        4,
+                      ),
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: const Color(
+                            0xFFF2F2F7,
+                          ),
+                          borderRadius: BorderRadius.circular(
+                            16,
+                          ),
+                          border: Border.all(
+                            color: const Color(
+                              0xFFE5E5EA,
+                            ),
+                          ),
+                        ),
+                        child: TextField(
+                          controller: dashboardSearchController,
+                          focusNode: dashboardSearchFocusNode,
+                          textInputAction: TextInputAction.search,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          onChanged: (
+                            String value,
+                          ) {
+                            setState(() {
+                              dashboardSearchQuery = value;
+                            });
+                          },
+                          decoration: InputDecoration(
+                            hintText: 'Search cards',
+                            hintStyle: const TextStyle(
+                              color: Color(
+                                0xFF8E8E93,
+                              ),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w400,
+                            ),
+                            prefixIcon: const Icon(
+                              Icons.search_rounded,
+                              color: Color(
+                                0xFF8E8E93,
+                              ),
+                              size: 22,
+                            ),
+                            suffixIcon: dashboardSearchQuery.isNotEmpty
+                                ? IconButton(
+                                    tooltip: 'Clear search',
+                                    onPressed: () {
+                                      dashboardSearchController.clear();
+
+                                      setState(() {
+                                        dashboardSearchQuery = '';
+                                      });
+
+                                      dashboardSearchFocusNode.requestFocus();
+                                    },
+                                    icon: const Icon(
+                                      Icons.cancel_rounded,
+                                      color: Color(
+                                        0xFF8E8E93,
+                                      ),
+                                      size: 20,
+                                    ),
+                                  )
+                                : null,
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(
+                      key: ValueKey<String>(
+                        'dashboard-search-closed',
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildBottomNavigationItem({
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+    int badgeCount = 0,
+  }) {
+    final Color foregroundColor = isSelected
+        ? const Color(
+            0xFF2C74FF,
+          )
+        : const Color(
+            0xFF6B7280,
+          );
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(
+          20,
+        ),
+        onTap: onTap,
+        child: SizedBox(
+          height: 54,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(
+                      milliseconds: 180,
+                    ),
+                    width: 36,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? const Color(
+                              0xFFEAF2FF,
+                            )
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(
+                        12,
+                      ),
+                    ),
+                    child: Icon(
+                      icon,
+                      color: foregroundColor,
+                      size: 23,
+                    ),
+                  ),
+                  if (badgeCount > 0)
+                    Positioned(
+                      right: -7,
+                      top: -5,
+                      child: Container(
+                        constraints: const BoxConstraints(
+                          minWidth: 18,
+                          minHeight: 18,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(
+                            0xFFFF3B30,
+                          ),
+                          borderRadius: BorderRadius.circular(
+                            20,
+                          ),
+                          border: Border.all(
+                            color: Colors.white,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Text(
+                          badgeCount > 99
+                              ? '99+'
+                              : badgeCount.toString(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            height: 1.1,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(
+                height: 2,
+              ),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: foregroundColor,
+                  fontSize: 10.5,
+                  fontWeight: isSelected
+                      ? FontWeight.w700
+                      : FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   // ============================================================
   // PROFILE
@@ -1810,6 +3954,8 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
       fetchInboxMailCount();
 
       fetchTodayStatusCounts();
+
+      fetchTodayDgmSummary();
     }
   }
 
@@ -1965,6 +4111,10 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
     );
 
     mailCountTimer?.cancel();
+
+    dashboardSearchController.dispose();
+
+    dashboardSearchFocusNode.dispose();
 
     super.dispose();
   }
@@ -2200,374 +4350,331 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
               padding: const EdgeInsets.only(
                 right: 12,
               ),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.mail_outline_rounded,
-                      color: Colors.black,
-                      size: 28,
-                    ),
-                    onPressed: isPageLoading
-                        ? null
-                        : () async {
-                            await Navigator.push<void>(
-                              context,
-                              MaterialPageRoute(
-                                builder: (
-                                  BuildContext context,
-                                ) {
-                                  return const StaffMailPage();
-                                },
-                              ),
-                            );
-
-                            if (!mounted) {
-                              return;
-                            }
-
-                            await fetchInboxMailCount();
-                          },
-                  ),
-                  if (!isPageLoading && inboxMailCount > 0)
-                    Positioned(
-                      right: 4,
-                      top: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(
-                            20,
-                          ),
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 18,
-                          minHeight: 18,
-                        ),
-                        child: Text(
-                          inboxMailCount > 99
-                              ? '99+'
-                              : inboxMailCount.toString(),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+              child: IconButton(
+                tooltip: 'Logout',
+                icon: const Icon(
+                  Icons.logout_rounded,
+                  color: Colors.black,
+                  size: 27,
+                ),
+                onPressed: isPageLoading
+                    ? null
+                    : () {
+                        logout(
+                          context,
+                        );
+                      },
               ),
             ),
           ],
         ),
 
-        drawer: Drawer(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: <Widget>[
-              DrawerHeader(
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Image.asset(
-                      "lib/assets/logo.png",
-                      width: 150,
-                      height: 150,
-                      fit: BoxFit.contain,
-                    ),
-                  ],
-                ),
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.dashboard,
-                ),
-                title: const Text(
-                  'Dashboard',
-                ),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (
-                        BuildContext context,
-                      ) {
-                        return WarehouseAdmin();
-                      },
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.mail_outline_rounded,
-                ),
-                title: const Text(
-                  'Send Mail',
-                ),
-                onTap: () async {
-                  Navigator.pop(
-                    context,
-                  );
+        // drawer: Drawer(
+        //   child: ListView(
+        //     padding: EdgeInsets.zero,
+        //     children: <Widget>[
+        //       DrawerHeader(
+        //         decoration: BoxDecoration(
+        //           color: Colors.grey[200],
+        //         ),
+        //         child: Row(
+        //           mainAxisAlignment: MainAxisAlignment.center,
+        //           children: [
+        //             Image.asset(
+        //               "lib/assets/logo.png",
+        //               width: 150,
+        //               height: 150,
+        //               fit: BoxFit.contain,
+        //             ),
+        //           ],
+        //         ),
+        //       ),
+        //       ListTile(
+        //         leading: const Icon(
+        //           Icons.dashboard,
+        //         ),
+        //         title: const Text(
+        //           'Dashboard',
+        //         ),
+        //         onTap: () {
+        //           Navigator.push(
+        //             context,
+        //             MaterialPageRoute(
+        //               builder: (
+        //                 BuildContext context,
+        //               ) {
+        //                 return WarehouseAdmin();
+        //               },
+        //             ),
+        //           );
+        //         },
+        //       ),
+        //       ListTile(
+        //         leading: const Icon(
+        //           Icons.mail_outline_rounded,
+        //         ),
+        //         title: const Text(
+        //           'Send Mail',
+        //         ),
+        //         onTap: () async {
+        //           Navigator.pop(
+        //             context,
+        //           );
 
-                  await Navigator.push<void>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (
-                        BuildContext context,
-                      ) {
-                        return const StaffMailPage();
-                      },
-                    ),
-                  );
+        //           await Navigator.push<void>(
+        //             context,
+        //             MaterialPageRoute(
+        //               builder: (
+        //                 BuildContext context,
+        //               ) {
+        //                 return const StaffMailPage();
+        //               },
+        //             ),
+        //           );
 
-                  if (!mounted) {
-                    return;
-                  }
+        //           if (!mounted) {
+        //             return;
+        //           }
 
-                  await fetchInboxMailCount();
-                },
-              ),
-              const Divider(),
-              _buildDropdownTile(
-                context,
-                'Purchase',
-                [
-                  'Product List',
-                  'Product Add',
-                ],
-                icon: Icons.shopping_cart_outlined,
-              ),
-              _buildDropdownTile(
-                context,
-                'Delivery Note',
-                [
-                  'Delivery Order (DO)',
-                  'Delivery Order(Packing under Progress)',
-                  'Packed For Delivery(PFD)',
-                  'Out For Delivery(OFD)',
-                  'Return From Delivery (RFD)',
-                  'Delivery Order(Shipped)',
-                  'Daily Goods Movement',
-                ],
-                icon: Icons.local_shipping_outlined,
-              ),
-              _buildDropdownTile(
-                context,
-                'GRV',
-                [
-                  'Create New GRV',
-                  'GRVs List',
-                ],
-                icon: Icons.assignment_return_outlined,
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.receipt_long_outlined,
-                ),
-                title: const Text(
-                  'Local Purchase Order',
-                ),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (
-                        BuildContext context,
-                      ) {
-                        return LocalPurchaseOrderScreen();
-                      },
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.inventory_2_outlined,
-                ),
-                title: const Text(
-                  'Order Requests',
-                ),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (
-                        BuildContext context,
-                      ) {
-                        return Warehouse_Order_Request(
-                          status: null,
-                        );
-                      },
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.verified_outlined,
-                ),
-                title: const Text(
-                  'Approve Products',
-                ),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (
-                        BuildContext context,
-                      ) {
-                        return Approve_products();
-                      },
-                    ),
-                  );
-                },
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(
-                  Icons.fingerprint_rounded,
-                ),
-                title: const Text(
-                  'Add Attendance',
-                ),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (
-                        BuildContext context,
-                      ) {
-                        return StaffSelfAttendanceScreen();
-                      },
-                    ),
-                  );
-                },
-              ),
-              if (isManager)
-                ListTile(
-                  leading: const Icon(
-                    Icons.group_add_outlined,
-                  ),
-                  title: const Text(
-                    'Add Team Staff',
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (
-                          BuildContext context,
-                        ) {
-                          return StaffAttendanceTeamMemberScreen();
-                        },
-                      ),
-                    );
-                  },
-                ),
-              if (isManager)
-                ListTile(
-                  leading: const Icon(
-                    Icons.how_to_reg_outlined,
-                  ),
-                  title: const Text(
-                    'Add & Approve Attendance',
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (
-                          BuildContext context,
-                        ) {
-                          return StaffMarkAttendanceScreen();
-                        },
-                      ),
-                    );
-                  },
-                ),
-              const Divider(),
-              if (isManager)
-                ListTile(
-                  leading: const Icon(
-                    Icons.fact_check_outlined,
-                  ),
-                  title: const Text(
-                    'Approve Leave Requests',
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (
-                          BuildContext context,
-                        ) {
-                          return ManagerLeaveRequestsPage();
-                        },
-                      ),
-                    );
-                  },
-                ),
-              ListTile(
-                leading: const Icon(
-                  Icons.event_note_outlined,
-                ),
-                title: const Text(
-                  'Employee Leave Form',
-                ),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (
-                        BuildContext context,
-                      ) {
-                        return EmployeeLeaveFormPage();
-                      },
-                    ),
-                  );
-                },
-              ),
-              const Divider(),
-              _buildDropdownTile(
-                context,
-                'Reports',
-                [
-                  'Product Stock Report',
-                  'Product Sale Report',
-                  'Stock Report',
-                  'Damaged Stock',
-                  'Product Usability Report',
-                ],
-                icon: Icons.analytics_outlined,
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(
-                  Icons.exit_to_app,
-                ),
-                title: const Text(
-                  'Logout',
-                ),
-                onTap: () {
-                  logout(
-                    context,
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
+        //           await fetchInboxMailCount();
+        //         },
+        //       ),
+        //       const Divider(),
+        //       _buildDropdownTile(
+        //         context,
+        //         'Purchase',
+        //         [
+        //           'Product List',
+        //           'Product Add',
+        //         ],
+        //         icon: Icons.shopping_cart_outlined,
+        //       ),
+        //       _buildDropdownTile(
+        //         context,
+        //         'Delivery Note',
+        //         [
+        //           'Delivery Order (DO)',
+        //           'Delivery Order(Packing under Progress)',
+        //           'Packed For Delivery(PFD)',
+        //           'Out For Delivery(OFD)',
+        //           'Return From Delivery (RFD)',
+        //           'Delivery Order(Shipped)',
+        //           'Daily Goods Movement',
+        //         ],
+        //         icon: Icons.local_shipping_outlined,
+        //       ),
+        //       _buildDropdownTile(
+        //         context,
+        //         'GRV',
+        //         [
+        //           'Create New GRV',
+        //           'GRVs List',
+        //         ],
+        //         icon: Icons.assignment_return_outlined,
+        //       ),
+        //       ListTile(
+        //         leading: const Icon(
+        //           Icons.receipt_long_outlined,
+        //         ),
+        //         title: const Text(
+        //           'Local Purchase Order',
+        //         ),
+        //         onTap: () {
+        //           Navigator.push(
+        //             context,
+        //             MaterialPageRoute(
+        //               builder: (
+        //                 BuildContext context,
+        //               ) {
+        //                 return LocalPurchaseOrderScreen();
+        //               },
+        //             ),
+        //           );
+        //         },
+        //       ),
+        //       ListTile(
+        //         leading: const Icon(
+        //           Icons.inventory_2_outlined,
+        //         ),
+        //         title: const Text(
+        //           'Order Requests',
+        //         ),
+        //         onTap: () {
+        //           Navigator.push(
+        //             context,
+        //             MaterialPageRoute(
+        //               builder: (
+        //                 BuildContext context,
+        //               ) {
+        //                 return Warehouse_Order_Request(
+        //                   status: null,
+        //                 );
+        //               },
+        //             ),
+        //           );
+        //         },
+        //       ),
+        //       ListTile(
+        //         leading: const Icon(
+        //           Icons.verified_outlined,
+        //         ),
+        //         title: const Text(
+        //           'Approve Products',
+        //         ),
+        //         onTap: () {
+        //           Navigator.push(
+        //             context,
+        //             MaterialPageRoute(
+        //               builder: (
+        //                 BuildContext context,
+        //               ) {
+        //                 return Approve_products();
+        //               },
+        //             ),
+        //           );
+        //         },
+        //       ),
+        //       const Divider(),
+        //       ListTile(
+        //         leading: const Icon(
+        //           Icons.fingerprint_rounded,
+        //         ),
+        //         title: const Text(
+        //           'Add Attendance',
+        //         ),
+        //         onTap: () {
+        //           Navigator.push(
+        //             context,
+        //             MaterialPageRoute(
+        //               builder: (
+        //                 BuildContext context,
+        //               ) {
+        //                 return StaffSelfAttendanceScreen();
+        //               },
+        //             ),
+        //           );
+        //         },
+        //       ),
+        //       if (isManager)
+        //         ListTile(
+        //           leading: const Icon(
+        //             Icons.group_add_outlined,
+        //           ),
+        //           title: const Text(
+        //             'Add Team Staff',
+        //           ),
+        //           onTap: () {
+        //             Navigator.push(
+        //               context,
+        //               MaterialPageRoute(
+        //                 builder: (
+        //                   BuildContext context,
+        //                 ) {
+        //                   return StaffAttendanceTeamMemberScreen();
+        //                 },
+        //               ),
+        //             );
+        //           },
+        //         ),
+        //       if (isManager)
+        //         ListTile(
+        //           leading: const Icon(
+        //             Icons.how_to_reg_outlined,
+        //           ),
+        //           title: const Text(
+        //             'Add & Approve Attendance',
+        //           ),
+        //           onTap: () {
+        //             Navigator.push(
+        //               context,
+        //               MaterialPageRoute(
+        //                 builder: (
+        //                   BuildContext context,
+        //                 ) {
+        //                   return StaffMarkAttendanceScreen();
+        //                 },
+        //               ),
+        //             );
+        //           },
+        //         ),
+        //       const Divider(),
+        //       if (isManager)
+        //         ListTile(
+        //           leading: const Icon(
+        //             Icons.fact_check_outlined,
+        //           ),
+        //           title: const Text(
+        //             'Approve Leave Requests',
+        //           ),
+        //           onTap: () {
+        //             Navigator.push(
+        //               context,
+        //               MaterialPageRoute(
+        //                 builder: (
+        //                   BuildContext context,
+        //                 ) {
+        //                   return ManagerLeaveRequestsPage();
+        //                 },
+        //               ),
+        //             );
+        //           },
+        //         ),
+        //       ListTile(
+        //         leading: const Icon(
+        //           Icons.event_note_outlined,
+        //         ),
+        //         title: const Text(
+        //           'Employee Leave Form',
+        //         ),
+        //         onTap: () {
+        //           Navigator.push(
+        //             context,
+        //             MaterialPageRoute(
+        //               builder: (
+        //                 BuildContext context,
+        //               ) {
+        //                 return EmployeeLeaveFormPage();
+        //               },
+        //             ),
+        //           );
+        //         },
+        //       ),
+        //       const Divider(),
+        //       _buildDropdownTile(
+        //         context,
+        //         'Reports',
+        //         [
+        //           'Product Stock Report',
+        //           'Product Sale Report',
+        //           'Stock Report',
+        //           'Damaged Stock',
+        //           'Product Usability Report',
+        //         ],
+        //         icon: Icons.analytics_outlined,
+        //       ),
+        //       const Divider(),
+        //       ListTile(
+        //         leading: const Icon(
+        //           Icons.exit_to_app,
+        //         ),
+        //         title: const Text(
+        //           'Logout',
+        //         ),
+        //         onTap: () {
+        //           logout(
+        //             context,
+        //           );
+        //         },
+        //       ),
+        //     ],
+        //   ),
+        // ),
+
+        // ========================================================
+        // MODERN BOTTOM NAVIGATION
+        // ========================================================
+
+        bottomNavigationBar: _buildModernBottomNavigationBar(),
 
         // ========================================================
         // PAGE BODY
@@ -2580,151 +4687,303 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
                   padding: const EdgeInsets.all(
                     16.0,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // ===========================================
-                      // PROFILE
-                      // ===========================================
-
-                      Row(
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (
-                                    BuildContext context,
-                                  ) {
-                                    return EditProfileScreen();
-                                  },
-                                ),
-                              );
-                            },
-                            child: CircleAvatar(
-                              radius: 25,
-                              backgroundColor: const Color(
-                                0xFFE5E7EB,
-                              ),
-                              backgroundImage: getProfileImageUrl().isNotEmpty
-                                  ? NetworkImage(
-                                      getProfileImageUrl(),
-                                    )
-                                  : const AssetImage(
-                                      'lib/assets/female.jpeg',
-                                    ) as ImageProvider,
-                            ),
-                          ),
-                          const SizedBox(
-                            width: 16,
-                          ),
-                          Expanded(
-                            child: Text(
-                              '$username',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      await Future.wait(
+                        [
+                          fetchTodayStatusCounts(),
+                          fetchTodayDgmSummary(),
+                          fetchInboxMailCount(),
                         ],
-                      ),
+                      );
+                    },
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        // ===========================================
+                        // PROFILE
+                        // NOW PART OF THE MAIN SCROLLABLE PAGE
+                        // ===========================================
+Row(
+  crossAxisAlignment: CrossAxisAlignment.center,
+  children: [
+    // =========================================
+    // PROFILE - LEFT SIDE
+    // =========================================
+    Expanded(
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (
+                    BuildContext context,
+                  ) {
+                    return EditProfileScreen();
+                  },
+                ),
+              );
+            },
+            child: CircleAvatar(
+              radius: 25,
+              backgroundColor: const Color(
+                0xFFE5E7EB,
+              ),
+              backgroundImage:
+                  getProfileImageUrl().isNotEmpty
+                      ? NetworkImage(
+                          getProfileImageUrl(),
+                        )
+                      : const AssetImage(
+                          'lib/assets/female.jpeg',
+                        ) as ImageProvider,
+            ),
+          ),
 
-                      const SizedBox(
-                        height: 20,
-                      ),
+          const SizedBox(
+            width: 16,
+          ),
 
-                      // ===========================================
-                      // DASHBOARD
-                      // ===========================================
+          Expanded(
+            child: Text(
+              '$username',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
 
-                      Expanded(
-                        child: RefreshIndicator(
-                          onRefresh: () async {
-                            await Future.wait(
-                              [
-                                fetchTodayStatusCounts(),
-                                fetchInboxMailCount(),
-                              ],
-                            );
-                          },
-                          child: ListView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            children: [
-                              // ===================================
-                              // DATE + REFRESH
-                              // ===================================
-                              Row(
-                                children: [
-                                  // Shipping & Logistics title
-                                  const Expanded(
-                                    child: Text(
-                                      'Shipping & Logistics (S & L)',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w800,
-                                        color: Color(0xFF111827),
+    const SizedBox(
+      width: 12,
+    ),
+
+    // =========================================
+    // SHIPPING & LOGISTICS LOGO
+    // =========================================
+    Container(
+      width: 105,
+      height: 92,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFFEAF5FF),
+            Color(0xFFF4F8FF),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(
+          22,
+        ),
+        border: Border.all(
+          color: const Color(
+            0xFF2C74FF,
+          ).withOpacity(
+            0.12,
+          ),
+        ),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // PACKAGE
+          Positioned(
+            top: 17,
+            left: 20,
+            child: Transform.rotate(
+              angle: -0.08,
+              child: const Icon(
+                Icons.inventory_2_rounded,
+                size: 31,
+                color: Color(
+                  0xFF56AFFF,
+                ),
+              ),
+            ),
+          ),
+
+          // TRUCK
+          Positioned(
+            right: 15,
+            bottom: 22,
+            child: const Icon(
+              Icons.local_shipping_rounded,
+              size: 43,
+              color: Color(
+                0xFF2C74FF,
+              ),
+            ),
+          ),
+
+          // MOVEMENT LINES
+          Positioned(
+            left: 13,
+            bottom: 27,
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 24,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: const Color(
+                      0xFF56AFFF,
+                    ).withOpacity(
+                      0.65,
+                    ),
+                    borderRadius:
+                        BorderRadius.circular(
+                      10,
+                    ),
+                  ),
+                ),
+                const SizedBox(
+                  height: 5,
+                ),
+                Container(
+                  width: 17,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: const Color(
+                      0xFF56AFFF,
+                    ).withOpacity(
+                      0.40,
+                    ),
+                    borderRadius:
+                        BorderRadius.circular(
+                      10,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  ],
+),
+                        const SizedBox(
+                          height: 20,
+                        ),
+
+                        if (isBottomSearchOpen &&
+                            dashboardSearchQuery.trim().isNotEmpty)
+                          ...[
+                            _buildDashboardSearchResults(),
+
+                            const SizedBox(
+                              height: 12,
+                            ),
+                          ]
+                        else
+                          ...[
+                            // ===================================
+                            // DATE + REFRESH
+                            // ===================================
+
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: Text(
+                                    'Shipping & Logistics (S & L)',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(
+                                        0xFF111827,
                                       ),
                                     ),
                                   ),
+                                ),
 
-                                  const SizedBox(width: 10),
+                                const SizedBox(
+                                  width: 10,
+                                ),
 
-                                  // Current Date
-                               
-                                  const SizedBox(width: 4),
+                                const SizedBox(
+                                  width: 4,
+                                ),
 
-                                  // Refresh
-                                  IconButton(
-                                    tooltip: 'Refresh',
-                                    onPressed: isLoadingTodayStatusCounts
-                                        ? null
-                                        : fetchTodayStatusCounts,
-                                    icon: const Icon(
-                                      Icons.refresh_rounded,
+                                IconButton(
+                                  tooltip: 'Refresh',
+                                  onPressed:
+                                      isLoadingTodayStatusCounts ||
+                                              isLoadingDgmSummary
+                                          ? null
+                                          : () async {
+                                              await Future.wait(
+                                                [
+                                                  fetchTodayStatusCounts(),
+                                                  fetchTodayDgmSummary(),
+                                                ],
+                                              );
+                                            },
+                                  icon: const Icon(
+                                    Icons.refresh_rounded,
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.calendar_today_rounded,
+                                  size: 16,
+                                  color: Color(
+                                    0xFF6B7280,
+                                  ),
+                                ),
+                                const SizedBox(
+                                  width: 4,
+                                ),
+                                Text(
+                                  DateFormat(
+                                    'dd MMMM yyyy',
+                                  ).format(
+                                    DateTime.now(),
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Color.fromARGB(
+                                      255,
+                                      69,
+                                      72,
+                                      78,
                                     ),
                                   ),
-                                ],
-                              ),
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.calendar_today_rounded,
-                                    size: 16,
-                                    color: Color(0xFF6B7280),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    DateFormat('dd MMMM yyyy').format(
-                                      DateTime.now(),
-                                    ),
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      color: Color.fromARGB(255, 69, 72, 78),
-                                    ),
-                                  ),
-                                ],
-                              )
-,
-                              const SizedBox(
-                                height: 14,
-                              ),
+                                ),
+                              ],
+                            ),
 
-                              _buildTodayStatusSection(),
+                            const SizedBox(
+                              height: 14,
+                            ),
 
-                              const SizedBox(
-                                height: 30,
-                              ),
-                            ],
-                          ),
+                            _buildTodayStatusSection(),
+
+                            // Front menu cards are now appended directly
+                            // inside _buildTodayStatusSection() so all cards
+                            // remain continuous with no empty grid cell.
+                          ],
+
+                        const SizedBox(
+                          height: 12,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
         ),

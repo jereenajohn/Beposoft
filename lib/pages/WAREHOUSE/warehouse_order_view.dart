@@ -22,7 +22,7 @@ import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' hide Border;
 import 'package:open_filex/open_filex.dart';
 
 class WarehouseOrderView extends StatefulWidget {
@@ -53,6 +53,15 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
   drower d = drower();
 
   // ============================================================
+  // STATUS COUNT SUMMARY
+  // ============================================================
+
+  int todayStatusCount = 0;
+  int allStatusCount = 0;
+  bool isStatusCountLoading = true;
+  String? statusCountError;
+
+  // ============================================================
   // STATUS DISPLAY NAME
   // ============================================================
   //
@@ -71,8 +80,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
   // ============================================================
 
   String getStatusDisplayName(dynamic status) {
-    final String value =
-        status?.toString().trim() ?? '';
+    final String value = status?.toString().trim() ?? '';
 
     switch (value) {
       case 'To Print':
@@ -130,6 +138,8 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
 
     fetchOrderData();
 
+    fetchStatusCountSummary();
+
     getprofiledata();
   }
 
@@ -182,8 +192,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
   // ============================================================
 
   Future<String?> getTokenFromPrefs() async {
-    SharedPreferences prefs =
-        await SharedPreferences.getInstance();
+    SharedPreferences prefs = await SharedPreferences.getInstance();
 
     return prefs.getString(
       'token',
@@ -222,8 +231,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
         if (!mounted) return;
 
         setState(() {
-          username =
-              productsData['username'] ?? '';
+          username = productsData['username'] ?? '';
         });
       }
     } catch (error) {
@@ -233,68 +241,405 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
     }
   }
 
+
+  // ============================================================
+  // FETCH STATUS COUNT SUMMARY
+  // ============================================================
+
+  Future<void> fetchStatusCountSummary() async {
+    if (!mounted) return;
+
+    setState(() {
+      isStatusCountLoading = true;
+      statusCountError = null;
+    });
+
+    try {
+      final String? token = await getTokenFromPrefs();
+
+      if (token == null || token.trim().isEmpty) {
+        if (!mounted) return;
+
+        setState(() {
+          isStatusCountLoading = false;
+          statusCountError = 'Authentication token not found';
+        });
+        return;
+      }
+
+      final http.Response response = await http.get(
+        Uri.parse('$api/api/orders/status/count/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode != 200) {
+        if (!mounted) return;
+
+        setState(() {
+          isStatusCountLoading = false;
+          statusCountError =
+              'Failed to load status count (${response.statusCode})';
+        });
+        return;
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+
+      if (decoded is! Map<String, dynamic>) {
+        if (!mounted) return;
+
+        setState(() {
+          isStatusCountLoading = false;
+          statusCountError = 'Invalid status count response';
+        });
+        return;
+      }
+
+      final String targetStatus =
+          widget.status?.toString().trim() ?? '';
+
+      int todayCount = 0;
+      int allCount = 0;
+
+      final dynamic todayData = decoded['today'];
+
+      if (todayData is List) {
+        for (final dynamic item in todayData) {
+          if (item is! Map) continue;
+
+          if ((item['status']?.toString().trim() ?? '') == targetStatus) {
+            final dynamic rawCount = item['count'];
+            todayCount = rawCount is int
+                ? rawCount
+                : int.tryParse(rawCount?.toString() ?? '0') ?? 0;
+            break;
+          }
+        }
+      }
+
+      final dynamic allData = decoded['all'];
+
+      if (allData is List) {
+        for (final dynamic item in allData) {
+          if (item is! Map) continue;
+
+          if ((item['status']?.toString().trim() ?? '') == targetStatus) {
+            final dynamic rawCount = item['count'];
+            allCount = rawCount is int
+                ? rawCount
+                : int.tryParse(rawCount?.toString() ?? '0') ?? 0;
+            break;
+          }
+        }
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        todayStatusCount = todayCount;
+        allStatusCount = allCount;
+        isStatusCountLoading = false;
+        statusCountError = null;
+      });
+    } catch (error) {
+      debugPrint('WAREHOUSE ORDER STATUS COUNT ERROR: $error');
+
+      if (!mounted) return;
+
+      setState(() {
+        isStatusCountLoading = false;
+        statusCountError = 'Unable to load status count';
+      });
+    }
+  }
+
+  Widget _buildStatusCountSummary() {
+    final String statusTitle = widget.status == null
+        ? 'Order Summary'
+        : getStatusDisplayName(widget.status);
+
+    if (isStatusCountLoading) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: const Color(0xFFE2E8F0),
+            ),
+          ),
+          child: const Center(
+            child: SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.2,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (statusCountError != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF7ED),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: const Color(0xFFFED7AA),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.info_outline_rounded,
+                size: 20,
+                color: Color(0xFFEA580C),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  statusCountError!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF9A3412),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Retry',
+                onPressed: fetchStatusCountSummary,
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  size: 20,
+                  color: Color(0xFFEA580C),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            statusTitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF111827),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatusCountCard(
+                  label: 'Today',
+                  count: todayStatusCount,
+                  icon: Icons.today_rounded,
+                ),
+              ),
+              const SizedBox(width: 12),
+            Expanded(
+  child: _buildStatusCountCard(
+    label: 'Till Today',
+    count: allStatusCount,
+    icon: Icons.all_inbox_rounded,
+  ),
+),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusCountCard({
+    required String label,
+    required int count,
+    required IconData icon,
+  }) {
+    return Container(
+      height: 92,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF56AFFF),
+            Color(0xFF2C74FF),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2C74FF).withOpacity(0.18),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.16),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.22),
+              ),
+            ),
+            child: Icon(
+              icon,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.90),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    count.toString(),
+                    maxLines: 1,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // FORMAT UPDATED AT - INDIA DATE & TIME
+  // ============================================================
+
+  String _formatUpdatedAt(dynamic value) {
+    final String raw = value?.toString().trim() ?? '';
+
+    if (raw.isEmpty) {
+      return '';
+    }
+
+    try {
+      final DateTime parsed = DateTime.parse(raw);
+
+      final DateTime indiaTime = parsed
+          .toUtc()
+          .add(
+            const Duration(
+              hours: 5,
+              minutes: 30,
+            ),
+          );
+
+      return DateFormat(
+        'dd MMM yyyy, hh:mm a',
+      ).format(
+        indiaTime,
+      );
+    } catch (_) {
+      return raw;
+    }
+  }
+
   // ============================================================
   // FETCH ORDER DATA
   // ============================================================
 
   Future<void> fetchOrderData() async {
     try {
-      final token =
-          await getTokenFromPrefs();
+      final token = await getTokenFromPrefs();
 
-      final dep =
-          await getdepFromPrefs();
+      final dep = await getdepFromPrefs();
 
-      String url =
-          '$api/api/orders/${widget.status}/';
+      String url = '$api/api/orders/${widget.status}/';
 
-      List<Map<String, dynamic>>
-          orderList = [];
+      List<Map<String, dynamic>> orderList = [];
 
       var response = await http.get(
         Uri.parse(
           url,
         ),
         headers: {
-          'Authorization':
-              'Bearer $token',
-          'Content-Type':
-              'application/json',
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
         },
       );
 
+      print(
+        "==============================response====================${response.body}",
+      );
+
       if (response.statusCode == 200) {
-        final Map<String, dynamic>
-            responseData =
-            jsonDecode(
+        final Map<String, dynamic> responseData = jsonDecode(
           response.body,
         );
 
-        final List ordersData =
-            responseData['results'];
+        final List ordersData = responseData['results'];
 
-        List<Map<String, dynamic>>
-            newOrders = [];
+        List<Map<String, dynamic>> newOrders = [];
 
-        for (var orderData
-            in ordersData) {
-          String rawOrderDate =
-              orderData['order_date'] ??
-                  "";
+        for (var orderData in ordersData) {
+          String rawOrderDate = orderData['order_date'] ?? "";
 
-          String formattedOrderDate =
-              rawOrderDate;
+          String formattedOrderDate = rawOrderDate;
 
           try {
-            DateTime parsedOrderDate =
-                DateFormat(
+            DateTime parsedOrderDate = DateFormat(
               'yyyy-MM-dd',
             ).parse(
               rawOrderDate,
             );
 
-            formattedOrderDate =
-                DateFormat(
+            formattedOrderDate = DateFormat(
               'yyyy-MM-dd',
             ).format(
               parsedOrderDate,
@@ -306,56 +651,51 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
           }
 
           if (widget.status == null ||
-              widget.status ==
-                  orderData['status']) {
-            if (orderData['status'] !=
-                "Order Request by Warehouse") {
+              widget.status == orderData['status']) {
+            if (orderData['status'] != "Order Request by Warehouse") {
               newOrders.add({
-                'id':
-                    orderData['id'],
-                'invoice':
-                    orderData['invoice'],
-                'manage_staff':
-                    orderData[
-                        'manage_staff'],
+                'id': orderData['id'],
+
+                'invoice': orderData['invoice'],
+
+                'manage_staff': orderData['manage_staff'],
+
                 'customer': {
-                  'id':
-                      orderData[
-                              'customer']
-                          ['id'],
-                  'name':
-                      orderData[
-                              'customer']
-                          ['name'],
-                  'phone':
-                      orderData[
-                              'customer']
-                          ['phone'],
-                  'email':
-                      orderData[
-                              'customer']
-                          ['email'],
-                  'address':
-                      orderData[
-                              'customer']
-                          ['address'],
+                  'id': orderData['customer']['id'],
+                  'name': orderData['customer']['name'],
+                  'phone': orderData['customer']['phone'],
+                  'email': orderData['customer']['email'],
+                  'address': orderData['customer']['address'],
                 },
-                'warehouse':
-                    orderData[
-                        'warehouse_data'],
+
+                'warehouse': orderData['warehouse_data'],
+
+                // ================================================
+                // STATE
+                // ================================================
+
+                'state': orderData['state'] ?? '',
+
+                // ================================================
+                // ZIP CODE
+                // ================================================
+
+                'zipcode': orderData['billing_address']?['zipcode']
+                        ?.toString()
+                        .replaceAll("'", "")
+                        .trim() ??
+                    '',
 
                 // Keep RAW backend status
-                'status':
-                    orderData['status'],
+                'status': orderData['status'],
 
-                'total_amount':
-                    orderData[
-                        'total_amount'],
-                'order_date':
-                    formattedOrderDate,
-                'locked_by':
-                    orderData[
-                        'locked_by'],
+                'total_amount': orderData['total_amount'],
+
+                'order_date': formattedOrderDate,
+
+                'updated_at': orderData['updated_at'] ?? '',
+
+                'locked_by': orderData['locked_by'],
               });
             }
           }
@@ -366,8 +706,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
         setState(() {
           orders = newOrders;
 
-          filteredOrders =
-              newOrders;
+          filteredOrders = newOrders;
         });
       } else {
         throw Exception(
@@ -392,35 +731,21 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
       searchQuery = query;
 
       if (query.isEmpty) {
-        filteredOrders =
-            orders;
+        filteredOrders = orders;
       } else {
-        filteredOrders =
-            orders.where(
+        filteredOrders = orders.where(
           (order) {
             final invoice =
-                order['invoice']
-                        ?.toString()
-                        .toLowerCase() ??
-                    '';
+                order['invoice']?.toString().toLowerCase() ?? '';
 
             final manageStaff =
-                order['manage_staff']
-                        ?.toString()
-                        .toLowerCase() ??
-                    '';
+                order['manage_staff']?.toString().toLowerCase() ?? '';
 
             final totalAmount =
-                order['total_amount']
-                        ?.toString()
-                        .toLowerCase() ??
-                    '';
+                order['total_amount']?.toString().toLowerCase() ?? '';
 
             final customer =
-                order['customer']?['name']
-                        ?.toString()
-                        .toLowerCase() ??
-                    '';
+                order['customer']?['name']?.toString().toLowerCase() ?? '';
 
             return invoice.contains(
                   query.toLowerCase(),
@@ -447,20 +772,15 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
   void _filterOrdersBySingleDate() {
     if (selectedDate != null) {
       setState(() {
-        filteredOrders =
-            orders.where(
+        filteredOrders = orders.where(
           (order) {
-            final orderDate =
-                DateTime.parse(
+            final orderDate = DateTime.parse(
               order['order_date'],
             );
 
-            return orderDate.year ==
-                    selectedDate!.year &&
-                orderDate.month ==
-                    selectedDate!.month &&
-                orderDate.day ==
-                    selectedDate!.day;
+            return orderDate.year == selectedDate!.year &&
+                orderDate.month == selectedDate!.month &&
+                orderDate.day == selectedDate!.day;
           },
         ).toList();
       });
@@ -474,20 +794,16 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
   Future lockorder(
     var id,
   ) async {
-    final token =
-        await getTokenFromPrefs();
+    final token = await getTokenFromPrefs();
 
     try {
-      var response =
-          await http.post(
+      var response = await http.post(
         Uri.parse(
           '$api/api/orders/$id/lock/',
         ),
         headers: {
-          'Content-Type':
-              'application/json',
-          'Authorization':
-              'Bearer $token',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
         },
         body: jsonEncode(
           {},
@@ -509,23 +825,18 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
   // ============================================================
 
   void _filterOrdersByDateRange() {
-    if (startDate != null &&
-        endDate != null) {
+    if (startDate != null && endDate != null) {
       setState(() {
-        filteredOrders =
-            orders.where(
+        filteredOrders = orders.where(
           (order) {
-            final orderDate =
-                DateTime.parse(
+            final orderDate = DateTime.parse(
               order['order_date'],
             );
 
-            return orderDate
-                    .isAtSameMomentAs(
+            return orderDate.isAtSameMomentAs(
                   startDate!,
                 ) ||
-                orderDate
-                    .isAtSameMomentAs(
+                orderDate.isAtSameMomentAs(
                   endDate!,
                 ) ||
                 (orderDate.isAfter(
@@ -547,26 +858,20 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
   Future<void> _selectSingleDate(
     BuildContext context,
   ) async {
-    final DateTime? picked =
-        await showDatePicker(
+    final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate:
-          DateTime.now(),
-      firstDate:
-          DateTime(
+      initialDate: DateTime.now(),
+      firstDate: DateTime(
         2000,
       ),
-      lastDate:
-          DateTime(
+      lastDate: DateTime(
         2101,
       ),
     );
 
-    if (picked != null &&
-        picked != selectedDate) {
+    if (picked != null && picked != selectedDate) {
       setState(() {
-        selectedDate =
-            picked;
+        selectedDate = picked;
       });
 
       _filterOrdersBySingleDate();
@@ -580,36 +885,27 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
   Future<void> _selectDateRange(
     BuildContext context,
   ) async {
-    final DateTimeRange? picked =
-        await showDateRangePicker(
+    final DateTimeRange? picked = await showDateRangePicker(
       context: context,
-      firstDate:
-          DateTime(
+      firstDate: DateTime(
         2000,
       ),
-      lastDate:
-          DateTime(
+      lastDate: DateTime(
         2101,
       ),
-      initialDateRange:
-          startDate != null &&
-                  endDate != null
-              ? DateTimeRange(
-                  start:
-                      startDate!,
-                  end:
-                      endDate!,
-                )
-              : null,
+      initialDateRange: startDate != null && endDate != null
+          ? DateTimeRange(
+              start: startDate!,
+              end: endDate!,
+            )
+          : null,
     );
 
     if (picked != null) {
       setState(() {
-        startDate =
-            picked.start;
+        startDate = picked.start;
 
-        endDate =
-            picked.end;
+        endDate = picked.end;
       });
 
       _filterOrdersByDateRange();
@@ -621,11 +917,9 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
   // ============================================================
 
   Future<void> exportToExcel() async {
-    var excel =
-        Excel.createExcel();
+    var excel = Excel.createExcel();
 
-    Sheet sheetObject =
-        excel['Order List'];
+    Sheet sheetObject = excel['Order List'];
 
     sheetObject.appendRow([
       'Invoice',
@@ -655,74 +949,34 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
       'Order Date',
     ]);
 
-    for (var order
-        in filteredOrders) {
-      final dynamic items =
-          order['items'];
+    for (var order in filteredOrders) {
+      final dynamic items = order['items'];
 
       if (items is List) {
-        for (var item
-            in items) {
+        for (var item in items) {
           sheetObject.appendRow([
-            order['invoice'] ??
-                '',
-            order['manage_staff'] ??
-                '',
-            order['customer']?[
-                    'name'] ??
-                '',
-            order['customer']?[
-                    'phone'] ??
-                '',
-            order['customer']?[
-                    'email'] ??
-                '',
-            order['customer']?[
-                    'address'] ??
-                '',
-            order['billing_address']?[
-                    'name'] ??
-                '',
-            order['billing_address']?[
-                    'email'] ??
-                '',
-            order['billing_address']?[
-                    'phone'] ??
-                '',
-            order['billing_address']?[
-                    'address'] ??
-                '',
-            order['billing_address']?[
-                    'city'] ??
-                '',
-            order['billing_address']?[
-                    'state'] ??
-                '',
-            order['billing_address']?[
-                    'zipcode'] ??
-                '',
-            order['bank']?[
-                    'name'] ??
-                '',
-            order['bank']?[
-                    'account_number'] ??
-                '',
-            order['bank']?[
-                    'ifsc_code'] ??
-                '',
-            order['bank']?[
-                    'branch'] ??
-                '',
-            item['name'] ??
-                '',
-            item['quantity'] ??
-                '',
-            item['price'] ??
-                '',
-            item['tax'] ??
-                '',
-            item['discount'] ??
-                '',
+            order['invoice'] ?? '',
+            order['manage_staff'] ?? '',
+            order['customer']?['name'] ?? '',
+            order['customer']?['phone'] ?? '',
+            order['customer']?['email'] ?? '',
+            order['customer']?['address'] ?? '',
+            order['billing_address']?['name'] ?? '',
+            order['billing_address']?['email'] ?? '',
+            order['billing_address']?['phone'] ?? '',
+            order['billing_address']?['address'] ?? '',
+            order['billing_address']?['city'] ?? '',
+            order['billing_address']?['state'] ?? '',
+            order['billing_address']?['zipcode'] ?? '',
+            order['bank']?['name'] ?? '',
+            order['bank']?['account_number'] ?? '',
+            order['bank']?['ifsc_code'] ?? '',
+            order['bank']?['branch'] ?? '',
+            item['name'] ?? '',
+            item['quantity'] ?? '',
+            item['price'] ?? '',
+            item['tax'] ?? '',
+            item['discount'] ?? '',
 
             // ================================================
             // DISPLAY RENAMED STATUS IN EXCEL
@@ -732,30 +986,18 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
               order['status'],
             ),
 
-            order['total_amount'] ??
-                '',
-            order['order_date'] ??
-                '',
+            order['total_amount'] ?? '',
+            order['order_date'] ?? '',
           ]);
         }
       } else {
         sheetObject.appendRow([
-          order['invoice'] ??
-              '',
-          order['manage_staff'] ??
-              '',
-          order['customer']?[
-                  'name'] ??
-              '',
-          order['customer']?[
-                  'phone'] ??
-              '',
-          order['customer']?[
-                  'email'] ??
-              '',
-          order['customer']?[
-                  'address'] ??
-              '',
+          order['invoice'] ?? '',
+          order['manage_staff'] ?? '',
+          order['customer']?['name'] ?? '',
+          order['customer']?['phone'] ?? '',
+          order['customer']?['email'] ?? '',
+          order['customer']?['address'] ?? '',
           '',
           '',
           '',
@@ -781,22 +1023,17 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
             order['status'],
           ),
 
-          order['total_amount'] ??
-              '',
-          order['order_date'] ??
-              '',
+          order['total_amount'] ?? '',
+          order['order_date'] ?? '',
         ]);
       }
     }
 
-    final tempDir =
-        await getTemporaryDirectory();
+    final tempDir = await getTemporaryDirectory();
 
-    final tempPath =
-        "${tempDir.path}/order_list.xlsx";
+    final tempPath = "${tempDir.path}/order_list.xlsx";
 
-    final tempFile =
-        File(
+    final tempFile = File(
       tempPath,
     );
 
@@ -814,51 +1051,38 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
   // ============================================================
 
   Future<pw.Document> createPdf() async {
-    final pdf =
-        pw.Document();
+    final pdf = pw.Document();
 
-    for (var order
-        in filteredOrders) {
+    for (var order in filteredOrders) {
       pdf.addPage(
         pw.Page(
-          pageFormat:
-              PdfPageFormat.a4,
+          pageFormat: PdfPageFormat.a4,
           build: (
             pw.Context context,
           ) {
             return pw.Padding(
-              padding:
-                  const pw.EdgeInsets.all(
+              padding: const pw.EdgeInsets.all(
                 24,
               ),
-              child:
-                  pw.Column(
-                crossAxisAlignment:
-                    pw.CrossAxisAlignment
-                        .start,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   // ===============================================
                   // TITLE
                   // ===============================================
 
                   pw.Center(
-                    child:
-                        pw.Text(
+                    child: pw.Text(
                       'Order Details',
-                      style:
-                          pw.TextStyle(
-                        fontSize:
-                            20,
-                        fontWeight:
-                            pw.FontWeight
-                                .bold,
+                      style: pw.TextStyle(
+                        fontSize: 20,
+                        fontWeight: pw.FontWeight.bold,
                       ),
                     ),
                   ),
 
                   pw.SizedBox(
-                    height:
-                        20,
+                    height: 20,
                   ),
 
                   // ===============================================
@@ -867,11 +1091,8 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
 
                   pw.Text(
                     'Invoice: ${order['invoice'] ?? ''}',
-                    style:
-                        pw.TextStyle(
-                      fontWeight:
-                          pw.FontWeight
-                              .bold,
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
                     ),
                   ),
 
@@ -880,8 +1101,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                   ),
 
                   pw.SizedBox(
-                    height:
-                        10,
+                    height: 10,
                   ),
 
                   // ===============================================
@@ -890,11 +1110,8 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
 
                   pw.Text(
                     'Customer Details',
-                    style:
-                        pw.TextStyle(
-                      fontWeight:
-                          pw.FontWeight
-                              .bold,
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
                     ),
                   ),
 
@@ -915,8 +1132,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                   ),
 
                   pw.SizedBox(
-                    height:
-                        10,
+                    height: 10,
                   ),
 
                   // ===============================================
@@ -925,11 +1141,8 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
 
                   pw.Text(
                     'Billing Address',
-                    style:
-                        pw.TextStyle(
-                      fontWeight:
-                          pw.FontWeight
-                              .bold,
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
                     ),
                   ),
 
@@ -962,8 +1175,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                   ),
 
                   pw.SizedBox(
-                    height:
-                        10,
+                    height: 10,
                   ),
 
                   // ===============================================
@@ -972,11 +1184,8 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
 
                   pw.Text(
                     'Bank Details',
-                    style:
-                        pw.TextStyle(
-                      fontWeight:
-                          pw.FontWeight
-                              .bold,
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
                     ),
                   ),
 
@@ -997,8 +1206,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                   ),
 
                   pw.SizedBox(
-                    height:
-                        10,
+                    height: 10,
                   ),
 
                   // ===============================================
@@ -1007,16 +1215,12 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
 
                   pw.Text(
                     'Items',
-                    style:
-                        pw.TextStyle(
-                      fontWeight:
-                          pw.FontWeight
-                              .bold,
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
                     ),
                   ),
 
-                  if (order['items']
-                      is List)
+                  if (order['items'] is List)
                     pw.Table.fromTextArray(
                       headers: [
                         'Name',
@@ -1026,63 +1230,37 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                         'Discount',
                       ],
                       data: [
-                        for (var item
-                            in order['items'])
+                        for (var item in order['items'])
                           [
-                            item['name'] ??
-                                '',
-                            item['quantity']
-                                    ?.toString() ??
-                                '',
-                            item['price']
-                                    ?.toString() ??
-                                '',
-                            item['tax']
-                                    ?.toString() ??
-                                '',
-                            item['discount']
-                                    ?.toString() ??
-                                '',
+                            item['name'] ?? '',
+                            item['quantity']?.toString() ?? '',
+                            item['price']?.toString() ?? '',
+                            item['tax']?.toString() ?? '',
+                            item['discount']?.toString() ?? '',
                           ],
                       ],
-                      headerStyle:
-                          pw.TextStyle(
-                        fontWeight:
-                            pw.FontWeight
-                                .bold,
-                        fontSize:
-                            10,
+                      headerStyle: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold,
+                        fontSize: 10,
                       ),
-                      cellStyle:
-                          pw.TextStyle(
-                        fontSize:
-                            8,
+                      cellStyle: pw.TextStyle(
+                        fontSize: 8,
                       ),
-                      headerDecoration:
-                          const pw.BoxDecoration(
-                        color:
-                            PdfColors
-                                .grey300,
+                      headerDecoration: const pw.BoxDecoration(
+                        color: PdfColors.grey300,
                       ),
-                      rowDecoration:
-                          const pw.BoxDecoration(
-                        border:
-                            pw.Border(
-                          bottom:
-                              pw.BorderSide(
-                            color:
-                                PdfColors
-                                    .grey400,
-                            width:
-                                0.5,
+                      rowDecoration: const pw.BoxDecoration(
+                        border: pw.Border(
+                          bottom: pw.BorderSide(
+                            color: PdfColors.grey400,
+                            width: 0.5,
                           ),
                         ),
                       ),
                     ),
 
                   pw.SizedBox(
-                    height:
-                        10,
+                    height: 10,
                   ),
 
                   // ===============================================
@@ -1091,11 +1269,8 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
 
                   pw.Text(
                     'Order Summary',
-                    style:
-                        pw.TextStyle(
-                      fontWeight:
-                          pw.FontWeight
-                              .bold,
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
                     ),
                   ),
 
@@ -1130,14 +1305,11 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
   // ============================================================
 
   Future<void> downloadPdf() async {
-    final pdf =
-        await createPdf();
+    final pdf = await createPdf();
 
-    final output =
-        await getTemporaryDirectory();
+    final output = await getTemporaryDirectory();
 
-    final file =
-        File(
+    final file = File(
       "${output.path}/order_list.pdf",
     );
 
@@ -1146,10 +1318,8 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
     );
 
     await Printing.sharePdf(
-      bytes:
-          await pdf.save(),
-      filename:
-          'order_list.pdf',
+      bytes: await pdf.save(),
+      filename: 'order_list.pdf',
     );
   }
 
@@ -1158,8 +1328,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
   // ============================================================
 
   Future<String?> getdepFromPrefs() async {
-    SharedPreferences prefs =
-        await SharedPreferences.getInstance();
+    SharedPreferences prefs = await SharedPreferences.getInstance();
 
     return prefs.getString(
       'department',
@@ -1171,8 +1340,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
   // ============================================================
 
   Future<void> _navigateBack() async {
-    final dep =
-        await getdepFromPrefs();
+    final dep = await getdepFromPrefs();
 
     if (!mounted) return;
 
@@ -1206,8 +1374,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
               WarehouseDashboard(),
         ),
       );
-    } else if (dep ==
-        "Warehouse Admin") {
+    } else if (dep == "Warehouse Admin") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -1288,8 +1455,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
               Icons.arrow_back,
             ),
             onPressed: () async {
-              final dep =
-                  await getdepFromPrefs();
+              final dep = await getdepFromPrefs();
 
               if (!mounted) return;
 
@@ -1333,8 +1499,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                         bdm_dashbord(),
                   ),
                 );
-              } else if (dep ==
-                  "warehouse") {
+              } else if (dep == "warehouse") {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
@@ -1344,8 +1509,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                         WarehouseDashboard(),
                   ),
                 );
-              } else if (dep ==
-                  "Warehouse Admin") {
+              } else if (dep == "Warehouse Admin") {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
@@ -1374,8 +1538,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
               icon: const Icon(
                 Icons.calendar_today,
               ),
-              onPressed: () =>
-                  _selectSingleDate(
+              onPressed: () => _selectSingleDate(
                 context,
               ),
             ),
@@ -1384,8 +1547,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
               icon: const Icon(
                 Icons.date_range,
               ),
-              onPressed: () =>
-                  _selectDateRange(
+              onPressed: () => _selectDateRange(
                 context,
               ),
             ),
@@ -1415,15 +1577,13 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
               ) {
                 return const [
                   PopupMenuItem<String>(
-                    value:
-                        'Option 1',
+                    value: 'Option 1',
                     child: Text(
                       'Export Excel',
                     ),
                   ),
                   PopupMenuItem<String>(
-                    value:
-                        'Option 2',
+                    value: 'Option 2',
                     child: Text(
                       'Download Pdf',
                     ),
@@ -1440,7 +1600,12 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
 
         body: RefreshIndicator(
           onRefresh: () async {
-            await fetchOrderData();
+            await Future.wait(
+              [
+                fetchOrderData(),
+                fetchStatusCountSummary(),
+              ],
+            );
 
             _filterOrdersByStatus(
               selectedStatus,
@@ -1515,6 +1680,16 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
               ),
 
               // ==================================================
+              // TODAY + ALL STATUS SUMMARY
+              // ==================================================
+
+              _buildStatusCountSummary(),
+
+              const SizedBox(
+                height: 16,
+              ),
+
+              // ==================================================
               // SEARCH
               // ==================================================
 
@@ -1526,30 +1701,24 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                   decoration: InputDecoration(
                     hintText: 'Search...',
                     border: OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(
+                      borderRadius: BorderRadius.circular(
                         30.0,
                       ),
                     ),
-                    focusedBorder:
-                        OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(
                         30.0,
                       ),
-                      borderSide:
-                          const BorderSide(
+                      borderSide: const BorderSide(
                         color: Colors.blue,
                         width: 2.0,
                       ),
                     ),
-                    prefixIcon:
-                        const Icon(
+                    prefixIcon: const Icon(
                       Icons.search,
                     ),
                   ),
-                  onChanged:
-                      _filterOrders,
+                  onChanged: _filterOrders,
                 ),
               ),
 
@@ -1562,8 +1731,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                     ? Center(
                         child: Text(
                           selectedDate != null ||
-                                  (startDate != null &&
-                                      endDate != null)
+                                  (startDate != null && endDate != null)
                               ? 'No orders available in this date range'
                               : 'No orders available',
                           style: const TextStyle(
@@ -1578,10 +1746,8 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                         ),
                       )
                     : ListView.builder(
-                        itemCount:
-                            filteredOrders.length,
-                        padding:
-                            const EdgeInsets.only(
+                        itemCount: filteredOrders.length,
+                        padding: const EdgeInsets.only(
                           right: 10,
                           left: 10,
                         ),
@@ -1589,90 +1755,61 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                           context,
                           index,
                         ) {
-                          final order =
-                              filteredOrders[
-                                  index];
+                          final order = filteredOrders[index];
 
-                          final isLocked =
-                              order['locked_by'] !=
-                                  null;
+                          final isLocked = order['locked_by'] != null;
 
                           final isLockedByMe =
-                              order['locked_by'] ==
-                                  username;
+                              order['locked_by'] == username;
 
-                          Widget orderCard =
-                              Card(
-                            shape:
-                                RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(
+                          Widget orderCard = Card(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
                                 15.0,
                               ),
                             ),
-                            color:
-                                Colors.white,
-                            elevation:
-                                4,
-                            child:
-                                Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment
-                                      .start,
+                            color: Colors.white,
+                            elevation: 4,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 // =================================
                                 // HEADER
                                 // =================================
 
                                 Container(
-                                  decoration:
-                                      const BoxDecoration(
-                                    color:
-                                        Colors.blue,
-                                    borderRadius:
-                                        BorderRadius.only(
-                                      topLeft:
-                                          Radius.circular(
+                                  decoration: const BoxDecoration(
+                                    color: Colors.blue,
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: Radius.circular(
                                         15.0,
                                       ),
-                                      topRight:
-                                          Radius.circular(
+                                      topRight: Radius.circular(
                                         15.0,
                                       ),
                                     ),
                                   ),
-                                  padding:
-                                      const EdgeInsets.all(
+                                  padding: const EdgeInsets.all(
                                     8.0,
                                   ),
-                                  child:
-                                      Row(
+                                  child: Row(
                                     mainAxisAlignment:
-                                        MainAxisAlignment
-                                            .spaceBetween,
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Flexible(
-                                        child:
-                                            Text(
+                                        child: Text(
                                           '#${order['invoice']}',
-                                          maxLines:
-                                              1,
-                                          overflow:
-                                              TextOverflow
-                                                  .ellipsis,
-                                          style:
-                                              const TextStyle(
-                                            color:
-                                                Colors.white,
-                                            fontWeight:
-                                                FontWeight.bold,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
                                           ),
                                         ),
                                       ),
 
                                       const SizedBox(
-                                        width:
-                                            8,
+                                        width: 8,
                                       ),
 
                                       Text(
@@ -1680,16 +1817,12 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                                           'dd MMM yy',
                                         ).format(
                                           DateTime.parse(
-                                            order[
-                                                'order_date'],
+                                            order['order_date'],
                                           ),
                                         ),
-                                        style:
-                                            const TextStyle(
-                                          color:
-                                              Colors.white,
-                                          fontSize:
-                                              14,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
                                         ),
                                       ),
                                     ],
@@ -1701,15 +1834,12 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                                 // =================================
 
                                 Padding(
-                                  padding:
-                                      const EdgeInsets.all(
+                                  padding: const EdgeInsets.all(
                                     8.0,
                                   ),
-                                  child:
-                                      Column(
+                                  child: Column(
                                     crossAxisAlignment:
-                                        CrossAxisAlignment
-                                            .start,
+                                        CrossAxisAlignment.start,
                                     children: [
                                       // ===========================
                                       // LOCKED BY
@@ -1720,31 +1850,25 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                                           children: [
                                             const Icon(
                                               Icons.lock,
-                                              color:
-                                                  Colors.red,
-                                              size:
-                                                  16,
+                                              color: Colors.red,
+                                              size: 16,
                                             ),
+
                                             const SizedBox(
-                                              width:
-                                                  6,
+                                              width: 6,
                                             ),
+
                                             Expanded(
-                                              child:
-                                                  Text(
+                                              child: Text(
                                                 'Locked by: ${order['locked_by']}',
-                                                maxLines:
-                                                    1,
+                                                maxLines: 1,
                                                 overflow:
                                                     TextOverflow.ellipsis,
-                                                style:
-                                                    const TextStyle(
-                                                  color:
-                                                      Colors.red,
+                                                style: const TextStyle(
+                                                  color: Colors.red,
                                                   fontWeight:
                                                       FontWeight.bold,
-                                                  fontSize:
-                                                      13,
+                                                  fontSize: 13,
                                                 ),
                                               ),
                                             ),
@@ -1753,8 +1877,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
 
                                       if (isLocked)
                                         const SizedBox(
-                                          height:
-                                              8,
+                                          height: 8,
                                         ),
 
                                       // ===========================
@@ -1763,26 +1886,21 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
 
                                       Row(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment
-                                                .start,
+                                            CrossAxisAlignment.start,
                                         children: [
                                           const Text(
                                             'Status:',
-                                            style:
-                                                TextStyle(
-                                              fontSize:
-                                                  13,
+                                            style: TextStyle(
+                                              fontSize: 13,
                                             ),
                                           ),
 
                                           const SizedBox(
-                                            width:
-                                                12,
+                                            width: 12,
                                           ),
 
                                           Expanded(
-                                            child:
-                                                Text(
+                                            child: Text(
                                               // ====================
                                               // DISPLAY RENAMED STATUS
                                               // ====================
@@ -1791,17 +1909,12 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                                                 order['status'],
                                               ),
 
-                                              textAlign:
-                                                  TextAlign.right,
-                                              maxLines:
-                                                  2,
+                                              textAlign: TextAlign.right,
+                                              maxLines: 2,
                                               overflow:
-                                                  TextOverflow
-                                                      .ellipsis,
-                                              style:
-                                                  const TextStyle(
-                                                fontSize:
-                                                    13,
+                                                  TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 13,
                                                 fontWeight:
                                                     FontWeight.w600,
                                               ),
@@ -1811,8 +1924,7 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                                       ),
 
                                       const SizedBox(
-                                        height:
-                                            8.0,
+                                        height: 8.0,
                                       ),
 
                                       // ===========================
@@ -1821,38 +1933,28 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
 
                                       Row(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment
-                                                .start,
+                                            CrossAxisAlignment.start,
                                         children: [
                                           const Text(
                                             'Customer:',
-                                            style:
-                                                TextStyle(
-                                              fontSize:
-                                                  13,
+                                            style: TextStyle(
+                                              fontSize: 13,
                                             ),
                                           ),
 
                                           const SizedBox(
-                                            width:
-                                                12,
+                                            width: 12,
                                           ),
 
                                           Expanded(
-                                            child:
-                                                Text(
+                                            child: Text(
                                               '${order['customer']?['name'] ?? ''}',
-                                              textAlign:
-                                                  TextAlign.right,
-                                              maxLines:
-                                                  2,
+                                              textAlign: TextAlign.right,
+                                              maxLines: 2,
                                               overflow:
-                                                  TextOverflow
-                                                      .ellipsis,
-                                              style:
-                                                  const TextStyle(
-                                                fontSize:
-                                                    13,
+                                                  TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 13,
                                                 fontWeight:
                                                     FontWeight.w600,
                                               ),
@@ -1862,42 +1964,123 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                                       ),
 
                                       const SizedBox(
-                                        height:
-                                            8.0,
+                                        height: 8.0,
                                       ),
 
                                       // ===========================
-                                      // BILLING AMOUNT
+                                      // STATE
                                       // ===========================
 
                                       Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment
-                                                .spaceBetween,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           const Text(
-                                            'Billing Amount:',
-                                            style:
-                                                TextStyle(
-                                              fontSize:
-                                                  13,
+                                            'State:',
+                                            style: TextStyle(
+                                              fontSize: 13,
                                             ),
                                           ),
 
-                                          Flexible(
-                                            child:
-                                                Text(
-                                              '${order['total_amount'] ?? ''}',
-                                              textAlign:
-                                                  TextAlign.right,
-                                              style:
-                                                  const TextStyle(
-                                                fontSize:
-                                                    13,
+                                          const SizedBox(
+                                            width: 12,
+                                          ),
+
+                                          Expanded(
+                                            child: Text(
+                                              '${order['state'] ?? ''}',
+                                              textAlign: TextAlign.right,
+                                              maxLines: 2,
+                                              overflow:
+                                                  TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 13,
                                                 fontWeight:
-                                                    FontWeight.bold,
-                                                color:
-                                                    Colors.green,
+                                                    FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+
+                                      const SizedBox(
+                                        height: 8.0,
+                                      ),
+
+                                      // ===========================
+                                      // ZIP CODE
+                                      // ===========================
+
+                                      Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Zip Code:',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                            ),
+                                          ),
+
+                                          const SizedBox(
+                                            width: 12,
+                                          ),
+
+                                          Expanded(
+                                            child: Text(
+                                              '${order['zipcode'] ?? ''}',
+                                              textAlign: TextAlign.right,
+                                              maxLines: 1,
+                                              overflow:
+                                                  TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight:
+                                                    FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+
+                                      const SizedBox(
+                                        height: 8.0,
+                                      ),
+
+                                      // ===========================
+                                      // UPDATED AT
+                                      // ===========================
+
+                                      Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Status Updated At:',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.orange,
+                                            ),
+                                          ),
+
+                                          const SizedBox(
+                                            width: 12,
+                                          ),
+
+                                          Expanded(
+                                            child: Text(
+                                              _formatUpdatedAt(
+                                                order['updated_at'],
+                                              ),
+                                              textAlign: TextAlign.right,
+                                              maxLines: 1,
+                                              overflow:
+                                                  TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight:
+                                                    FontWeight.w600,
+                                                    color: Colors.orange,
                                               ),
                                             ),
                                           ),
@@ -1911,54 +2094,37 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                                 // WAREHOUSE DETAILS
                                 // =================================
 
-                                if (order[
-                                            'warehouse_orders'] !=
-                                        null &&
-                                    order[
-                                            'warehouse_orders']
-                                        .isNotEmpty)
+                                if (order['warehouse_orders'] != null &&
+                                    order['warehouse_orders'].isNotEmpty)
                                   Padding(
-                                    padding:
-                                        const EdgeInsets
-                                            .symmetric(
-                                      horizontal:
-                                          8.0,
-                                      vertical:
-                                          4.0,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8.0,
+                                      vertical: 4.0,
                                     ),
-                                    child:
-                                        Column(
+                                    child: Column(
                                       crossAxisAlignment:
-                                          CrossAxisAlignment
-                                              .start,
+                                          CrossAxisAlignment.start,
                                       children: [
                                         const Text(
                                           'Warehouse Details:',
-                                          style:
-                                              TextStyle(
-                                            fontSize:
-                                                14,
-                                            fontWeight:
-                                                FontWeight.bold,
-                                            color:
-                                                Colors.blue,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blue,
                                           ),
                                         ),
 
                                         const SizedBox(
-                                          height:
-                                              4.0,
+                                          height: 4.0,
                                         ),
 
-                                        ...order[
-                                                'warehouse_orders']
+                                        ...order['warehouse_orders']
                                             .map<Widget>(
                                           (
                                             warehouse,
                                           ) {
                                             return Card(
-                                              color:
-                                                  const Color.fromARGB(
+                                              color: const Color.fromARGB(
                                                 240,
                                                 255,
                                                 255,
@@ -1966,88 +2132,77 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                                               ),
                                               margin:
                                                   const EdgeInsets.symmetric(
-                                                vertical:
-                                                    4.0,
+                                                vertical: 4.0,
                                               ),
-                                              child:
-                                                  Padding(
+                                              child: Padding(
                                                 padding:
                                                     const EdgeInsets.all(
                                                   8.0,
                                                 ),
-                                                child:
-                                                    Row(
+                                                child: Row(
                                                   crossAxisAlignment:
                                                       CrossAxisAlignment.start,
                                                   children: [
                                                     Image.network(
                                                       "${warehouse['image']}",
-                                                      width:
-                                                          80,
-                                                      height:
-                                                          80,
-                                                      fit:
-                                                          BoxFit.cover,
-                                                      errorBuilder:
-                                                          (
+                                                      width: 80,
+                                                      height: 80,
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder: (
                                                         context,
                                                         error,
                                                         stackTrace,
                                                       ) {
                                                         return const SizedBox(
-                                                          width:
-                                                              80,
-                                                          height:
-                                                              80,
-                                                          child:
-                                                              Icon(
-                                                            Icons.image_not_supported,
+                                                          width: 80,
+                                                          height: 80,
+                                                          child: Icon(
+                                                            Icons
+                                                                .image_not_supported,
                                                           ),
                                                         );
                                                       },
                                                     ),
 
                                                     const SizedBox(
-                                                      width:
-                                                          10,
+                                                      width: 10,
                                                     ),
 
                                                     Expanded(
-                                                      child:
-                                                          Column(
+                                                      child: Column(
                                                         crossAxisAlignment:
-                                                            CrossAxisAlignment.start,
+                                                            CrossAxisAlignment
+                                                                .start,
                                                         children: [
                                                           Text(
                                                             'Box: ${warehouse['box']}',
                                                             style:
                                                                 const TextStyle(
-                                                              fontSize:
-                                                                  13,
+                                                              fontSize: 13,
                                                             ),
                                                           ),
+
                                                           Text(
                                                             'Total Weight: ${warehouse['total_weight']}',
                                                             style:
                                                                 const TextStyle(
-                                                              fontSize:
-                                                                  13,
+                                                              fontSize: 13,
                                                             ),
                                                           ),
+
                                                           Text(
                                                             'Total Volume Weight: ${warehouse['total_volume_weight']}',
                                                             style:
                                                                 const TextStyle(
-                                                              fontSize:
-                                                                  13,
+                                                              fontSize: 13,
                                                             ),
                                                           ),
+
                                                           Text(
                                                             'Shipping Charge: \$${warehouse['shipping_charge']}',
                                                             style:
                                                                 const TextStyle(
-                                                              fontSize:
-                                                                  13,
+                                                              fontSize: 13,
                                                               color:
                                                                   Colors.green,
                                                             ),
@@ -2072,50 +2227,46 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
                           // ORDER CLICK
                           // =======================================
 
-                          if (!isLocked ||
-                              isLockedByMe) {
+                          if (!isLocked || isLockedByMe) {
                             return Padding(
-                              padding:
-                                  const EdgeInsets
-                                      .symmetric(
-                                vertical:
-                                    3.0,
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 3.0,
                               ),
-                              child:
-                                  GestureDetector(
-                               onTap: () async {
-  await lockorder(
-    order['id'],
-  );
+                              child: GestureDetector(
+                                onTap: () async {
+                                  await lockorder(
+                                    order['id'],
+                                  );
 
-  await Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => WarehouseOrderReview(
-        id: order['id'],
-      ),
-    ),
-  );
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          WarehouseOrderReview(
+                                        id: order['id'],
+                                      ),
+                                    ),
+                                  );
 
-  if (!mounted) return;
+                                  if (!mounted) return;
 
-  // Reload data when returning from WarehouseOrderReview
-  await fetchOrderData();
-},
-                                child:
-                                    orderCard,
+                                  // Reload order data and counts when returning
+                                  await Future.wait(
+                                    [
+                                      fetchOrderData(),
+                                      fetchStatusCountSummary(),
+                                    ],
+                                  );
+                                },
+                                child: orderCard,
                               ),
                             );
                           } else {
                             return Padding(
-                              padding:
-                                  const EdgeInsets
-                                      .symmetric(
-                                vertical:
-                                    3.0,
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 3.0,
                               ),
-                              child:
-                                  orderCard,
+                              child: orderCard,
                             );
                           }
                         },
