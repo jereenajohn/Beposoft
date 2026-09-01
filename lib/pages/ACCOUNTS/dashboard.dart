@@ -9,6 +9,7 @@ import 'package:beposoft/pages/ADMIN/add_team_staff.dart';
 import 'package:beposoft/pages/ADMIN/all_local_purchases_screen.dart';
 import 'package:beposoft/pages/ADMIN/localpurchaseorderscreen.dart';
 import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
+import 'package:beposoft/pages/ADMIN/sales_person_point_system_page.dart';
 import 'package:beposoft/pages/auth_status_checker.dart';
 
 import 'package:beposoft/pages/ACCOUNTS/Bulk_Bepocart_Orders.dart';
@@ -1254,7 +1255,17 @@ class _admin_dashboardState extends State<dashboard>
                             builder: (context) => EmployeeLeaveFormPage()));
                   },
                 ),
-
+       ListTile(
+                  leading: Icon(Icons.person),
+                  title: Text('Point System'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => ProductPointSystemPage()));
+                    // Navigate to the Settings page or perform any other action
+                  },
+                ),
                 ListTile(
                   title: const Text('Send Mail'),
                   onTap: () async {

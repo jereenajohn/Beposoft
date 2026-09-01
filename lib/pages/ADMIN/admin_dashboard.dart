@@ -23,6 +23,7 @@ import 'package:beposoft/pages/ADMIN/admin_add_attendance.dart';
 import 'package:beposoft/pages/ADMIN/all_local_purchases_screen.dart';
 import 'package:beposoft/pages/ADMIN/localpurchaseorderscreen.dart';
 import 'package:beposoft/pages/ADMIN/manager_leave_requestpage.dart';
+import 'package:beposoft/pages/ADMIN/sales_person_point_system_page.dart';
 import 'package:beposoft/pages/BDO/EmployeeLeaveFormPage%20.dart';
 import 'package:beposoft/pages/auth_status_checker.dart';
 import 'package:beposoft/pages/ACCOUNTS/add_warehouse.dart';
@@ -77,7 +78,7 @@ class admin_dashboard extends StatefulWidget {
 }
 
 class _admin_dashboardState extends State<admin_dashboard>
-    with WidgetsBindingObserver {  
+    with WidgetsBindingObserver {
   List<String> statusOptions = ["pending", "approved", "rejected"];
   List<Map<String, dynamic>> grvlist = [];
   List<Map<String, dynamic>> proforma = [];
@@ -114,156 +115,152 @@ class _admin_dashboardState extends State<admin_dashboard>
     fetchInboxMailCount();
     fetchMyOrderSummary();
 
-  mailCountTimer = Timer.periodic(
-  const Duration(seconds: 5),
-  (_) {
-    if (mounted) {
-      fetchInboxMailCount();
-    }
-  },
-);
+    mailCountTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) {
+        if (mounted) {
+          fetchInboxMailCount();
+        }
+      },
+    );
 
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-  if (!mounted) return;
-  checkAppUpdate(context);
-});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      checkAppUpdate(context);
+    });
 
-WidgetsBinding.instance.addPostFrameCallback((_) {
-  if (!mounted) return;
-  AuthStatusChecker.start(context);
-});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      AuthStatusChecker.start(context);
+    });
   }
-
-@override
-void dispose() {
-  WidgetsBinding.instance.removeObserver(this);
-  mailCountTimer?.cancel();
-  super.dispose();
-}
 
   @override
-void didChangeAppLifecycleState(AppLifecycleState state) {
-  super.didChangeAppLifecycleState(state);
-
-  if (state == AppLifecycleState.resumed) {
-    fetchInboxMailCount();
-    fetchMyOrderSummary();
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    mailCountTimer?.cancel();
+    super.dispose();
   }
-}
 
- Future<void> fetchInboxMailCount() async {
-  if (isFetchingInboxMailCount) return;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
 
-  isFetchingInboxMailCount = true;
-
-  try {
-    final String? token = await getTokenFromPrefs();
-
-    if (token == null || token.trim().isEmpty) {
-      return;
+    if (state == AppLifecycleState.resumed) {
+      fetchInboxMailCount();
+      fetchMyOrderSummary();
     }
+  }
 
-    final Uri uri = Uri.parse(
-      '$api/api/internal/mails/',
-    ).replace(
-      queryParameters: {
-        'type': 'inbox',
-        'read_status': 'unread',
-        'page': '1',
-      },
-    );
+  Future<void> fetchInboxMailCount() async {
+    if (isFetchingInboxMailCount) return;
 
-    final http.Response response = await http.get(
-      uri,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
+    isFetchingInboxMailCount = true;
 
-    if (response.statusCode != 200) {
-      debugPrint(
-        'MAIL COUNT REQUEST FAILED: ${response.statusCode} ${response.body}',
+    try {
+      final String? token = await getTokenFromPrefs();
+
+      if (token == null || token.trim().isEmpty) {
+        return;
+      }
+
+      final Uri uri = Uri.parse(
+        '$api/api/internal/mails/',
+      ).replace(
+        queryParameters: {
+          'type': 'inbox',
+          'read_status': 'unread',
+          'page': '1',
+        },
       );
-      return;
-    }
 
-    final dynamic decoded = jsonDecode(response.body);
+      final http.Response response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-    int newUnreadCount = 0;
+      if (response.statusCode != 200) {
+        debugPrint(
+          'MAIL COUNT REQUEST FAILED: ${response.statusCode} ${response.body}',
+        );
+        return;
+      }
 
-    if (decoded is Map<String, dynamic>) {
-      final dynamic results = decoded['results'];
-      final dynamic data = decoded['data'];
+      final dynamic decoded = jsonDecode(response.body);
 
-      final dynamic rawUnreadCount =
-          decoded['unread_count'] ??
-          (results is Map ? results['unread_count'] : null) ??
-          (data is Map ? data['unread_count'] : null);
+      int newUnreadCount = 0;
 
-      final dynamic rawFilteredCount =
-          decoded['count'] ??
-          (results is Map ? results['count'] : null) ??
-          (data is Map ? data['count'] : null);
+      if (decoded is Map<String, dynamic>) {
+        final dynamic results = decoded['results'];
+        final dynamic data = decoded['data'];
 
-      if (rawUnreadCount != null) {
-        newUnreadCount =
-            rawUnreadCount is int
-                ? rawUnreadCount
-                : int.tryParse(rawUnreadCount.toString()) ?? 0;
-      } else if (rawFilteredCount != null) {
-        newUnreadCount =
-            rawFilteredCount is int
-                ? rawFilteredCount
-                : int.tryParse(rawFilteredCount.toString()) ?? 0;
-      } else {
-        dynamic mailList;
+        final dynamic rawUnreadCount = decoded['unread_count'] ??
+            (results is Map ? results['unread_count'] : null) ??
+            (data is Map ? data['unread_count'] : null);
 
-        if (results is Map && results['data'] is List) {
-          mailList = results['data'];
-        } else if (data is Map && data['data'] is List) {
-          mailList = data['data'];
-        } else if (results is List) {
-          mailList = results;
-        } else if (data is List) {
-          mailList = data;
-        }
+        final dynamic rawFilteredCount = decoded['count'] ??
+            (results is Map ? results['count'] : null) ??
+            (data is Map ? data['count'] : null);
 
-        if (mailList is List) {
-          newUnreadCount = mailList.where((dynamic mail) {
-            if (mail is! Map) return false;
+        if (rawUnreadCount != null) {
+          newUnreadCount = rawUnreadCount is int
+              ? rawUnreadCount
+              : int.tryParse(rawUnreadCount.toString()) ?? 0;
+        } else if (rawFilteredCount != null) {
+          newUnreadCount = rawFilteredCount is int
+              ? rawFilteredCount
+              : int.tryParse(rawFilteredCount.toString()) ?? 0;
+        } else {
+          dynamic mailList;
 
-            if (mail.containsKey('is_read')) {
-              return mail['is_read'] != true;
-            }
+          if (results is Map && results['data'] is List) {
+            mailList = results['data'];
+          } else if (data is Map && data['data'] is List) {
+            mailList = data['data'];
+          } else if (results is List) {
+            mailList = results;
+          } else if (data is List) {
+            mailList = data;
+          }
 
-            if (mail.containsKey('read')) {
-              return mail['read'] != true;
-            }
+          if (mailList is List) {
+            newUnreadCount = mailList.where((dynamic mail) {
+              if (mail is! Map) return false;
 
-            final dynamic readAt = mail['read_at'];
+              if (mail.containsKey('is_read')) {
+                return mail['is_read'] != true;
+              }
 
-            return readAt == null ||
-                readAt.toString().trim().isEmpty;
-          }).length;
+              if (mail.containsKey('read')) {
+                return mail['read'] != true;
+              }
+
+              final dynamic readAt = mail['read_at'];
+
+              return readAt == null || readAt.toString().trim().isEmpty;
+            }).length;
+          }
         }
       }
-    }
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (inboxMailCount != newUnreadCount) {
-      setState(() {
-        inboxMailCount = newUnreadCount;
-      });
+      if (inboxMailCount != newUnreadCount) {
+        setState(() {
+          inboxMailCount = newUnreadCount;
+        });
+      }
+    } catch (error, stackTrace) {
+      debugPrint('MAIL COUNT ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    } finally {
+      isFetchingInboxMailCount = false;
     }
-  } catch (error, stackTrace) {
-    debugPrint('MAIL COUNT ERROR: $error');
-    debugPrintStack(stackTrace: stackTrace);
-  } finally {
-    isFetchingInboxMailCount = false;
   }
-}
+
   Future<void> fetchMyOrderSummary() async {
     if (!mounted) return;
 
@@ -311,21 +308,18 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
           response.body,
         );
 
-        if (parsed is Map<String, dynamic> &&
-            parsed['status'] == 'success') {
-          final Map<String, dynamic> allOrders =
-              parsed['all_orders'] is Map
-                  ? Map<String, dynamic>.from(
-                      parsed['all_orders'],
-                    )
-                  : <String, dynamic>{};
+        if (parsed is Map<String, dynamic> && parsed['status'] == 'success') {
+          final Map<String, dynamic> allOrders = parsed['all_orders'] is Map
+              ? Map<String, dynamic>.from(
+                  parsed['all_orders'],
+                )
+              : <String, dynamic>{};
 
-          final Map<String, dynamic> todayOrders =
-              parsed['today_orders'] is Map
-                  ? Map<String, dynamic>.from(
-                      parsed['today_orders'],
-                    )
-                  : <String, dynamic>{};
+          final Map<String, dynamic> todayOrders = parsed['today_orders'] is Map
+              ? Map<String, dynamic>.from(
+                  parsed['today_orders'],
+                )
+              : <String, dynamic>{};
 
           final Map<String, dynamic> invoiceCreated =
               parsed['invoice_created'] is Map
@@ -434,9 +428,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
             children: [
               Expanded(
                 child: _buildInfoCard(
-                  isMyOrderSummaryLoading
-                      ? '...'
-                      : myTotalBills.toString(),
+                  isMyOrderSummaryLoading ? '...' : myTotalBills.toString(),
                   'Total Bills',
                   0,
                 ),
@@ -470,9 +462,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
             children: [
               Expanded(
                 child: _buildInfoCard(
-                  isMyOrderSummaryLoading
-                      ? '...'
-                      : myTodaysBills.toString(),
+                  isMyOrderSummaryLoading ? '...' : myTodaysBills.toString(),
                   'Today Bills',
                   0,
                 ),
@@ -1180,20 +1170,20 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                   },
                 ),
 
-                  // if (isManager)
-                  // ListTile(
-                  //   leading: const Icon(Icons.person),
-                  //   title: const Text('Face Recognition'),
-                  //   onTap: () {
-                  //     Navigator.push(
-                  //       context,
-                  //       MaterialPageRoute(
-                  //         builder: (context) =>
-                  //             const StaffMarkAttendanceScreenface(),
-                  //       ),
-                  //     );
-                  //   },
-                  // ),
+                // if (isManager)
+                // ListTile(
+                //   leading: const Icon(Icons.person),
+                //   title: const Text('Face Recognition'),
+                //   onTap: () {
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //         builder: (context) =>
+                //             const StaffMarkAttendanceScreenface(),
+                //       ),
+                //     );
+                //   },
+                // ),
                 ListTile(
                   leading: Icon(Icons.person),
                   title: Text('Add Attendance'),
@@ -1273,24 +1263,34 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                             builder: (context) => EmployeeLeaveFormPage()));
                   },
                 ),
+                ListTile(
+                  leading: Icon(Icons.person),
+                  title: Text('Point System'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => ProductPointSystemPage()));
+                    // Navigate to the Settings page or perform any other action
+                  },
+                ),
+                ListTile(
+                  title: const Text('Send Mail'),
+                  onTap: () async {
+                    Navigator.pop(context);
 
-           ListTile(
-  title: const Text('Send Mail'),
-  onTap: () async {
-    Navigator.pop(context);
+                    await Navigator.push<void>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const StaffMailPage(),
+                      ),
+                    );
 
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const StaffMailPage(),
-      ),
-    );
+                    if (!mounted) return;
 
-    if (!mounted) return;
-
-    await fetchInboxMailCount();
-  },
-),
+                    await fetchInboxMailCount();
+                  },
+                ),
 
                 _buildDropdownTile(context, 'Customers', [
                   'Add Customer',
@@ -1326,34 +1326,34 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                   'New Proforma Invoice',
                   'Proforma Invoice List',
                 ]),
-                       _buildDropdownTile(
-                context,
-                'Delivery Note',
-                [
-                  'Delivery Order (DO)',
-                  'Delivery Order(Packing under Progress)',
-                  'Packed For Delivery(PFD)',
-                  'Out For Delivery(OFD)',
-                  'Return From Delivery (RFD)',
-                  'Delivery Order(Shipped)',
-                  'Daily Goods Movement',
-                ],
-              ),
-                  _buildDropdownTile(context, 'Orders', [
-                    // 'New Orders',
-                    'Orders List',
-                    'Waiting For Approval',
-                    'Invoice Approved',
-                    'Pre Booked',
-                    'Waiting For Confirmation',
-                    'DO(Delivery Order)',
-                    'Packing Under Progress',
-                    'PFD (Packed For Delivery)',
-                     'OFD (Out For Delivery)',
-                     'Return From Delivery',
-                    'Shipped',
-                    'Invoice Rejected'
-                  ]),
+                _buildDropdownTile(
+                  context,
+                  'Delivery Note',
+                  [
+                    'Delivery Order (DO)',
+                    'Delivery Order(Packing under Progress)',
+                    'Packed For Delivery(PFD)',
+                    'Out For Delivery(OFD)',
+                    'Return From Delivery (RFD)',
+                    'Delivery Order(Shipped)',
+                    'Daily Goods Movement',
+                  ],
+                ),
+                _buildDropdownTile(context, 'Orders', [
+                  // 'New Orders',
+                  'Orders List',
+                  'Waiting For Approval',
+                  'Invoice Approved',
+                  'Pre Booked',
+                  'Waiting For Confirmation',
+                  'DO(Delivery Order)',
+                  'Packing Under Progress',
+                  'PFD (Packed For Delivery)',
+                  'OFD (Out For Delivery)',
+                  'Return From Delivery',
+                  'Shipped',
+                  'Invoice Rejected'
+                ]),
                 Divider(),
                 Text("Others"),
                 Divider(),
@@ -1380,29 +1380,28 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                 _buildDropdownTile(context, 'Daily Sales Reports',
                     ['Add Team', 'Team wise Report']),
 
-                           ListTile(
-                    leading: Icon(Icons.dashboard),
-                    title: Text('Local Purchase Order'),
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) =>
-                                  LocalPurchaseOrderScreen()));
-                    },
-                  ),
-                                ListTile(
-                    leading: Icon(Icons.dashboard),
-                    title: Text('All Local Purchase Orders'),
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) =>
-                                  AllLocalPurchaseOrderScreen()));
-                    },
-                  ),
-     ListTile(
+                ListTile(
+                  leading: Icon(Icons.dashboard),
+                  title: Text('Local Purchase Order'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => LocalPurchaseOrderScreen()));
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.dashboard),
+                  title: Text('All Local Purchase Orders'),
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) =>
+                                AllLocalPurchaseOrderScreen()));
+                  },
+                ),
+                ListTile(
                   leading: Icon(Icons.category),
                   title: Text('Add Main Category'),
                   onTap: () {
@@ -1836,8 +1835,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                   'Actual Delivery Report',
                   'Order Comparison Report',
                   'Product Usability Report',
-                   'Dispatched & Pending Orders Report',
-
+                  'Dispatched & Pending Orders Report',
                 ]),
 
                 _buildDropdownTile(context, 'Staff', [

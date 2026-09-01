@@ -42,6 +42,73 @@ class _Performa_CartState extends State<Performa_Cart> {
     return prefs.getString('token');
   }
 
+
+  // ============================================================
+  // PROFORMA CART ACTION LOG
+  // API: POST /api/datalog/create/
+  //
+  // DataLog.order is nullable on the backend, so cart actions can
+  // be logged before the Proforma/Order has been created.
+  // ============================================================
+  Future<bool> createCartActionLog({
+    required String action,
+    required Map<String, dynamic> beforeData,
+    required Map<String, dynamic> afterData,
+    Map<String, dynamic>? metadata,
+  }) async {
+    final String? token = await getTokenFromPrefs();
+
+    if (token == null || token.trim().isEmpty) {
+      debugPrint('CART ACTION LOG SKIPPED [$action]: token not found');
+      return false;
+    }
+
+    final Map<String, dynamic> normalizedBefore = <String, dynamic>{
+      'action': action,
+      'source': 'proforma_cart',
+      ...beforeData,
+    };
+
+    final Map<String, dynamic> normalizedAfter = <String, dynamic>{
+      'action': action,
+      'source': 'proforma_cart',
+      ...afterData,
+      if (metadata != null) 'metadata': metadata,
+      'logged_at': DateTime.now().toIso8601String(),
+    };
+
+    try {
+      final http.Response response = await http.post(
+        Uri.parse('$api/api/datalog/create/'),
+        headers: <String, String>{
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(<String, dynamic>{
+          'before_data': normalizedBefore,
+          'after_data': normalizedAfter,
+          'order': null,
+        }),
+      );
+
+      final bool success =
+          response.statusCode == 200 || response.statusCode == 201;
+
+      if (!success) {
+        debugPrint(
+          'CART ACTION LOG FAILED [$action]: '
+          '${response.statusCode} ${response.body}',
+        );
+      }
+
+      return success;
+    } catch (error, stackTrace) {
+      debugPrint('CART ACTION LOG ERROR [$action]: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      return false;
+    }
+  }
+
   Future<void> fetchCartData() async {
     try {
       final token = await getTokenFromPrefs();
@@ -100,10 +167,29 @@ final price = double.tryParse(item['price'].toString()) ?? 0.0; // Ensure it's a
   }
 
   Future<void> updatecartdetails(
-      int id, int quantity, String description, double discount, double price) async {
+    int id,
+    int quantity,
+    String description,
+    double discount,
+    double price,
+    Map<String, dynamic> previousItem,
+  ) async {
     try {
       final token = await getTokenFromPrefs();
-      final response = await http.put(
+
+      if (token == null || token.trim().isEmpty) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Authentication token not found'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final http.Response response = await http.put(
         Uri.parse('$api/api/cart/update/$id/'),
         headers: {
           'Authorization': 'Bearer $token',
@@ -117,23 +203,60 @@ final price = double.tryParse(item['price'].toString()) ?? 0.0; // Ensure it's a
         }),
       );
 
-      
-
       if (response.statusCode == 200) {
-        fetchCartData();
+        await createCartActionLog(
+          action: 'proforma_cart_item_updated',
+          beforeData: <String, dynamic>{
+            'cart_item_id': id,
+            'product_name': previousItem['name'],
+            'slug': previousItem['slug'],
+            'size': previousItem['size'],
+            'quantity': previousItem['quantity'],
+            'price': previousItem['price'],
+            'discount': previousItem['discount'],
+            'note': previousItem['note'],
+            'tax': previousItem['tax'],
+            'status': 'before_update',
+          },
+          afterData: <String, dynamic>{
+            'cart_item_id': id,
+            'product_name': previousItem['name'],
+            'slug': previousItem['slug'],
+            'size': previousItem['size'],
+            'quantity': quantity,
+            'price': price,
+            'discount': discount,
+            'note': description,
+            'tax': previousItem['tax'],
+            'status': 'after_update',
+          },
+        );
+
+        await fetchCartData();
+
+        if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Cart item updated successfully!'),
             backgroundColor: Colors.green,
           ),
         );
       } else {
+        debugPrint(
+          'CART UPDATE FAILED: ${response.statusCode} ${response.body}',
+        );
+
         throw Exception('Failed to update cart item');
       }
-    } catch (error) {
-      
+    } catch (error, stackTrace) {
+      debugPrint('CART UPDATE ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('Failed to update cart item'),
           backgroundColor: Colors.red,
         ),
@@ -141,34 +264,82 @@ final price = double.tryParse(item['price'].toString()) ?? 0.0; // Ensure it's a
     }
   }
 
-  Future<void> deletecartitem(int id) async {
+  Future<void> deletecartitem(
+    int id,
+    Map<String, dynamic> item,
+  ) async {
     final token = await getTokenFromPrefs();
 
+    if (token == null || token.trim().isEmpty) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Authentication token not found'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     try {
-      final response = await http.delete(
+      final http.Response response = await http.delete(
         Uri.parse('$api/api/cart/update/$id/'),
         headers: {
           'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
         },
       );
 
-      if (response.statusCode == 204) {
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        await createCartActionLog(
+          action: 'proforma_cart_item_deleted',
+          beforeData: <String, dynamic>{
+            'cart_item_id': id,
+            'product_name': item['name'],
+            'slug': item['slug'],
+            'size': item['size'],
+            'quantity': item['quantity'],
+            'price': item['price'],
+            'discount': item['discount'],
+            'note': item['note'],
+            'tax': item['tax'],
+            'status': 'present',
+          },
+          afterData: <String, dynamic>{
+            'cart_item_id': id,
+            'product_name': item['name'],
+            'status': 'deleted',
+          },
+        );
+
+        if (!mounted) return;
+
         setState(() {
-          cartdata.removeWhere((item) => item['id'] == id);
+          cartdata.removeWhere((cartItem) => cartItem['id'] == id);
         });
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Product deleted from Cart Successfully'),
             backgroundColor: Colors.green,
           ),
         );
       } else {
+        debugPrint(
+          'CART DELETE FAILED: ${response.statusCode} ${response.body}',
+        );
+
         throw Exception('Failed to delete cart ID: $id');
       }
-    } catch (error) {
-      
+    } catch (error, stackTrace) {
+      debugPrint('CART DELETE ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('Failed to delete item from cart'),
           backgroundColor: Colors.red,
         ),
@@ -233,13 +404,28 @@ final price = double.tryParse(item['price'].toString()) ?? 0.0; // Ensure it's a
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              onPressed: () {
+              onPressed: () async {
                 final description = descriptionController.text;
-                final quantity = int.tryParse(quantityController.text) ?? item['quantity'];
-                final discount = double.tryParse(discountController.text) ?? item['discount'];
-                final upprice = double.tryParse(pricee.text) ?? item['price'];
+                final quantity =
+                    int.tryParse(quantityController.text) ??
+                        (int.tryParse(item['quantity'].toString()) ?? 0);
+                final discount =
+                    double.tryParse(discountController.text) ??
+                        (double.tryParse(item['discount'].toString()) ?? 0.0);
+                final upprice =
+                    double.tryParse(pricee.text) ??
+                        (double.tryParse(item['price'].toString()) ?? 0.0);
 
-                updatecartdetails(item['id'], quantity, description, discount, upprice);
+                await updatecartdetails(
+                  item['id'],
+                  quantity,
+                  description,
+                  discount,
+                  upprice,
+                  item,
+                );
+
+                if (!context.mounted) return;
                 Navigator.of(context).pop();
               },
               child: Text('Save'),
@@ -430,7 +616,7 @@ final price = double.tryParse(item['price'].toString()) ?? 0.0; // Ensure it's a
                                     child: IconButton(
                                       icon: Icon(Icons.delete, color: Colors.red),
                                       onPressed: () async {
-                                        await deletecartitem(item['id']);
+                                        await deletecartitem(item['id'], item);
                                       },
                                     ),
                                   ),

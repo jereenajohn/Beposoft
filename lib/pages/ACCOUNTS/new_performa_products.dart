@@ -465,40 +465,92 @@ class _CreatePerformaProduct_ListState
     );
   }
 
-  Future<String> addtocart(
-    varid,
-    quantity,
-  ) async {
-    final token = await getTokenFromPrefs();
+ Future<String> addtocart(
+  varid,
+  quantity,
+) async {
+  final String? token = await getTokenFromPrefs();
 
-    try {
-      final response = await http.post(
-        Uri.parse(
-          '$api/api/cart/product/',
-        ),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'product': varid,
-          'quantity': quantity,
-        }),
-      );
+  final Map<String, dynamic>? item =
+      _findProductDataById(varid);
 
-      if (response.statusCode == 201) {
-        return "success";
-      }
+  final double productPrice = _readItemNumber(
+    item,
+    [
+      'rate',
+      'selling_price',
+      'price',
+      'actual_price',
+      'mrp',
+    ],
+  );
 
-      if (response.statusCode == 400) {
-        return "failed";
-      }
+  try {
+    final http.Response response = await http.post(
+      Uri.parse(
+        '$api/api/cart/product/excel/',
+      ),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'product': varid,
+        'quantity': quantity,
+        'price': productPrice,
+      }),
+    );
 
-      return "error";
-    } catch (e) {
-      return "exception";
+    debugPrint(
+      'ADD TO CART PRODUCT ID: $varid',
+    );
+
+    debugPrint(
+      'ADD TO CART QUANTITY: $quantity',
+    );
+
+    debugPrint(
+      'ADD TO CART PRICE: $productPrice',
+    );
+
+    debugPrint(
+      'ADD TO CART PAYLOAD: ${jsonEncode({
+        'product': varid,
+        'quantity': quantity,
+        'price': productPrice,
+      })}',
+    );
+
+    debugPrint(
+      'ADD TO CART STATUS: ${response.statusCode}',
+    );
+
+    debugPrint(
+      'ADD TO CART RESPONSE: ${response.body}',
+    );
+
+    if (response.statusCode == 200 ||
+        response.statusCode == 201) {
+      return "success";
     }
+
+    if (response.statusCode == 400) {
+      return "failed";
+    }
+
+    return "error";
+  } catch (e, stackTrace) {
+    debugPrint(
+      'ADD TO CART ERROR: $e',
+    );
+
+    debugPrintStack(
+      stackTrace: stackTrace,
+    );
+
+    return "exception";
   }
+}
 
   void handleAddToCart(
     BuildContext context,
@@ -560,39 +612,90 @@ class _CreatePerformaProduct_ListState
     }
   }
 
-  Future<String> addtocart2(
-    varid,
-    quantity,
-  ) async {
-    final token = await getTokenFromPrefs();
+ Future<String> addtocart2(
+  varid,
+  quantity,
+) async {
+  final String? token = await getTokenFromPrefs();
 
-    try {
-      final response = await http.post(
-        Uri.parse(
-          '$api/api/cart/product/',
-        ),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'product': varid,
-          'quantity': quantity,
-        }),
-      );
+  final Map<String, dynamic>? item =
+      _findProductDataById(varid);
 
-      if (response.statusCode == 201) {
-        return "success";
-      } else if (response.statusCode == 400) {
-        return "failed";
-      } else {
-        return "error";
-      }
-    } catch (e) {
-      return "exception";
+  final double productPrice = _readItemNumber(
+    item,
+    [
+      'rate',
+      'selling_price',
+      'price',
+      'actual_price',
+      'mrp',
+    ],
+  );
+
+  try {
+    final http.Response response = await http.post(
+      Uri.parse(
+        '$api/api/cart/product/excel/',
+      ),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'product': varid,
+        'quantity': quantity,
+        'price': productPrice,
+      }),
+    );
+
+    debugPrint(
+      'ADD TO CART 2 PRODUCT ID: $varid',
+    );
+
+    debugPrint(
+      'ADD TO CART 2 QUANTITY: $quantity',
+    );
+
+    debugPrint(
+      'ADD TO CART 2 PRICE: $productPrice',
+    );
+
+    debugPrint(
+      'ADD TO CART 2 PAYLOAD: ${jsonEncode({
+        'product': varid,
+        'quantity': quantity,
+        'price': productPrice,
+      })}',
+    );
+
+    debugPrint(
+      'ADD TO CART 2 STATUS: ${response.statusCode}',
+    );
+
+    debugPrint(
+      'ADD TO CART 2 RESPONSE: ${response.body}',
+    );
+
+    if (response.statusCode == 200 ||
+        response.statusCode == 201) {
+      return "success";
+    } else if (response.statusCode == 400) {
+      return "failed";
+    } else {
+      return "error";
     }
-  }
+  } catch (e, stackTrace) {
+    debugPrint(
+      'ADD TO CART 2 ERROR: $e',
+    );
 
+    debugPrintStack(
+      stackTrace: stackTrace,
+    );
+
+    return "exception";
+  }
+}
   Map<String, dynamic>? _findProductDataById(dynamic productId) {
     final String targetId = productId?.toString() ?? '';
 
