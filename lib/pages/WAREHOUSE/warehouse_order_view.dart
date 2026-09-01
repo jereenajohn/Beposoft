@@ -231,7 +231,8 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
         if (!mounted) return;
 
         setState(() {
-          username = productsData['username'] ?? '';
+          username =
+              productsData['username'] ?? '';
         });
       }
     } catch (error) {
@@ -913,8 +914,10 @@ Future<void> fetchStatusCountSummary() async {
           url,
         ),
         headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
+          'Authorization':
+              'Bearer $token',
+          'Content-Type':
+              'application/json',
         },
       );
 
@@ -929,7 +932,17 @@ Future<void> fetchStatusCountSummary() async {
 
         final List ordersData = responseData['results'];
 
-        List<Map<String, dynamic>> newOrders = [];
+        List<Map<String, dynamic>>
+            newOrders = [];
+
+        for (var orderData
+            in ordersData) {
+          String rawOrderDate =
+              orderData['order_date'] ??
+                  "";
+
+          String formattedOrderDate =
+              rawOrderDate;
 
         for (var orderData in ordersData) {
           String rawOrderDate = orderData['order_date'] ?? "";
@@ -965,11 +978,26 @@ Future<void> fetchStatusCountSummary() async {
                 'manage_staff': orderData['manage_staff'],
 
                 'customer': {
-                  'id': orderData['customer']['id'],
-                  'name': orderData['customer']['name'],
-                  'phone': orderData['customer']['phone'],
-                  'email': orderData['customer']['email'],
-                  'address': orderData['customer']['address'],
+                  'id':
+                      orderData[
+                              'customer']
+                          ['id'],
+                  'name':
+                      orderData[
+                              'customer']
+                          ['name'],
+                  'phone':
+                      orderData[
+                              'customer']
+                          ['phone'],
+                  'email':
+                      orderData[
+                              'customer']
+                          ['email'],
+                  'address':
+                      orderData[
+                              'customer']
+                          ['address'],
                 },
 
                 'warehouse': orderData['warehouse_data'],
@@ -1035,7 +1063,8 @@ Future<void> fetchStatusCountSummary() async {
       searchQuery = query;
 
       if (query.isEmpty) {
-        filteredOrders = orders;
+        filteredOrders =
+            orders;
       } else {
         filteredOrders = orders.where(
           (order) {
@@ -1129,7 +1158,8 @@ Future<void> fetchStatusCountSummary() async {
   // ============================================================
 
   void _filterOrdersByDateRange() {
-    if (startDate != null && endDate != null) {
+    if (startDate != null &&
+        endDate != null) {
       setState(() {
         filteredOrders = orders.where(
           (order) {
@@ -1175,7 +1205,8 @@ Future<void> fetchStatusCountSummary() async {
 
     if (picked != null && picked != selectedDate) {
       setState(() {
-        selectedDate = picked;
+        selectedDate =
+            picked;
       });
 
       _filterOrdersBySingleDate();
@@ -1355,7 +1386,8 @@ Future<void> fetchStatusCountSummary() async {
   // ============================================================
 
   Future<pw.Document> createPdf() async {
-    final pdf = pw.Document();
+    final pdf =
+        pw.Document();
 
     for (var order in filteredOrders) {
       pdf.addPage(
@@ -1376,11 +1408,16 @@ Future<void> fetchStatusCountSummary() async {
                   // ===============================================
 
                   pw.Center(
-                    child: pw.Text(
+                    child:
+                        pw.Text(
                       'Order Details',
-                      style: pw.TextStyle(
-                        fontSize: 20,
-                        fontWeight: pw.FontWeight.bold,
+                      style:
+                          pw.TextStyle(
+                        fontSize:
+                            20,
+                        fontWeight:
+                            pw.FontWeight
+                                .bold,
                       ),
                     ),
                   ),
@@ -1678,7 +1715,8 @@ Future<void> fetchStatusCountSummary() async {
               WarehouseDashboard(),
         ),
       );
-    } else if (dep == "Warehouse Admin") {
+    } else if (dep ==
+        "Warehouse Admin") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -1803,7 +1841,8 @@ Future<void> fetchStatusCountSummary() async {
                         bdm_dashbord(),
                   ),
                 );
-              } else if (dep == "warehouse") {
+              } else if (dep ==
+                  "warehouse") {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
@@ -1813,7 +1852,8 @@ Future<void> fetchStatusCountSummary() async {
                         WarehouseDashboard(),
                   ),
                 );
-              } else if (dep == "Warehouse Admin") {
+              } else if (dep ==
+                  "Warehouse Admin") {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
@@ -2022,7 +2062,8 @@ Future<void> fetchStatusCountSummary() async {
                       Icons.search,
                     ),
                   ),
-                  onChanged: _filterOrders,
+                  onChanged:
+                      _filterOrders,
                 ),
               ),
 
@@ -2035,7 +2076,8 @@ Future<void> fetchStatusCountSummary() async {
                     ? Center(
                         child: Text(
                           selectedDate != null ||
-                                  (startDate != null && endDate != null)
+                                  (startDate != null &&
+                                      endDate != null)
                               ? 'No orders available in this date range'
                               : 'No orders available',
                           style: const TextStyle(
@@ -2072,10 +2114,15 @@ Future<void> fetchStatusCountSummary() async {
                                 15.0,
                               ),
                             ),
-                            color: Colors.white,
-                            elevation: 4,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            color:
+                                Colors.white,
+                            elevation:
+                                4,
+                            child:
+                                Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment
+                                      .start,
                               children: [
                                 // =================================
                                 // HEADER
@@ -2098,7 +2145,8 @@ Future<void> fetchStatusCountSummary() async {
                                   ),
                                   child: Row(
                                     mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
+                                        MainAxisAlignment
+                                            .spaceBetween,
                                     children: [
                                       Flexible(
                                         child: Text(
@@ -2143,7 +2191,8 @@ Future<void> fetchStatusCountSummary() async {
                                   ),
                                   child: Column(
                                     crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                        CrossAxisAlignment
+                                            .start,
                                     children: [
                                       // ===========================
                                       // LOCKED BY
@@ -2194,8 +2243,10 @@ Future<void> fetchStatusCountSummary() async {
                                         children: [
                                           const Text(
                                             'Status:',
-                                            style: TextStyle(
-                                              fontSize: 13,
+                                            style:
+                                                TextStyle(
+                                              fontSize:
+                                                  13,
                                             ),
                                           ),
 
@@ -2241,8 +2292,10 @@ Future<void> fetchStatusCountSummary() async {
                                         children: [
                                           const Text(
                                             'Customer:',
-                                            style: TextStyle(
-                                              fontSize: 13,
+                                            style:
+                                                TextStyle(
+                                              fontSize:
+                                                  13,
                                             ),
                                           ),
 
@@ -2398,8 +2451,16 @@ Future<void> fetchStatusCountSummary() async {
                                 // WAREHOUSE DETAILS
                                 // =================================
 
-                                if (order['warehouse_orders'] != null &&
-                                    order['warehouse_orders'].isNotEmpty)
+                                // =================================
+                                // WAREHOUSE DETAILS
+                                // =================================
+
+                                if (order[
+                                            'warehouse_orders'] !=
+                                        null &&
+                                    order[
+                                            'warehouse_orders']
+                                        .isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 8.0,
@@ -2407,7 +2468,8 @@ Future<void> fetchStatusCountSummary() async {
                                     ),
                                     child: Column(
                                       crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                          CrossAxisAlignment
+                                              .start,
                                       children: [
                                         const Text(
                                           'Warehouse Details:',

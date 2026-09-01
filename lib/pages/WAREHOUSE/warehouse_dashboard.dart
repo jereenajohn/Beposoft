@@ -37,10 +37,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shimmer/shimmer.dart';
 
-class WarehouseDashboard extends StatefulWidget {
-  @override
-  State<WarehouseDashboard> createState() => _WarehouseDashboardState();
-}
+        // ========================================================
+        // 5. RETURN FROM DELIVERY (RFD)
+        // ========================================================
 
 class _WarehouseDashboardState extends State<WarehouseDashboard>
     with WidgetsBindingObserver {
@@ -431,8 +430,9 @@ class _WarehouseDashboardState extends State<WarehouseDashboard>
     todayStatusError = null;
   });
 
-  try {
-    final String? token = await getTokenFromPrefs();
+  // ============================================================
+  // MAIL COUNT
+  // ============================================================
 
     if (token == null || token.trim().isEmpty) {
       if (!mounted) return;
@@ -3657,7 +3657,6 @@ Widget _buildReportsCard({
       } else if (storeParts[i] < currentParts[i]) {
         return false;
       }
-    }
 
     return false;
   }
@@ -3714,7 +3713,8 @@ Widget _buildReportsCard({
             response.body,
           );
 
-          if (data['resultCount'] != null &&
+          if (data['resultCount'] !=
+                  null &&
               data['resultCount'] > 0 &&
               data['results'] != null &&
               data['results'] is List &&
@@ -3864,8 +3864,10 @@ Widget _buildReportsCard({
           '$api/api/orders/',
         ),
         headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
+          'Authorization':
+              'Bearer $token',
+          'Content-Type':
+              'application/json',
         },
       );
 
@@ -3906,29 +3908,70 @@ Widget _buildReportsCard({
           }
 
           orderList.add({
-            'id': productData['id'],
-            'invoice': productData['invoice'],
-            'manage_staff': productData['manage_staff'],
+            'id':
+                productData['id'],
+            'invoice':
+                productData['invoice'],
+            'manage_staff':
+                productData[
+                    'manage_staff'],
             'customer': {
-              'name': productData['customer']['name'],
-              'phone': productData['customer']['phone'],
-              'email': productData['customer']['email'],
-              'address': productData['customer']['address'],
+              'name':
+                  productData['customer']
+                      ['name'],
+              'phone':
+                  productData['customer']
+                      ['phone'],
+              'email':
+                  productData['customer']
+                      ['email'],
+              'address':
+                  productData['customer']
+                      ['address'],
             },
             'billing_address': {
-              'name': productData['billing_address']['name'],
-              'email': productData['billing_address']['email'],
-              'zipcode': productData['billing_address']['zipcode'],
-              'address': productData['billing_address']['address'],
-              'phone': productData['billing_address']['phone'],
-              'city': productData['billing_address']['city'],
-              'state': productData['billing_address']['state'],
+              'name':
+                  productData[
+                          'billing_address']
+                      ['name'],
+              'email':
+                  productData[
+                          'billing_address']
+                      ['email'],
+              'zipcode':
+                  productData[
+                          'billing_address']
+                      ['zipcode'],
+              'address':
+                  productData[
+                          'billing_address']
+                      ['address'],
+              'phone':
+                  productData[
+                          'billing_address']
+                      ['phone'],
+              'city':
+                  productData[
+                          'billing_address']
+                      ['city'],
+              'state':
+                  productData[
+                          'billing_address']
+                      ['state'],
             },
             'bank': {
-              'name': productData['bank']['name'],
-              'account_number': productData['bank']['account_number'],
-              'ifsc_code': productData['bank']['ifsc_code'],
-              'branch': productData['bank']['branch'],
+              'name':
+                  productData['bank']
+                      ['name'],
+              'account_number':
+                  productData['bank']
+                      ['account_number'],
+              'ifsc_code':
+                  productData['bank']
+                      ['ifsc_code'],
+              'branch':
+                  productData['bank']
+                      ['branch'],
             },
             'items': productData['items'] != null
                 ? productData['items'].map(
@@ -3952,7 +3995,9 @@ Widget _buildReportsCard({
 
           if (productData['status'] == 'To Print') {
             toprint++;
-          } else if (productData['status'] == 'Packed') {
+          } else if (productData[
+                  'status'] ==
+              'Packed') {
             packed++;
           }
         }
@@ -3964,7 +4009,8 @@ Widget _buildReportsCard({
         setState(() {
           orders = orderList;
 
-          filteredOrders = orderList;
+          filteredOrders =
+              orderList;
         });
       }
     } catch (error) {
@@ -3984,15 +4030,18 @@ Widget _buildReportsCard({
     }
 
     try {
-      final token = await getTokenFromPrefs();
+      final token =
+          await getTokenFromPrefs();
 
       final response = await http.get(
         Uri.parse(
           '$api/api/salesreport',
         ),
         headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
+          'Authorization':
+              'Bearer $token',
+          'Content-Type':
+              'application/json',
         },
       );
 
@@ -4007,9 +4056,13 @@ Widget _buildReportsCard({
 
         for (var reportData in salesData) {
           salesReportDataList.add({
-            'date': reportData['date'],
-            'total_bills_in_date': reportData['total_bills_in_date'],
-            'amount': reportData['amount'],
+            'date':
+                reportData['date'],
+            'total_bills_in_date':
+                reportData[
+                    'total_bills_in_date'],
+            'amount':
+                reportData['amount'],
             'approved': {
               'bills': reportData['approved']['bills'],
               'amount': reportData['approved']['amount'],
@@ -4347,15 +4400,18 @@ Widget _buildReportsCard({
 
   Future<void> getGrvList() async {
     try {
-      final token = await getTokenFromPrefs();
+      final token =
+          await getTokenFromPrefs();
 
       final response = await http.get(
         Uri.parse(
           '$api/api/grvget/',
         ),
         headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
+          'Authorization':
+              'Bearer $token',
+          'Content-Type':
+              'application/json',
         },
       );
 
@@ -4370,15 +4426,29 @@ Widget _buildReportsCard({
 
         for (var productData in productsData) {
           grvDataList.add({
-            'id': productData['id'],
-            'product': productData['product'],
-            'returnreason': productData['returnreason'],
-            'invoice': productData['invoice'],
-            'customer': productData['customer'],
-            'staff': productData['staff'],
-            'remark': productData['remark'],
-            'status': productData['status'] ?? statusOptions[0],
-            'order_date': productData['order_date'],
+            'id':
+                productData['id'],
+            'product':
+                productData[
+                    'product'],
+            'returnreason':
+                productData[
+                    'returnreason'],
+            'invoice':
+                productData['invoice'],
+            'customer':
+                productData[
+                    'customer'],
+            'staff':
+                productData['staff'],
+            'remark':
+                productData['remark'],
+            'status':
+                productData['status'] ??
+                    statusOptions[0],
+            'order_date':
+                productData[
+                    'order_date'],
           });
         }
 
@@ -4387,7 +4457,8 @@ Widget _buildReportsCard({
         }
 
         setState(() {
-          grvlist = grvDataList;
+          grvlist =
+              grvDataList;
         });
 
         int grvListCount = grvlist.length;
@@ -4560,7 +4631,8 @@ Widget _buildReportsCard({
     BuildContext context,
   ) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
+      debugShowCheckedModeBanner:
+          false,
       home: Scaffold(
         backgroundColor: Colors.white,
 
