@@ -423,166 +423,386 @@ class _WarehouseAdminState extends State<WarehouseAdmin>
   // FETCH TODAY STATUS COUNTS
   // ============================================================
 
-  Future<void> fetchTodayStatusCounts() async {
-    if (!mounted) return;
+Future<void> fetchTodayStatusCounts() async {
+  if (!mounted) return;
 
-    setState(() {
-      isLoadingTodayStatusCounts = true;
-      todayStatusError = null;
-    });
+  setState(() {
+    isLoadingTodayStatusCounts = true;
+    todayStatusError = null;
+  });
 
-    try {
-      final String? token = await getTokenFromPrefs();
+  try {
+    final String? token = await getTokenFromPrefs();
 
-      if (token == null || token.trim().isEmpty) {
-        if (!mounted) return;
-
-        setState(() {
-          isLoadingTodayStatusCounts = false;
-          todayStatusError = 'Authentication token not found';
-        });
-
-        return;
-      }
-
-      final http.Response response = await http.get(
-        Uri.parse(
-          '$api/api/orders/status/count/',
-        ),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      debugPrint(
-        'STATUS COUNT RESPONSE: ${response.statusCode}',
-      );
-
-      debugPrint(
-        'STATUS COUNT BODY: ${response.body}',
-      );
-
-      if (response.statusCode == 200) {
-        final dynamic decoded = jsonDecode(
-          response.body,
-        );
-
-        if (decoded is Map<String, dynamic>) {
-          final dynamic todayData = decoded['today'];
-          final dynamic allData = decoded['all'];
-
-          if (todayData is List && allData is List) {
-            final Map<String, int> todayStatusMap = {};
-            final Map<String, int> allStatusMap = {};
-
-            for (final dynamic item in todayData) {
-              if (item is Map) {
-                final String status =
-                    item['status']?.toString().trim() ?? '';
-
-                final dynamic rawCount = item['count'];
-
-                final int count = rawCount is int
-                    ? rawCount
-                    : int.tryParse(
-                          rawCount?.toString() ?? '0',
-                        ) ??
-                        0;
-
-                if (status.isNotEmpty) {
-                  todayStatusMap[status] = count;
-                }
-              }
-            }
-
-            for (final dynamic item in allData) {
-              if (item is Map) {
-                final String status =
-                    item['status']?.toString().trim() ?? '';
-
-                final dynamic rawCount = item['count'];
-
-                final int count = rawCount is int
-                    ? rawCount
-                    : int.tryParse(
-                          rawCount?.toString() ?? '0',
-                        ) ??
-                        0;
-
-                if (status.isNotEmpty) {
-                  allStatusMap[status] = count;
-                }
-              }
-            }
-
-            final List<Map<String, dynamic>> filteredStatusList =
-                warehouseDashboardStatuses.map(
-              (String status) {
-                return {
-                  'status': status,
-                  'today_count': todayStatusMap[status] ?? 0,
-                  'all_count': allStatusMap[status] ?? 0,
-                };
-              },
-            ).toList();
-
-            if (!mounted) return;
-
-            setState(() {
-              todayStatusCounts = filteredStatusList;
-
-              isLoadingTodayStatusCounts = false;
-
-              todayStatusError = null;
-            });
-
-            return;
-          }
-        }
-
-        if (!mounted) return;
-
-        setState(() {
-          todayStatusCounts = [];
-
-          isLoadingTodayStatusCounts = false;
-
-          todayStatusError = 'Invalid response from server';
-        });
-      } else {
-        if (!mounted) return;
-
-        setState(() {
-          todayStatusCounts = [];
-
-          isLoadingTodayStatusCounts = false;
-
-          todayStatusError =
-              'Failed to load status counts (${response.statusCode})';
-        });
-      }
-    } catch (error, stackTrace) {
-      debugPrint(
-        'TODAY STATUS COUNT ERROR: $error',
-      );
-
-      debugPrintStack(
-        stackTrace: stackTrace,
-      );
-
+    if (token == null || token.trim().isEmpty) {
       if (!mounted) return;
 
       setState(() {
         todayStatusCounts = [];
-
         isLoadingTodayStatusCounts = false;
-
-        todayStatusError = 'Unable to load today\'s order status';
+        todayStatusError = 'Authentication token not found';
       });
-    }
-  }
 
+      return;
+    }
+
+    // ============================================================
+    // DATE VALUES
+    // ============================================================
+
+    final DateTime now = DateTime.now();
+
+    final String today = DateFormat(
+      'yyyy-MM-dd',
+    ).format(now);
+
+    final String currentMonthStart = DateFormat(
+      'yyyy-MM-dd',
+    ).format(
+      DateTime(
+        now.year,
+        now.month,
+        1,
+      ),
+    );
+
+    // ============================================================
+    // COMMON API REQUEST
+    // ============================================================
+
+    Future<Map<String, int>> fetchStatusSummary({
+      String? date,
+      String? startDate,
+      String? endDate,
+      required String requestType,
+    }) async {
+      final Map<String, String> params = {};
+
+      // TODAY
+      if (date != null && date.trim().isNotEmpty) {
+        params['date'] = date;
+      }
+
+      // CURRENT MONTH / DATE RANGE
+      if (startDate != null &&
+          startDate.trim().isNotEmpty) {
+        params['start_date'] = startDate;
+      }
+
+      if (endDate != null &&
+          endDate.trim().isNotEmpty) {
+        params['end_date'] = endDate;
+      }
+
+      final Uri uri = Uri.parse(
+        '$api/api/shipping/status/history/summary/',
+      ).replace(
+        queryParameters: params,
+      );
+
+      debugPrint(
+        '=============================================',
+      );
+
+      debugPrint(
+        'STATUS REQUEST TYPE: $requestType',
+      );
+
+      debugPrint(
+        'STATUS REQUEST URL: $uri',
+      );
+
+      final http.Response response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          // Avoid stale intermediary response where applicable.
+          'Cache-Control': 'no-cache',
+        },
+      );
+
+      debugPrint(
+        'STATUS RESPONSE CODE [$requestType]: '
+        '${response.statusCode}',
+      );
+
+      debugPrint(
+        'STATUS RESPONSE BODY [$requestType]: '
+        '${response.body}',
+      );
+
+      debugPrint(
+        '=============================================',
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          'Failed to load $requestType status summary '
+          '(${response.statusCode})',
+        );
+      }
+
+      final dynamic decoded = jsonDecode(
+        response.body,
+      );
+
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception(
+          'Invalid response from server',
+        );
+      }
+
+      final String responseStatus =
+          decoded['status']
+                  ?.toString()
+                  .trim()
+                  .toLowerCase() ??
+              '';
+
+      if (responseStatus.isNotEmpty &&
+          responseStatus != 'success') {
+        throw Exception(
+          decoded['message']?.toString() ??
+              'Failed to load status summary',
+        );
+      }
+
+      // ============================================================
+      // DEBUG BACKEND FILTERS
+      // ============================================================
+
+      final dynamic filters = decoded['filters'];
+
+      if (filters is Map) {
+        debugPrint(
+          'BACKEND FILTERS [$requestType]',
+        );
+
+        debugPrint(
+          'date       : ${filters['date']}',
+        );
+
+        debugPrint(
+          'start_date : ${filters['start_date']}',
+        );
+
+        debugPrint(
+          'end_date   : ${filters['end_date']}',
+        );
+      }
+
+      // ============================================================
+      // DATA
+      // ============================================================
+
+      final dynamic data = decoded['data'];
+
+      if (data is! Map) {
+        throw Exception(
+          'Invalid status summary data',
+        );
+      }
+
+      debugPrint(
+        'TOTAL COUNT [$requestType]: '
+        '${data['total_count']}',
+      );
+
+      final dynamic rawStatusCounts =
+          data['status_counts'];
+
+      if (rawStatusCounts == null) {
+        return <String, int>{};
+      }
+
+      if (rawStatusCounts is! Map) {
+        throw Exception(
+          'Invalid status_counts data',
+        );
+      }
+
+      final Map<String, int> statusMap =
+          <String, int>{};
+
+      rawStatusCounts.forEach(
+        (
+          dynamic key,
+          dynamic value,
+        ) {
+          final String status =
+              key?.toString().trim() ?? '';
+
+          if (status.isEmpty) {
+            return;
+          }
+
+          int count = 0;
+
+          if (value is int) {
+            count = value;
+          } else if (value is num) {
+            count = value.toInt();
+          } else {
+            count =
+                int.tryParse(
+                  value?.toString() ?? '0',
+                ) ??
+                0;
+          }
+
+          statusMap[status] = count;
+        },
+      );
+
+      debugPrint(
+        'PARSED STATUS MAP [$requestType]: '
+        '$statusMap',
+      );
+
+      return statusMap;
+    }
+
+    // ============================================================
+    // FETCH BOTH REQUESTS
+    // ============================================================
+
+    final List<Map<String, int>> responses =
+        await Future.wait<Map<String, int>>(
+      [
+        // ========================================================
+        // TODAY
+        //
+        // Example:
+        // ?date=2026-08-31
+        // ========================================================
+
+        fetchStatusSummary(
+          date: today,
+          requestType: 'TODAY',
+        ),
+
+        // ========================================================
+        // TILL TODAY = CURRENT MONTH
+        //
+        // Example:
+        // ?start_date=2026-08-01
+        // &end_date=2026-08-31
+        // ========================================================
+
+        fetchStatusSummary(
+          startDate: currentMonthStart,
+          endDate: today,
+          requestType: 'CURRENT MONTH',
+        ),
+      ],
+    );
+
+    // ============================================================
+    // RESPONSE 1 = TODAY
+    // ============================================================
+
+    final Map<String, int> todayStatusMap =
+        responses[0];
+
+    // ============================================================
+    // RESPONSE 2 = CURRENT MONTH TILL TODAY
+    // ============================================================
+
+    final Map<String, int> tillTodayStatusMap =
+        responses[1];
+
+    debugPrint(
+      '=============================================',
+    );
+
+    debugPrint(
+      'FINAL TODAY MAP:',
+    );
+
+    debugPrint(
+      todayStatusMap.toString(),
+    );
+
+    debugPrint(
+      'FINAL CURRENT MONTH MAP:',
+    );
+
+    debugPrint(
+      tillTodayStatusMap.toString(),
+    );
+
+    debugPrint(
+      '=============================================',
+    );
+
+    // ============================================================
+    // EXISTING DASHBOARD STATUS MAPPING
+    // ============================================================
+
+    final List<Map<String, dynamic>>
+        filteredStatusList =
+        warehouseDashboardStatuses.map(
+      (
+        String status,
+      ) {
+        final int todayCount =
+            todayStatusMap[status] ?? 0;
+
+        final int tillTodayCount =
+            tillTodayStatusMap[status] ?? 0;
+
+        debugPrint(
+          '$status => '
+          'Today: $todayCount | '
+          'Till Today: $tillTodayCount',
+        );
+
+        return <String, dynamic>{
+          'status': status,
+
+          // Today only
+          'today_count': todayCount,
+
+          // First day of current month -> today
+          'all_count': tillTodayCount,
+        };
+      },
+    ).toList();
+
+    if (!mounted) return;
+
+    setState(() {
+      todayStatusCounts =
+          filteredStatusList;
+
+      isLoadingTodayStatusCounts =
+          false;
+
+      todayStatusError = null;
+    });
+  } catch (error, stackTrace) {
+    debugPrint(
+      'STATUS HISTORY SUMMARY ERROR: $error',
+    );
+
+    debugPrintStack(
+      stackTrace: stackTrace,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      todayStatusCounts = [];
+
+      isLoadingTodayStatusCounts =
+          false;
+
+      todayStatusError =
+          'Unable to load order status summary';
+    });
+  }
+}
   // ============================================================
   // FETCH TODAY DGM PARCEL SERVICE SUMMARY
   // ============================================================

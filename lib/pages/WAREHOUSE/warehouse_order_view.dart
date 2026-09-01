@@ -246,116 +246,420 @@ class _WarehouseOrderViewState extends State<WarehouseOrderView> {
   // FETCH STATUS COUNT SUMMARY
   // ============================================================
 
-  Future<void> fetchStatusCountSummary() async {
-    if (!mounted) return;
+  // ============================================================
+// FETCH STATUS COUNT SUMMARY
+//
+// SAME API + DATE PARAM LOGIC USED IN WAREHOUSE ADMIN
+//
+// TODAY:
+// ?date=yyyy-MM-dd
+//
+// TILL TODAY:
+// ?start_date=FIRST_DAY_OF_CURRENT_MONTH
+// &end_date=TODAY
+// ============================================================
 
-    setState(() {
-      isStatusCountLoading = true;
-      statusCountError = null;
-    });
+Future<void> fetchStatusCountSummary() async {
+  if (!mounted) return;
 
-    try {
-      final String? token = await getTokenFromPrefs();
+  setState(() {
+    isStatusCountLoading = true;
+    statusCountError = null;
+  });
 
-      if (token == null || token.trim().isEmpty) {
-        if (!mounted) return;
+  try {
+    final String? token = await getTokenFromPrefs();
 
-        setState(() {
-          isStatusCountLoading = false;
-          statusCountError = 'Authentication token not found';
-        });
-        return;
+    if (token == null || token.trim().isEmpty) {
+      if (!mounted) return;
+
+      setState(() {
+        isStatusCountLoading = false;
+        statusCountError = 'Authentication token not found';
+      });
+
+      return;
+    }
+
+    // ============================================================
+    // CURRENT DATE
+    // ============================================================
+
+    final DateTime now = DateTime.now();
+
+    final String today = DateFormat(
+      'yyyy-MM-dd',
+    ).format(
+      now,
+    );
+
+    // ============================================================
+    // FIRST DAY OF CURRENT MONTH
+    // ============================================================
+
+    final String currentMonthStart = DateFormat(
+      'yyyy-MM-dd',
+    ).format(
+      DateTime(
+        now.year,
+        now.month,
+        1,
+      ),
+    );
+
+    // ============================================================
+    // COMMON STATUS SUMMARY API METHOD
+    // ============================================================
+
+    Future<Map<String, int>> fetchStatusSummary({
+      String? date,
+      String? startDate,
+      String? endDate,
+      required String requestType,
+    }) async {
+      final Map<String, String> params = {};
+
+      // ==========================================================
+      // TODAY
+      // ==========================================================
+
+      if (date != null && date.trim().isNotEmpty) {
+        params['date'] = date;
       }
 
+      // ==========================================================
+      // CURRENT MONTH RANGE
+      // ==========================================================
+
+      if (startDate != null && startDate.trim().isNotEmpty) {
+        params['start_date'] = startDate;
+      }
+
+      if (endDate != null && endDate.trim().isNotEmpty) {
+        params['end_date'] = endDate;
+      }
+
+      // ==========================================================
+      // SAME API USED IN WAREHOUSE ADMIN
+      // ==========================================================
+
+      final Uri uri = Uri.parse(
+        '$api/api/shipping/status/history/summary/',
+      ).replace(
+        queryParameters: params,
+      );
+
+      debugPrint(
+        '=============================================',
+      );
+
+      debugPrint(
+        'WAREHOUSE ORDER VIEW STATUS REQUEST: $requestType',
+      );
+
+      debugPrint(
+        'WAREHOUSE ORDER VIEW STATUS URL: $uri',
+      );
+
+      // ==========================================================
+      // API REQUEST
+      // ==========================================================
+
       final http.Response response = await http.get(
-        Uri.parse('$api/api/orders/status/count/'),
+        uri,
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
         },
       );
 
-      if (response.statusCode != 200) {
-        if (!mounted) return;
+      debugPrint(
+        'STATUS RESPONSE CODE [$requestType]: '
+        '${response.statusCode}',
+      );
 
-        setState(() {
-          isStatusCountLoading = false;
-          statusCountError =
-              'Failed to load status count (${response.statusCode})';
-        });
-        return;
+      debugPrint(
+        'STATUS RESPONSE BODY [$requestType]: '
+        '${response.body}',
+      );
+
+      debugPrint(
+        '=============================================',
+      );
+
+      // ==========================================================
+      // RESPONSE VALIDATION
+      // ==========================================================
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          'Failed to load $requestType status summary '
+          '(${response.statusCode})',
+        );
       }
 
-      final dynamic decoded = jsonDecode(response.body);
+      final dynamic decoded = jsonDecode(
+        response.body,
+      );
 
       if (decoded is! Map<String, dynamic>) {
-        if (!mounted) return;
-
-        setState(() {
-          isStatusCountLoading = false;
-          statusCountError = 'Invalid status count response';
-        });
-        return;
+        throw Exception(
+          'Invalid response from server',
+        );
       }
 
-      final String targetStatus =
-          widget.status?.toString().trim() ?? '';
+      final String responseStatus =
+          decoded['status']
+                  ?.toString()
+                  .trim()
+                  .toLowerCase() ??
+              '';
 
-      int todayCount = 0;
-      int allCount = 0;
+      if (responseStatus.isNotEmpty &&
+          responseStatus != 'success') {
+        throw Exception(
+          decoded['message']?.toString() ??
+              'Failed to load status summary',
+        );
+      }
 
-      final dynamic todayData = decoded['today'];
+      // ==========================================================
+      // OPTIONAL BACKEND FILTER DEBUG
+      // ==========================================================
 
-      if (todayData is List) {
-        for (final dynamic item in todayData) {
-          if (item is! Map) continue;
+      final dynamic filters = decoded['filters'];
 
-          if ((item['status']?.toString().trim() ?? '') == targetStatus) {
-            final dynamic rawCount = item['count'];
-            todayCount = rawCount is int
-                ? rawCount
-                : int.tryParse(rawCount?.toString() ?? '0') ?? 0;
-            break;
+      if (filters is Map) {
+        debugPrint(
+          'BACKEND FILTERS [$requestType]',
+        );
+
+        debugPrint(
+          'date       : ${filters['date']}',
+        );
+
+        debugPrint(
+          'start_date : ${filters['start_date']}',
+        );
+
+        debugPrint(
+          'end_date   : ${filters['end_date']}',
+        );
+      }
+
+      // ==========================================================
+      // DATA
+      // ==========================================================
+
+      final dynamic data = decoded['data'];
+
+      if (data is! Map) {
+        throw Exception(
+          'Invalid status summary data',
+        );
+      }
+
+      debugPrint(
+        'TOTAL COUNT [$requestType]: '
+        '${data['total_count']}',
+      );
+
+      final dynamic rawStatusCounts =
+          data['status_counts'];
+
+      if (rawStatusCounts == null) {
+        return <String, int>{};
+      }
+
+      if (rawStatusCounts is! Map) {
+        throw Exception(
+          'Invalid status_counts data',
+        );
+      }
+
+      // ==========================================================
+      // CONVERT BACKEND STATUS MAP INTO Map<String, int>
+      // ==========================================================
+
+      final Map<String, int> statusMap =
+          <String, int>{};
+
+      rawStatusCounts.forEach(
+        (
+          dynamic key,
+          dynamic value,
+        ) {
+          final String status =
+              key?.toString().trim() ?? '';
+
+          if (status.isEmpty) {
+            return;
           }
-        }
-      }
 
-      final dynamic allData = decoded['all'];
+          int count = 0;
 
-      if (allData is List) {
-        for (final dynamic item in allData) {
-          if (item is! Map) continue;
-
-          if ((item['status']?.toString().trim() ?? '') == targetStatus) {
-            final dynamic rawCount = item['count'];
-            allCount = rawCount is int
-                ? rawCount
-                : int.tryParse(rawCount?.toString() ?? '0') ?? 0;
-            break;
+          if (value is int) {
+            count = value;
+          } else if (value is num) {
+            count = value.toInt();
+          } else {
+            count =
+                int.tryParse(
+                  value?.toString() ?? '0',
+                ) ??
+                0;
           }
-        }
-      }
 
-      if (!mounted) return;
+          statusMap[status] = count;
+        },
+      );
 
-      setState(() {
-        todayStatusCount = todayCount;
-        allStatusCount = allCount;
-        isStatusCountLoading = false;
-        statusCountError = null;
-      });
-    } catch (error) {
-      debugPrint('WAREHOUSE ORDER STATUS COUNT ERROR: $error');
+      debugPrint(
+        'PARSED STATUS MAP [$requestType]: '
+        '$statusMap',
+      );
 
-      if (!mounted) return;
-
-      setState(() {
-        isStatusCountLoading = false;
-        statusCountError = 'Unable to load status count';
-      });
+      return statusMap;
     }
-  }
 
+    // ============================================================
+    // FETCH TODAY + CURRENT MONTH TOGETHER
+    // ============================================================
+
+    final List<Map<String, int>> responses =
+        await Future.wait<Map<String, int>>(
+      [
+        // ========================================================
+        // TODAY
+        //
+        // Example:
+        // ?date=2026-09-01
+        // ========================================================
+
+        fetchStatusSummary(
+          date: today,
+          requestType: 'TODAY',
+        ),
+
+        // ========================================================
+        // TILL TODAY
+        //
+        // FIRST DAY OF CURRENT MONTH -> TODAY
+        //
+        // Example:
+        // ?start_date=2026-09-01
+        // &end_date=2026-09-01
+        // ========================================================
+
+        fetchStatusSummary(
+          startDate: currentMonthStart,
+          endDate: today,
+          requestType: 'CURRENT MONTH',
+        ),
+      ],
+    );
+
+    // ============================================================
+    // TODAY RESPONSE
+    // ============================================================
+
+    final Map<String, int> todayStatusMap =
+        responses[0];
+
+    // ============================================================
+    // CURRENT MONTH RESPONSE
+    // ============================================================
+
+    final Map<String, int> tillTodayStatusMap =
+        responses[1];
+
+    // ============================================================
+    // CURRENT ORDER VIEW STATUS
+    //
+    // Examples:
+    //
+    // To Print
+    // Packing under progress
+    // Packed
+    // Ready to ship
+    // Return From Delivery
+    // Shipped
+    // ============================================================
+
+    final String targetStatus =
+        widget.status?.toString().trim() ?? '';
+
+    // ============================================================
+    // GET COUNT ONLY FOR CURRENT CARD STATUS
+    // ============================================================
+
+    final int todayCount =
+        todayStatusMap[targetStatus] ?? 0;
+
+    final int tillTodayCount =
+        tillTodayStatusMap[targetStatus] ?? 0;
+
+    debugPrint(
+      '=============================================',
+    );
+
+    debugPrint(
+      'WAREHOUSE ORDER VIEW TARGET STATUS: '
+      '$targetStatus',
+    );
+
+    debugPrint(
+      'TODAY COUNT: $todayCount',
+    );
+
+    debugPrint(
+      'TILL TODAY COUNT: $tillTodayCount',
+    );
+
+    debugPrint(
+      '=============================================',
+    );
+
+    if (!mounted) return;
+
+    // ============================================================
+    // UPDATE EXISTING TOP CARDS
+    //
+    // todayStatusCount -> Today
+    //
+    // allStatusCount -> Till Today
+    // ============================================================
+
+    setState(() {
+      todayStatusCount = todayCount;
+
+      allStatusCount = tillTodayCount;
+
+      isStatusCountLoading = false;
+
+      statusCountError = null;
+    });
+  } catch (error, stackTrace) {
+    debugPrint(
+      'WAREHOUSE ORDER STATUS HISTORY SUMMARY ERROR: '
+      '$error',
+    );
+
+    debugPrintStack(
+      stackTrace: stackTrace,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      isStatusCountLoading = false;
+
+      statusCountError =
+          'Unable to load status count';
+    });
+  }
+}
   Widget _buildStatusCountSummary() {
     final String statusTitle = widget.status == null
         ? 'Order Summary'

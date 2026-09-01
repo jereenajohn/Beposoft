@@ -486,59 +486,123 @@ final TextEditingController accountsNoteController =
     }
   }
 
-  Future<void> addtocart(
-    List<Map<String, dynamic>> proformaItems,
-  ) async {
-    final String? token = await gettokenFromPrefs();
+ Future<void> addtocart(
+  List<Map<String, dynamic>> proformaItems,
+) async {
+  final String? token = await gettokenFromPrefs();
 
-    if (token == null || token.trim().isEmpty) {
-      throw Exception('Authentication token not found.');
-    }
-
-    for (final Map<String, dynamic> item in proformaItems) {
-      final dynamic productId = item['product'];
-      final int quantity =
-          int.tryParse((item['quantity'] ?? 0).toString()) ?? 0;
-
-      if (productId == null || quantity <= 0) {
-        throw Exception(
-          'Invalid product or quantity in the selected proforma.',
-        );
-      }
-
-      final http.Response response = await http.post(
-        Uri.parse('$api/api/cart/product/'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'product': productId,
-          'quantity': quantity,
-        }),
-      );
-
-      if (response.statusCode != 200 &&
-          response.statusCode != 201) {
-        String message = 'Unable to add a proforma product to the cart.';
-
-        try {
-          final dynamic decoded = jsonDecode(response.body);
-
-          if (decoded is Map) {
-            message = decoded['message']?.toString() ??
-                decoded['detail']?.toString() ??
-                decoded['error']?.toString() ??
-                message;
-          }
-        } catch (_) {}
-
-        throw Exception(message);
-      }
-    }
-
-    await fetchCartData();
+  if (token == null || token.trim().isEmpty) {
+    throw Exception(
+      'Authentication token not found.',
+    );
   }
+
+  for (final Map<String, dynamic> item
+      in proformaItems) {
+    final dynamic productId =
+        item['product'];
+
+    final int quantity =
+        int.tryParse(
+          (item['quantity'] ?? 0).toString(),
+        ) ??
+        0;
+
+    // IMPORTANT:
+    // This is the saved/edited Proforma price.
+    final double proformaPrice =
+        _parseAmount(
+          item['actual_price'],
+        );
+
+    final double discount =
+        _parseAmount(
+          item['discount'],
+        );
+
+    if (productId == null ||
+        quantity <= 0) {
+      throw Exception(
+        'Invalid product or quantity in the selected proforma.',
+      );
+    }
+
+    if (proformaPrice < 0) {
+      throw Exception(
+        'Invalid product price in the selected proforma.',
+      );
+    }
+
+    final Map<String, dynamic> payload = {
+      'product': productId,
+      'quantity': quantity,
+
+      // Preserve edited Proforma price
+      'price': proformaPrice,
+    };
+
+    debugPrint(
+      'PROFORMA TO ORDER CART PAYLOAD: '
+      '${jsonEncode(payload)}',
+    );
+
+    final http.Response response =
+        await http.post(
+      Uri.parse(
+        '$api/api/cart/product/excel/',
+      ),
+      headers: {
+        'Content-Type':
+            'application/json',
+        'Authorization':
+            'Bearer $token',
+      },
+      body: jsonEncode(
+        payload,
+      ),
+    );
+
+    debugPrint(
+      'PROFORMA TO ORDER CART STATUS: '
+      '${response.statusCode}',
+    );
+
+    debugPrint(
+      'PROFORMA TO ORDER CART RESPONSE: '
+      '${response.body}',
+    );
+
+    if (response.statusCode != 200 &&
+        response.statusCode != 201) {
+      String message =
+          'Unable to add a proforma product to the cart.';
+
+      try {
+        final dynamic decoded =
+            jsonDecode(
+          response.body,
+        );
+
+        if (decoded is Map) {
+          message =
+              decoded['message']
+                      ?.toString() ??
+                  decoded['detail']
+                      ?.toString() ??
+                  decoded['error']
+                      ?.toString() ??
+                  message;
+        }
+      } catch (_) {}
+
+      throw Exception(
+        message,
+      );
+    }
+  }
+
+  await fetchCartData();
+}
 
   Future<void> createlog({
     required dynamic createdOrderData,
